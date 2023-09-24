@@ -21,8 +21,11 @@ Users of this software are expected to use this software responsibly while abidi
     https://github.com/hacksider/Deep-Live-Cam.git
 
 #### 3. Download Models
-[GFPGANv1.4](https://huggingface.co/hacksider/deep-live-cam/resolve/main/GFPGANv1.4.pth)
-[inswapper_128.onnx](https://huggingface.co/hacksider/deep-live-cam/resolve/main/inswapper_128.onnx)
+
+ 1. [GFPGANv1.4](https://huggingface.co/hacksider/deep-live-cam/resolve/main/GFPGANv1.4.pth)
+ 2. [inswapper_128.onnx](https://huggingface.co/hacksider/deep-live-cam/resolve/main/inswapper_128.onnx)
+
+Then put those 2 files on the "**models**" folder
 
 #### 4. Install dependency
 We highly recommend to work with a  `venv`  to avoid issues.
@@ -123,7 +126,7 @@ python run.py --execution-provider openvino
 > Note: When you run this program for the first time, it will download some models ~300MB in size.
 
 Executing `python run.py` command will launch this window:
-![gui-demo](gui-demo.png)
+![gui-demo](instruct.png)
 
 Choose a face (image with desired face) and the target image/video (image/video in which you want to replace the face) and click on `Start`. Open file explorer and navigate to the directory you select your output to be in. You will find a directory named `<video_title>` where you can see the frames being swapped in realtime. Once the processing is done, it will create the output file. That's it.
 
