@@ -1,9 +1,3 @@
-
-
-Take a video and replace the face in it with a face of your choice. You only need one image of the desired face. No dataset, no training.
-
-You can watch some demos [here](https://drive.google.com/drive/folders/1KHv8n_rd3Lcr2v7jBq1yPSTWM554Gq8e?usp=sharing). A StableDiffusion extension is also available, [here](https://github.com/s0md3v/sd-webui-roop).
-
 ![demo-gif](demo.gif)
 
 ## Disclaimer
@@ -15,29 +9,22 @@ Users of this software are expected to use this software responsibly while abidi
 
 ## How do I install it?
 
-### Single command install
-
-For windows, [download this file](https://github.com/hacksider/roop-cam/files/12358726/1_click_install.zip), extract to a folder without space, then run (double click) 
-```
-windows_run.bat
-```
-
-Then proceed to the folder of roop-cam and just double click 
-```
-run-cuda-windows.bat
-```
 
 ### Basic: It is more likely to work on your computer but it will also be very slow. You can follow instructions for the basic install (This usually runs via **CPU**)
 #### 1.Setup your platform
 -   python (3.10 recommended)
 -   pip
 -   git
--   ffmpeg
--   visual studio 2022 runtimes (windows)
+-   [ffmpeg](https://www.youtube.com/watch?v=OlNWCpFdVMA) 
+-   [visual studio 2022 runtimes (windows)](https://learn.microsoft.com/en-us/visualstudio/releases/2022/redistribution#vs2022-download)
 #### 2. Clone Repository
-    https://github.com/hacksider/roop-cam.git
+    https://github.com/hacksider/Deep-Live-Cam.git
 
-#### 3. Install dependency
+#### 3. Download Models
+[GFPGANv1.4](https://huggingface.co/hacksider/deep-live-cam/resolve/main/GFPGANv1.4.pth)
+[inswapper_128.onnx](https://huggingface.co/hacksider/deep-live-cam/resolve/main/inswapper_128.onnx)
+
+#### 4. Install dependency
 We highly recommend to work with a  `venv`  to avoid issues.
 ```
 pip install -r requirements.txt
@@ -146,7 +133,7 @@ Just follow the clicks on the screenshot
 2. Click live
 3. Wait for a few second (it takes a longer time, usually 10 to 30 seconds before the preview shows up)
 
-![roop-cam](roop-cam.gif)
+![demo-gif](demo.gif)
 
 Just use your favorite screencapture to stream like OBS
 > Note: In case you want to change your face, just select another picture, the preview mode will then restart (so just wait a bit).
