@@ -2,7 +2,6 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.pyc
-*.bat
 .idea
 .todo
 *.log
