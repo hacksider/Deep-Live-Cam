@@ -171,5 +171,4 @@ Looking for a CLI mode? Using the -s/--source argument will make the run program
 - [deepinsight](https://github.com/deepinsight): for their [insightface](https://github.com/deepinsight/insightface) project which provided a well-made library and models.
 - [havok2-htwo](https://github.com/havok2-htwo) : for sharing the code for webcam
 - [GosuDRM](https://github.com/GosuDRM/nsfw-roop) : for uncensoring roop
-- [Troublechute](https://www.youtube.com/@TroubleChute) : for the single command powershell script (slightly modified by me)
 - and all developers behind libraries used in this project.
