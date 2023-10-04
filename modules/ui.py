@@ -257,11 +257,11 @@ def webcam_preview():
     global preview_label, PREVIEW
 
     cap = cv2.VideoCapture(0)  # Use index for the webcam (adjust the index accordingly if necessary)    
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)  # Set the width of the resolution
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)  # Set the height of the resolution
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)  # Set the width of the resolution
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)  # Set the height of the resolution
     cap.set(cv2.CAP_PROP_FPS, 60)  # Set the frame rate of the webcam
-    PREVIEW_MAX_WIDTH = 1280
-    PREVIEW_MAX_HEIGHT = 720
+    PREVIEW_MAX_WIDTH = 640
+    PREVIEW_MAX_HEIGHT = 360
 
     preview_label.configure(image=None)  # Reset the preview image before startup
 
