@@ -2,7 +2,7 @@
 
 numpy==1.23.5
 opencv-python==4.7.0.72
-onnx==1.14.0
+onnx==1.15.0
 insightface==0.7.3
 psutil==5.9.5
 tk==0.1.0
