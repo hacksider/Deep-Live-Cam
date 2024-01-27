@@ -1,5 +1,7 @@
 ![demo-gif](demo.gif)
 
+https://github.com/hacksider/Deep-Live-Cam/blob/main/demo.mp4
+
 ## Disclaimer
 This software is meant to be a productive contribution to the rapidly growing AI-generated media industry. It will help artists with tasks such as animating a custom character or using the character as a model for clothing etc.
 
