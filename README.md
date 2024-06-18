@@ -17,7 +17,7 @@ Users of this software are expected to use this software responsibly while abidi
 -   pip
 -   git
 -   [ffmpeg](https://www.youtube.com/watch?v=OlNWCpFdVMA) 
--   [visual studio 2022 runtimes (windows)](https://learn.microsoft.com/en-us/visualstudio/releases/2022/redistribution#vs2022-download)
+-   [visual studio 2022 runtimes (windows)](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
 #### 2. Clone Repository
     https://github.com/hacksider/Deep-Live-Cam.git
 
