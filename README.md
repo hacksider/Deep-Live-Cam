@@ -45,7 +45,7 @@ pip install -r requirements.txt
 
 ```
 pip uninstall onnxruntime onnxruntime-gpu
-pip install onnxruntime-gpu==1.18.0
+pip install onnxruntime-gpu==1.15.1
 
 ```
 
