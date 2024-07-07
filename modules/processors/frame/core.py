@@ -25,6 +25,7 @@ def load_frame_processor_module(frame_processor: str) -> Any:
             if not hasattr(frame_processor_module, method_name):
                 sys.exit()
     except ImportError:
+        print(f"Frame processor {frame_processor} not found")
         sys.exit()
     return frame_processor_module
 
@@ -47,8 +48,8 @@ def set_frame_processors_modules_from_ui(frame_processors: List[str]) -> None:
             FRAME_PROCESSORS_MODULES.append(frame_processor_module)
             modules.globals.frame_processors.append(frame_processor)
         if state == False:
-            frame_processor_module = load_frame_processor_module(frame_processor)
             try:
+                frame_processor_module = load_frame_processor_module(frame_processor)
                 FRAME_PROCESSORS_MODULES.remove(frame_processor_module)
                 modules.globals.frame_processors.remove(frame_processor)
             except:
