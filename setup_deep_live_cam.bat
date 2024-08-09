@@ -39,8 +39,18 @@ echo Installing Visual Studio 2022 Runtimes...
 winget install --id Microsoft.VC++2015-2022Redist-x64 -e --source winget
 
 :: 2. Clone Repository
-echo Cloning the repository...
-git clone https://github.com/hacksider/Deep-Live-Cam.git
+if exist Deep-Live-Cam (
+    echo Deep-Live-Cam directory already exists.
+    set /p overwrite="Do you want to overwrite? (Y/N): "
+    if /i "%overwrite%"=="Y" (
+        rmdir /s /q Deep-Live-Cam
+        git clone https://github.com/hacksider/Deep-Live-Cam.git
+    ) else (
+        echo Skipping clone, using existing directory.
+    )
+) else (
+    git clone https://github.com/hacksider/Deep-Live-Cam.git
+)
 cd Deep-Live-Cam
 
 :: 3. Download Models
