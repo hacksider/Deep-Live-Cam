@@ -1,4 +1,4 @@
-*![demo-gif](demo.gif)
+![demo-gif](demo.gif)
 
 
 ## Disclaimer
@@ -26,12 +26,12 @@ git clone https://github.com/hacksider/Deep-Live-Cam.git
 
 #### 3. Download Models
 
-Download manually by click the url:
+Download manually by clicking the URL:
 
  1. [GFPGANv1.4](https://huggingface.co/hacksider/deep-live-cam/resolve/main/GFPGANv1.4.pth)
  2. [inswapper_128_fp16.onnx](https://huggingface.co/hacksider/deep-live-cam/resolve/main/inswapper_128_fp16.onnx)
 
-or Download by command lines:
+or download using command lines:
 
 ```bash
 wget https://huggingface.co/hacksider/deep-live-cam/resolve/main/GFPGANv1.4.pth
