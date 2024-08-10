@@ -101,8 +101,23 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     preview_button = ctk.CTkButton(root, text='Preview', cursor='hand2', command=lambda: toggle_preview())
     preview_button.place(relx=0.65, rely=0.80, relwidth=0.2, relheight=0.05)
 
-    live_button = ctk.CTkButton(root, text='Live', cursor='hand2', command=lambda: webcam_preview())
-    live_button.place(relx=0.40, rely=0.86, relwidth=0.2, relheight=0.05)
+    # --- Camera Selection ---
+    camera_label = ctk.CTkLabel(root, text="Select Camera:")
+    camera_label.place(relx=0.4, rely=0.86, relwidth=0.2, relheight=0.05)
+
+    available_cameras = get_available_cameras()
+
+    # Convert camera indices to strings for CTkOptionMenu
+    available_camera_strings = [str(cam) for cam in available_cameras]
+
+    camera_variable = ctk.StringVar(value=available_camera_strings[0] if available_camera_strings else "No cameras found")
+    camera_optionmenu = ctk.CTkOptionMenu(root, variable=camera_variable, 
+                                         values=available_camera_strings)
+    camera_optionmenu.place(relx=0.65, rely=0.86, relwidth=0.2, relheight=0.05)
+
+    live_button = ctk.CTkButton(root, text='Live', cursor='hand2', command=lambda: webcam_preview(int(camera_variable.get())))
+    live_button.place(relx=0.15, rely=0.86, relwidth=0.2, relheight=0.05)
+    # --- End Camera Selection ---
 
     status_label = ctk.CTkLabel(root, text=None, justify='center')
     status_label.place(relx=0.1, rely=0.9, relwidth=0.8)
@@ -249,14 +264,18 @@ def update_preview(frame_number: int = 0) -> None:
         image = ctk.CTkImage(image, size=image.size)
         preview_label.configure(image=image)
 
-def webcam_preview():
+def webcam_preview(camera_index: int):
     if modules.globals.source_path is None:
         # No image selected
         return
-    
+
     global preview_label, PREVIEW
 
-    cap = cv2.VideoCapture(0)  # Use index for the webcam (adjust the index accordingly if necessary)    
+    cap = cv2.VideoCapture(camera_index)
+    if not cap.isOpened():
+        update_status(f"Error: Could not open camera with index {camera_index}")
+        return
+
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 960)  # Set the width of the resolution
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 540)  # Set the height of the resolution
     cap.set(cv2.CAP_PROP_FPS, 60)  # Set the frame rate of the webcam
@@ -294,3 +313,13 @@ def webcam_preview():
 
     cap.release()
     PREVIEW.withdraw()  # Close preview window when loop is finished
+
+def get_available_cameras():
+    """Returns a list of available camera indices."""
+    available_cameras = []
+    for index in range(10):  # Check for cameras with index 0 to 9
+        cap = cv2.VideoCapture(index)
+        if cap.isOpened():
+            available_cameras.append(index)
+            cap.release()
+    return available_cameras
