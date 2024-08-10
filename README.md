@@ -1,4 +1,4 @@
-![demo-gif](demo.gif)
+*![demo-gif](demo.gif)
 
 
 ## Disclaimer
@@ -19,20 +19,36 @@ Users of this software are expected to use this software responsibly while abidi
 -   [ffmpeg](https://www.youtube.com/watch?v=OlNWCpFdVMA) 
 -   [visual studio 2022 runtimes (windows)](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
 #### 2. Clone Repository
-    https://github.com/hacksider/Deep-Live-Cam.git
+```bash
+git clone https://github.com/hacksider/Deep-Live-Cam.git
+
+```
 
 #### 3. Download Models
 
+Download manually by click the url:
+
  1. [GFPGANv1.4](https://huggingface.co/hacksider/deep-live-cam/resolve/main/GFPGANv1.4.pth)
  2. [inswapper_128_fp16.onnx](https://huggingface.co/hacksider/deep-live-cam/resolve/main/inswapper_128_fp16.onnx)
+
+or Download by command lines:
+
+```bash
+wget https://huggingface.co/hacksider/deep-live-cam/resolve/main/GFPGANv1.4.pth
+wget https://huggingface.co/hacksider/deep-live-cam/resolve/main/inswapper_128_fp16.onnx
+
+```
 
 Then put those 2 files on the "**models**" folder
 
 #### 4. Install dependency
 We highly recommend to work with a  `venv`  to avoid issues.
-```
+
+```bash
 pip install -r requirements.txt
+
 ```
+
 ##### DONE!!! If you dont have any GPU, You should be able to run roop using `python run.py` command. Keep in mind that while running the program for first time, it will download some models which can take time depending on your network connection.
 
 ### *Proceed if you want to use GPU Acceleration
@@ -43,15 +59,14 @@ pip install -r requirements.txt
 2.  Install dependencies:
     
 
-```
+```bash
 pip uninstall onnxruntime onnxruntime-gpu
 pip install onnxruntime-gpu==1.16.3
-
 ```
 
 3.  Usage in case the provider is available:
 
-```
+```bash
 python run.py --execution-provider cuda
 
 ```
@@ -60,7 +75,7 @@ python run.py --execution-provider cuda
 
 1.  Install dependencies:
 
-```
+```bash
 pip uninstall onnxruntime onnxruntime-silicon
 pip install onnxruntime-silicon==1.13.1
 
@@ -68,7 +83,7 @@ pip install onnxruntime-silicon==1.13.1
 
 2.  Usage in case the provider is available:
 
-```
+```bash
 python run.py --execution-provider coreml
 
 ```
@@ -77,7 +92,7 @@ python run.py --execution-provider coreml
 
 1.  Install dependencies:
 
-```
+```bash
 pip uninstall onnxruntime onnxruntime-coreml
 pip install onnxruntime-coreml==1.13.1
 
@@ -85,7 +100,7 @@ pip install onnxruntime-coreml==1.13.1
 
 2.  Usage in case the provider is available:
 
-```
+```bash
 python run.py --execution-provider coreml
 
 ```
@@ -94,7 +109,7 @@ python run.py --execution-provider coreml
 
 1.  Install dependencies:
 
-```
+```bash
 pip uninstall onnxruntime onnxruntime-directml
 pip install onnxruntime-directml==1.15.1
 
@@ -102,7 +117,7 @@ pip install onnxruntime-directml==1.15.1
 
 2.  Usage in case the provider is available:
 
-```
+```bash
 python run.py --execution-provider directml
 
 ```
@@ -111,7 +126,7 @@ python run.py --execution-provider directml
 
 1.  Install dependencies:
 
-```
+```bash
 pip uninstall onnxruntime onnxruntime-openvino
 pip install onnxruntime-openvino==1.15.0
 
@@ -119,8 +134,9 @@ pip install onnxruntime-openvino==1.15.0
 
 2.  Usage in case the provider is available:
 
-```
+```bash
 python run.py --execution-provider openvino
+
 ```
 
 ## How do I use it?
