@@ -135,7 +135,7 @@ Choose a face (image with desired face) and the target image/video (image/video 
 Just follow the clicks on the screenshot
 1. Select a face
 2. Click live
-3. Wait for a few second (it takes a longer time, usually 10 to 30 seconds before the preview shows up)
+3. Wait for a few seconds (it takes a longer time, usually 10 to 30 seconds before the preview shows up)
 
 ![demo-gif](demo.gif)
 
