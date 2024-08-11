@@ -103,7 +103,7 @@ pip install onnxruntime-directml==1.15.1
 2.  Usage in case the provider is available:
 
 ```
-python run.py --execution-provider directml
+python run.py --execution-provider dml
 
 ```
 
