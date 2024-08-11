@@ -170,7 +170,7 @@ Looking for a CLI mode? Using the -s/--source argument will make the run program
 If you want the latest and greatest build, or want to see some new great features, go to our [experimental branch](https://github.com/hacksider/Deep-Live-Cam/tree/experimental) and experience what the contributors have given.
 
 ## Credits
-- [henryruhs](https://github.com/henryruhs): for being an irreplaceable contributor to the project
+
 - [ffmpeg](https://ffmpeg.org/): for making video related operations easy
 - [deepinsight](https://github.com/deepinsight): for their [insightface](https://github.com/deepinsight/insightface) project which provided a well-made library and models.
 - [havok2-htwo](https://github.com/havok2-htwo) : for sharing the code for webcam
