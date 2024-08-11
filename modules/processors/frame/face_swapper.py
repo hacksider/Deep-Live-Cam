@@ -2,6 +2,7 @@ from typing import Any, List
 import cv2
 import insightface
 import threading
+import os
 
 import modules.globals
 import modules.processors.frame.core
@@ -14,25 +15,24 @@ FACE_SWAPPER = None
 THREAD_LOCK = threading.Lock()
 NAME = 'DLC.FACE-SWAPPER'
 
-
 def pre_check() -> bool:
     download_directory_path = resolve_relative_path('../models')
-    conditional_download(download_directory_path, ['https://huggingface.co/hacksider/deep-live-cam/blob/main/inswapper_128_fp16.onnx'])
+    conditional_download(download_directory_path, [
+        'https://huggingface.co/hacksider/deep-live-cam/blob/main/inswapper_128_fp16.onnx'
+    ])
     return True
-
 
 def pre_start() -> bool:
     if not is_image(modules.globals.source_path):
         update_status('Select an image for source path.', NAME)
         return False
     elif not get_one_face(cv2.imread(modules.globals.source_path)):
-        update_status('No face in source path detected.', NAME)
+        update_status('No face detected in the source path.', NAME)
         return False
     if not is_image(modules.globals.target_path) and not is_video(modules.globals.target_path):
         update_status('Select an image or video for target path.', NAME)
         return False
     return True
-
 
 def get_face_swapper() -> Any:
     global FACE_SWAPPER
@@ -43,10 +43,8 @@ def get_face_swapper() -> Any:
             FACE_SWAPPER = insightface.model_zoo.get_model(model_path, providers=modules.globals.execution_providers)
     return FACE_SWAPPER
 
-
 def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
     return get_face_swapper().get(temp_frame, target_face, source_face, paste_back=True)
-
 
 def process_frame(source_face: Face, temp_frame: Frame) -> Frame:
     if modules.globals.many_faces:
@@ -60,7 +58,6 @@ def process_frame(source_face: Face, temp_frame: Frame) -> Frame:
             temp_frame = swap_face(source_face, target_face, temp_frame)
     return temp_frame
 
-
 def process_frames(source_path: str, temp_frame_paths: List[str], progress: Any = None) -> None:
     source_face = get_one_face(cv2.imread(source_path))
     for temp_frame_path in temp_frame_paths:
@@ -69,18 +66,15 @@ def process_frames(source_path: str, temp_frame_paths: List[str], progress: Any 
             result = process_frame(source_face, temp_frame)
             cv2.imwrite(temp_frame_path, result)
         except Exception as exception:
-            print(exception)
-            pass
+            print(f"Error processing frame {temp_frame_path}: {exception}")
         if progress:
             progress.update(1)
-
 
 def process_image(source_path: str, target_path: str, output_path: str) -> None:
     source_face = get_one_face(cv2.imread(source_path))
     target_frame = cv2.imread(target_path)
     result = process_frame(source_face, target_frame)
     cv2.imwrite(output_path, result)
-
 
 def process_video(source_path: str, temp_frame_paths: List[str]) -> None:
     modules.processors.frame.core.process_video(source_path, temp_frame_paths, process_frames)
