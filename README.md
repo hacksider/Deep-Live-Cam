@@ -21,14 +21,7 @@ Users of this software are expected to use this software responsibly while abidi
 #### 2. Clone Repository
     https://github.com/hacksider/Deep-Live-Cam.git
 
-#### 3. Download Models
-
- 1. [GFPGANv1.4](https://huggingface.co/hacksider/deep-live-cam/resolve/main/GFPGANv1.4.pth)
- 2. [inswapper_128_fp16.onnx](https://huggingface.co/hacksider/deep-live-cam/resolve/main/inswapper_128_fp16.onnx)
-
-Then put those 2 files on the "**models**" folder
-
-#### 4. Install dependency
+#### 3. Install dependency
 We highly recommend to work with a  `venv`  to avoid issues.
 ```
 pip install -r requirements.txt
@@ -127,7 +120,7 @@ python run.py --execution-provider openvino
 > Note: When you run this program for the first time, it will download some models ~300MB in size.
 
 Executing `python run.py` command will launch this window:
-![gui-demo](instruction.png)
+![gui-demo](docs/instruction.png)
 
 Choose a face (image with desired face) and the target image/video (image/video in which you want to replace the face) and click on `Start`. Open file explorer and navigate to the directory you select your output to be in. You will find a directory named `<video_title>` where you can see the frames being swapped in realtime. Once the processing is done, it will create the output file. That's it.
 
@@ -137,7 +130,7 @@ Just follow the clicks on the screenshot
 2. Click live
 3. Wait for a few seconds (it takes a longer time, usually 10 to 30 seconds before the preview shows up)
 
-![demo-gif](demo.gif)
+![demo-gif](docs/demo.gif)
 
 Just use your favorite screencapture to stream like OBS
 > Note: In case you want to change your face, just select another picture, the preview mode will then restart (so just wait a bit).
