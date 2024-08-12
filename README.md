@@ -14,6 +14,7 @@ Users of this software are expected to use this software responsibly while abidi
 ### Basic: It is more likely to work on your computer but it will also be very slow. You can follow instructions for the basic install (This usually runs via **CPU**)
 #### 1.Setup your platform
 -   python (3.10 recommended)
+-   python-tk
 -   pip
 -   git
 -   [ffmpeg](https://www.youtube.com/watch?v=OlNWCpFdVMA) 
