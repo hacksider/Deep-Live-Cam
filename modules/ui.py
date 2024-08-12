@@ -1,9 +1,16 @@
 import os
+import platform
 import webbrowser
 import customtkinter as ctk
 from typing import Callable, Tuple
 import cv2
 from PIL import Image, ImageOps
+
+# Import OS-specific modules only when necessary
+if platform.system() == 'Darwin':  # macOS
+    import objc
+    from Foundation import NSObject
+    import AVFoundation
 
 import modules.globals
 import modules.metadata
@@ -33,9 +40,47 @@ status_label = None
 img_ft, vid_ft = modules.globals.file_types
 
 
+def check_camera_permissions():
+    """Check and request camera access permission on macOS."""
+    if platform.system() == 'Darwin':  # macOS-specific
+        auth_status = AVFoundation.AVCaptureDevice.authorizationStatusForMediaType_(AVFoundation.AVMediaTypeVideo)
+
+        if auth_status == AVFoundation.AVAuthorizationStatusNotDetermined:
+            # Request access to the camera
+            def completion_handler(granted):
+                if granted:
+                    print("Access granted to the camera.")
+                else:
+                    print("Access denied to the camera.")
+            
+            AVFoundation.AVCaptureDevice.requestAccessForMediaType_completionHandler_(AVFoundation.AVMediaTypeVideo, completion_handler)
+        elif auth_status == AVFoundation.AVAuthorizationStatusAuthorized:
+            print("Camera access already authorized.")
+        elif auth_status == AVFoundation.AVAuthorizationStatusDenied:
+            print("Camera access denied. Please enable it in System Preferences.")
+        elif auth_status == AVFoundation.AVAuthorizationStatusRestricted:
+            print("Camera access restricted. The app is not allowed to use the camera.")
+
+
+def select_camera(camera_name: str):
+    """Select the appropriate camera based on its name (cross-platform)."""
+    if platform.system() == 'Darwin':  # macOS-specific
+        devices = AVFoundation.AVCaptureDevice.devicesWithMediaType_(AVFoundation.AVMediaTypeVideo)
+        for device in devices:
+            if device.localizedName() == camera_name:
+                return device
+    elif platform.system() == 'Windows' or platform.system() == 'Linux':
+        # On Windows/Linux, simply return the camera name as OpenCV can handle it by index
+        return camera_name
+    return None
+
+
 def init(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.CTk:
     global ROOT, PREVIEW
 
+    if platform.system() == 'Darwin':  # macOS-specific
+        check_camera_permissions()  # Check camera permissions before initializing the UI
+    
     ROOT = create_root(start, destroy)
     PREVIEW = create_preview(ROOT)
 
@@ -49,10 +94,11 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     ctk.set_appearance_mode('system')
     ctk.set_default_color_theme(resolve_relative_path('ui.json'))
 
+    print("Creating root window...")
+    
     root = ctk.CTk()
     root.minsize(ROOT_WIDTH, ROOT_HEIGHT)
     root.title(f'{modules.metadata.name} {modules.metadata.version} {modules.metadata.edition}')
-    root.configure()
     root.protocol('WM_DELETE_WINDOW', lambda: destroy())
 
     source_label = ctk.CTkLabel(root, text=None)
@@ -61,10 +107,10 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     target_label = ctk.CTkLabel(root, text=None)
     target_label.place(relx=0.6, rely=0.1, relwidth=0.3, relheight=0.25)
 
-    source_button = ctk.CTkButton(root, text='Select a face', cursor='hand2', command=lambda: select_source_path())
+    source_button = ctk.CTkButton(root, text='Select a face', cursor='hand2', command=select_source_path)
     source_button.place(relx=0.1, rely=0.4, relwidth=0.3, relheight=0.1)
 
-    target_button = ctk.CTkButton(root, text='Select a target', cursor='hand2', command=lambda: select_target_path())
+    target_button = ctk.CTkButton(root, text='Select a target', cursor='hand2', command=select_target_path)
     target_button.place(relx=0.6, rely=0.4, relwidth=0.3, relheight=0.1)
 
     keep_fps_value = ctk.BooleanVar(value=modules.globals.keep_fps)
@@ -75,9 +121,8 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     keep_frames_switch = ctk.CTkSwitch(root, text='Keep frames', variable=keep_frames_value, cursor='hand2', command=lambda: setattr(modules.globals, 'keep_frames', keep_frames_value.get()))
     keep_frames_switch.place(relx=0.1, rely=0.65)
 
-    # for FRAME PROCESSOR ENHANCER tumbler:
     enhancer_value = ctk.BooleanVar(value=modules.globals.fp_ui['face_enhancer'])
-    enhancer_switch = ctk.CTkSwitch(root, text='Face Enhancer', variable=enhancer_value, cursor='hand2', command=lambda: update_tumbler('face_enhancer',enhancer_value.get()))
+    enhancer_switch = ctk.CTkSwitch(root, text='Face Enhancer', variable=enhancer_value, cursor='hand2', command=lambda: update_tumbler('face_enhancer', enhancer_value.get()))
     enhancer_switch.place(relx=0.1, rely=0.7)
 
     keep_audio_value = ctk.BooleanVar(value=modules.globals.keep_audio)
@@ -93,57 +138,51 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     nsfw_switch.place(relx=0.6, rely=0.7)
 
     start_button = ctk.CTkButton(root, text='Start', cursor='hand2', command=lambda: select_output_path(start))
-    start_button.place(relx=0.15, rely=0.80, relwidth=0.2, relheight=0.05)
+    start_button.place(relx=0.15, rely=0.8, relwidth=0.2, relheight=0.05)
 
-    stop_button = ctk.CTkButton(root, text='Destroy', cursor='hand2', command=lambda: destroy())
-    stop_button.place(relx=0.4, rely=0.80, relwidth=0.2, relheight=0.05)
+    stop_button = ctk.CTkButton(root, text='Destroy', cursor='hand2', command=destroy)
+    stop_button.place(relx=0.4, rely=0.8, relwidth=0.2, relheight=0.05)
 
-    preview_button = ctk.CTkButton(root, text='Preview', cursor='hand2', command=lambda: toggle_preview())
-    preview_button.place(relx=0.65, rely=0.80, relwidth=0.2, relheight=0.05)
+    preview_button = ctk.CTkButton(root, text='Preview', cursor='hand2', command=toggle_preview)
+    preview_button.place(relx=0.65, rely=0.8, relwidth=0.2, relheight=0.05)
 
-    # --- Camera Selection ---
     camera_label = ctk.CTkLabel(root, text="Select Camera:")
     camera_label.place(relx=0.4, rely=0.86, relwidth=0.2, relheight=0.05)
 
     available_cameras = get_available_cameras()
-
-    # Convert camera indices to strings for CTkOptionMenu
     available_camera_strings = [str(cam) for cam in available_cameras]
 
     camera_variable = ctk.StringVar(value=available_camera_strings[0] if available_camera_strings else "No cameras found")
-    camera_optionmenu = ctk.CTkOptionMenu(root, variable=camera_variable, 
-                                         values=available_camera_strings)
+    camera_optionmenu = ctk.CTkOptionMenu(root, variable=camera_variable, values=available_camera_strings)
     camera_optionmenu.place(relx=0.65, rely=0.86, relwidth=0.2, relheight=0.05)
 
-    live_button = ctk.CTkButton(root, text='Live', cursor='hand2', command=lambda: webcam_preview(int(camera_variable.get())))
+    live_button = ctk.CTkButton(root, text='Live', cursor='hand2', command=lambda: webcam_preview(camera_variable.get()))
     live_button.place(relx=0.15, rely=0.86, relwidth=0.2, relheight=0.05)
-    # --- End Camera Selection ---
 
     status_label = ctk.CTkLabel(root, text=None, justify='center')
-    status_label.place(relx=0.1, rely=0.9, relwidth=0.8)
+    status_label.place(relx=0.1, relwidth=0.8, rely=0.9)
 
     donate_label = ctk.CTkLabel(root, text='Deep Live Cam', justify='center', cursor='hand2')
     donate_label.place(relx=0.1, rely=0.95, relwidth=0.8)
     donate_label.configure(text_color=ctk.ThemeManager.theme.get('URL').get('text_color'))
-    donate_label.bind('<Button>', lambda event: webbrowser.open('https://paypal.me/hacksider'))
+    donate_label.bind('<Button-1>', lambda event: webbrowser.open('https://paypal.me/hacksider'))
 
     return root
 
 
-def create_preview(parent: ctk.CTkToplevel) -> ctk.CTkToplevel:
+def create_preview(parent: ctk.CTk) -> ctk.CTkToplevel:
     global preview_label, preview_slider
 
     preview = ctk.CTkToplevel(parent)
     preview.withdraw()
     preview.title('Preview')
-    preview.configure()
-    preview.protocol('WM_DELETE_WINDOW', lambda: toggle_preview())
+    preview.protocol('WM_DELETE_WINDOW', toggle_preview)
     preview.resizable(width=False, height=False)
 
     preview_label = ctk.CTkLabel(preview, text=None)
     preview_label.pack(fill='both', expand=True)
 
-    preview_slider = ctk.CTkSlider(preview, from_=0, to=0, command=lambda frame_value: update_preview(frame_value))
+    preview_slider = ctk.CTkSlider(preview, from_=0, to=0, command=update_preview)
 
     return preview
 
@@ -158,10 +197,10 @@ def update_tumbler(var: str, value: bool) -> None:
 
 
 def select_source_path() -> None:
-    global RECENT_DIRECTORY_SOURCE, img_ft, vid_ft
+    global RECENT_DIRECTORY_SOURCE
 
     PREVIEW.withdraw()
-    source_path = ctk.filedialog.askopenfilename(title='select an source image', initialdir=RECENT_DIRECTORY_SOURCE, filetypes=[img_ft])
+    source_path = ctk.filedialog.askopenfilename(title='Select a source image', initialdir=RECENT_DIRECTORY_SOURCE, filetypes=[img_ft])
     if is_image(source_path):
         modules.globals.source_path = source_path
         RECENT_DIRECTORY_SOURCE = os.path.dirname(modules.globals.source_path)
@@ -173,10 +212,10 @@ def select_source_path() -> None:
 
 
 def select_target_path() -> None:
-    global RECENT_DIRECTORY_TARGET, img_ft, vid_ft
+    global RECENT_DIRECTORY_TARGET
 
     PREVIEW.withdraw()
-    target_path = ctk.filedialog.askopenfilename(title='select an target image or video', initialdir=RECENT_DIRECTORY_TARGET, filetypes=[img_ft, vid_ft])
+    target_path = ctk.filedialog.askopenfilename(title='Select a target image or video', initialdir=RECENT_DIRECTORY_TARGET, filetypes=[img_ft, vid_ft])
     if is_image(target_path):
         modules.globals.target_path = target_path
         RECENT_DIRECTORY_TARGET = os.path.dirname(modules.globals.target_path)
@@ -193,12 +232,12 @@ def select_target_path() -> None:
 
 
 def select_output_path(start: Callable[[], None]) -> None:
-    global RECENT_DIRECTORY_OUTPUT, img_ft, vid_ft
+    global RECENT_DIRECTORY_OUTPUT
 
     if is_image(modules.globals.target_path):
-        output_path = ctk.filedialog.asksaveasfilename(title='save image output file', filetypes=[img_ft], defaultextension='.png', initialfile='output.png', initialdir=RECENT_DIRECTORY_OUTPUT)
+        output_path = ctk.filedialog.asksaveasfilename(title='Save image output file', filetypes=[img_ft], defaultextension='.png', initialfile='output.png', initialdir=RECENT_DIRECTORY_OUTPUT)
     elif is_video(modules.globals.target_path):
-        output_path = ctk.filedialog.asksaveasfilename(title='save video output file', filetypes=[vid_ft], defaultextension='.mp4', initialfile='output.mp4', initialdir=RECENT_DIRECTORY_OUTPUT)
+        output_path = ctk.filedialog.asksaveasfilename(title='Save video output file', filetypes=[vid_ft], defaultextension='.mp4', initialfile='output.mp4', initialdir=RECENT_DIRECTORY_OUTPUT)
     else:
         output_path = None
     if output_path:
@@ -219,13 +258,13 @@ def render_video_preview(video_path: str, size: Tuple[int, int], frame_number: i
     if frame_number:
         capture.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
     has_frame, frame = capture.read()
+    capture.release()
     if has_frame:
         image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
         if size:
             image = ImageOps.fit(image, size, Image.LANCZOS)
         return ctk.CTkImage(image, size=image.size)
-    capture.release()
-    cv2.destroyAllWindows()
+    return None
 
 
 def toggle_preview() -> None:
@@ -240,7 +279,7 @@ def toggle_preview() -> None:
 def init_preview() -> None:
     if is_image(modules.globals.target_path):
         preview_slider.pack_forget()
-    if is_video(modules.globals.target_path):
+    elif is_video(modules.globals.target_path):
         video_frame_total = get_video_frame_total(modules.globals.target_path)
         preview_slider.configure(to=video_frame_total)
         preview_slider.pack(fill='x')
@@ -250,7 +289,7 @@ def init_preview() -> None:
 def update_preview(frame_number: int = 0) -> None:
     if modules.globals.source_path and modules.globals.target_path:
         temp_frame = get_video_frame(modules.globals.target_path, frame_number)
-        if modules.globals.nsfw == False:
+        if not modules.globals.nsfw:
             from modules.predicter import predict_frame
             if predict_frame(temp_frame):
                 quit()
@@ -264,62 +303,98 @@ def update_preview(frame_number: int = 0) -> None:
         image = ctk.CTkImage(image, size=image.size)
         preview_label.configure(image=image)
 
-def webcam_preview(camera_index: int):
+
+def webcam_preview(camera_name: str):
     if modules.globals.source_path is None:
-        # No image selected
         return
 
     global preview_label, PREVIEW
 
-    cap = cv2.VideoCapture(camera_index)
-    if not cap.isOpened():
-        update_status(f"Error: Could not open camera with index {camera_index}")
+    # Select the camera by its name
+    selected_camera = select_camera(camera_name)
+    if selected_camera is None:
+        update_status(f"No suitable camera found.")
         return
 
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 960)  # Set the width of the resolution
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 540)  # Set the height of the resolution
-    cap.set(cv2.CAP_PROP_FPS, 60)  # Set the frame rate of the webcam
+    # Use OpenCV's camera index for cross-platform compatibility
+    camera_index = get_camera_index_by_name(camera_name)
+
+    cap = cv2.VideoCapture(camera_index)
+
+    if not cap.isOpened():
+        update_status(f"Error: Could not open camera {camera_name}")
+        return
+
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 960)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 540)
+    cap.set(cv2.CAP_PROP_FPS, 60)
+
     PREVIEW_MAX_WIDTH = 960
     PREVIEW_MAX_HEIGHT = 540
 
-    preview_label.configure(image=None)  # Reset the preview image before startup
-
-    PREVIEW.deiconify()  # Open preview window
+    preview_label.configure(image=None)
+    PREVIEW.deiconify()
 
     frame_processors = get_frame_processors_modules(modules.globals.frame_processors)
-
-    source_image = None  # Initialize variable for the selected face image
+    source_image = get_one_face(cv2.imread(modules.globals.source_path))
 
     while True:
         ret, frame = cap.read()
         if not ret:
+            update_status(f"Error: Frame not received from camera.")
             break
 
-        # Select and save face image only once
-        if source_image is None and modules.globals.source_path:
-            source_image = get_one_face(cv2.imread(modules.globals.source_path))
-
-        temp_frame = frame.copy()  #Create a copy of the frame
+        temp_frame = frame.copy()
 
         for frame_processor in frame_processors:
             temp_frame = frame_processor.process_frame(source_image, temp_frame)
 
-        image = cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB)  # Convert the image to RGB format to display it with Tkinter
-        image = Image.fromarray(image)
+        image = Image.fromarray(cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB))
         image = ImageOps.contain(image, (PREVIEW_MAX_WIDTH, PREVIEW_MAX_HEIGHT), Image.LANCZOS)
         image = ctk.CTkImage(image, size=image.size)
         preview_label.configure(image=image)
         ROOT.update()
 
     cap.release()
-    PREVIEW.withdraw()  # Close preview window when loop is finished
+    PREVIEW.withdraw()
+
+
+def get_camera_index_by_name(camera_name: str) -> int:
+    """Map camera name to index for OpenCV."""
+    if platform.system() == 'Darwin':  # macOS-specific
+        if "FaceTime" in camera_name:
+            return 0  # Assuming FaceTime is at index 0
+        elif "iPhone" in camera_name:
+            return 1  # Assuming iPhone camera is at index 1
+    elif platform.system() == 'Windows' or platform.system() == 'Linux':
+        # Map camera name to index dynamically (OpenCV on these platforms usually starts with 0)
+        return get_available_cameras().index(camera_name)
+    return -1
+
 
 def get_available_cameras():
-    """Returns a list of available camera indices."""
+    """Get available camera names (cross-platform)."""
     available_cameras = []
-    for index in range(10):  # Check for cameras with index 0 to 9
-        cap = cv2.VideoCapture(index)
-        if cap.isOpened():
-            available_cameras.append(index)
+    if platform.system() == 'Darwin':  # macOS-specific
+        devices = AVFoundation.AVCaptureDevice.devicesWithMediaType_(AVFoundation.AVMediaTypeVideo)
+        
+        for device in devices:
+            if device.deviceType() == AVFoundation.AVCaptureDeviceTypeBuiltInWideAngleCamera:
+                print(f"Found Built-In Camera: {device.localizedName()}")
+                available_cameras.append(device.localizedName())
+            elif device.deviceType() == "AVCaptureDeviceTypeExternal":
+                print(f"Found External Camera: {device.localizedName()}")
+                available_cameras.append(device.localizedName())
+            elif device.deviceType() == "AVCaptureDeviceTypeContinuityCamera":
+                print(f"Skipping Continuity Camera: {device.localizedName()}")
+    elif platform.system() == 'Windows' or platform.system() == 'Linux':
+        # Use OpenCV to detect camera indexes
+        index = 0
+        while True:
+            cap = cv2.VideoCapture(index)
+            if not cap.isOpened():
+                break
+            available_cameras.append(f"Camera {index}")
             cap.release()
+            index += 1
     return available_cameras
