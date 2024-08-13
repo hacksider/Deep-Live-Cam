@@ -6,7 +6,6 @@ __pycache__/
 .todo
 *.log
 *.backup
-.tf_env/
 
 *.png
 *.mp4
@@ -23,3 +22,5 @@ models/GFPGANv1.4.pth
 *.onnx
 models/DMDNet.pth
 .venv/
+tf_env/
+.tf_env/
