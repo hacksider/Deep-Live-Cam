@@ -15,6 +15,7 @@ THREAD_LOCK = threading.Lock()
 NAME = 'DLC.FACE-SWAPPER'
 
 
+# model update to use GPU / Metal on MacOS
 def pre_check() -> bool:
     download_directory_path = resolve_relative_path('../models')
     conditional_download(download_directory_path, ['https://huggingface.co/hacksider/deep-live-cam/blob/main/inswapper_128.onnx'])
