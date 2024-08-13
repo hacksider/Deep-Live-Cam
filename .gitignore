@@ -6,7 +6,7 @@ __pycache__/
 .todo
 *.log
 *.backup
-.tfenv/
+.tf_env/
 
 *.png
 *.mp4
