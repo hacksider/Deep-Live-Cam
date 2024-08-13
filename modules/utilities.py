@@ -27,7 +27,8 @@ def run_ffmpeg(args: List[str]) -> bool:
         subprocess.check_output(commands, stderr=subprocess.STDOUT)
         return True
     except Exception:
-        pass
+        print(' '.join(commands), "failed, please check the ffmpeg installation!")
+        exit(-1)
     return False
 
 
@@ -38,7 +39,7 @@ def detect_fps(target_path: str) -> float:
         numerator, denominator = map(int, output)
         return numerator / denominator
     except Exception:
-        pass
+        print(' '.join(commands), "failed, please check the ffprobe installation!")
     return 30.0
 
 
