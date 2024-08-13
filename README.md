@@ -74,19 +74,20 @@ python run.py --execution-provider coreml
 ```
 
 ### [](https://github.com/s0md3v/roop/wiki/2.-Acceleration#coreml-execution-provider-apple-legacy)CoreML Execution Provider (Apple Legacy)
+Metal support has been added for improved performance on macOS devices.
 
 1.  Install dependencies:
 
 ```
-pip uninstall onnxruntime onnxruntime-coreml
-pip install onnxruntime-coreml==1.13.1
+pip uninstall onnxruntime onnxruntime-silicon
+pip install onnxruntime-silicon==1.13.1
 
 ```
 
 2.  Usage in case the provider is available:
 
 ```
-python run.py --execution-provider coreml
+python run.py --execution-provider metal
 
 ```
 
