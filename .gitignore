@@ -22,3 +22,4 @@ models/inswapper_128.onnx
 models/GFPGANv1.4.pth
 *.onnx
 models/DMDNet.pth
+.venv/
