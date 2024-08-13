@@ -95,7 +95,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     start_button = ctk.CTkButton(root, text='开始', cursor='hand2', command=lambda: select_output_path(start))
     start_button.place(relx=0.15, rely=0.80, relwidth=0.2, relheight=0.05)
 
-    stop_button = ctk.CTkButton(root, text='充值', cursor='hand2', command=lambda: destroy())
+    stop_button = ctk.CTkButton(root, text='关闭', cursor='hand2', command=lambda: destroy())
     stop_button.place(relx=0.4, rely=0.80, relwidth=0.2, relheight=0.05)
 
     preview_button = ctk.CTkButton(root, text='预览', cursor='hand2', command=lambda: toggle_preview())
