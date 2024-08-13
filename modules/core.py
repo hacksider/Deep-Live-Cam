@@ -41,8 +41,8 @@ def parse_args() -> None:
     program.add_argument('--keep-audio', help='keep original audio', dest='keep_audio', action='store_true', default=True)
     program.add_argument('--keep-frames', help='keep temporary frames', dest='keep_frames', action='store_true', default=True)
     program.add_argument('--many-faces', help='process every face', dest='many_faces', action='store_true', default=False)
-    program.add_argument('--video-encoder', help='adjust output video encoder', dest='video_encoder', default='libx264', choices=['libx264', 'libx265', 'libvpx-vp9'])
-    program.add_argument('--video-quality', help='adjust output video quality', dest='video_quality', type=int, default=50, choices=range(52), metavar='[0-51]')
+    program.add_argument('--video-encoder', help='adjust output video encoder', dest='video_encoder', default='libx265', choices=['libx264', 'libx265', 'libvpx-vp9'])
+    program.add_argument('--video-quality', help='adjust output video quality', dest='video_quality', type=int, default=1, choices=range(52), metavar='[0-51]')
     program.add_argument('--max-memory', help='maximum amount of RAM in GB', dest='max_memory', type=int, default=suggest_max_memory())
     program.add_argument('--execution-provider', help='execution provider', dest='execution_provider', default=['coreml'], choices=suggest_execution_providers(), nargs='+')
     program.add_argument('--execution-threads', help='number of execution threads', dest='execution_threads', type=int, default=suggest_execution_threads())
@@ -75,8 +75,8 @@ def parse_args() -> None:
 
 def suggest_max_memory() -> int:
     if platform.system().lower() == 'darwin':
-        return 4
-    return 16
+        return 6
+    return 4
 
 
 def suggest_execution_providers() -> List[str]:
@@ -84,7 +84,10 @@ def suggest_execution_providers() -> List[str]:
 
 
 def suggest_execution_threads() -> int:
-    return 8
+    if platform.system().lower() == 'darwin':
+        return 12
+    return 4
+    
 
 
 def limit_resources() -> None:
