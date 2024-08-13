@@ -109,8 +109,8 @@ def decode_execution_providers(execution_providers: List[str]) -> List[str]:
 
 def suggest_max_memory() -> int:
     if platform.system().lower() == 'darwin':
-        return 4
-    return 16
+        return 6
+    return 4
 
 
 def suggest_execution_providers() -> List[str]:
@@ -118,7 +118,10 @@ def suggest_execution_providers() -> List[str]:
 
 
 def suggest_execution_threads() -> int:
-    return 8
+    if platform.system().lower() == 'darwin':
+        return 12
+    return 4
+    
 
 
 def limit_resources() -> None:
