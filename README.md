@@ -87,7 +87,7 @@ pip install onnxruntime-silicon==1.13.1
 2.  Usage in case the provider is available:
 
 ```
-python run.py --execution-provider metal
+python run.py --execution-provider coreml
 
 ```
 

@@ -27,8 +27,8 @@ def run_ffmpeg(args: List[str]) -> bool:
     try:
         subprocess.check_output(commands, stderr=subprocess.STDOUT)
         return True
-    except Exception:
-        pass
+    except subprocess.CalledProcessError as e:
+        print(f"FFmpeg error: {e.output.decode().strip()}")  # Capture and print the error message
     return False
 
 
@@ -58,6 +58,21 @@ def extract_frames(target_path: str) -> None:
         frame_count += 1
     
     cap.release()
+
+
+def extract_frames_ffmpeg(target_path: str) -> None:
+    temp_directory_path = get_temp_directory_path(target_path)
+    os.makedirs(temp_directory_path, exist_ok=True)  # Ensure output directory exists
+    try:
+        (
+            ffmpeg
+            .input(target_path)
+            .output(os.path.join(temp_directory_path, '%04d.png'), start_number=0)
+            .overwrite_output()
+            .run(capture_stdout=True, capture_stderr=True)
+        )
+    except Exception as e:
+        print(f"Error running FFmpeg: {str(e)}")
 
 
 def create_video(target_path: str, fps: float = 30.0) -> None:

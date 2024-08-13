@@ -24,6 +24,7 @@ execution_providers: List[str] = []
 execution_threads = None
 headless = None
 log_level = 'error'
+model = None
 fp_ui: Dict[str, bool] = {}
 nsfw = None
 camera_input_combobox = None
