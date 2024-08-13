@@ -27,7 +27,7 @@
     pip install -r requirements.txt
     ```
     ```(适用于 Python3.10.x)
-    pip install -r requirements.txt
+    pip install -r orginal_requirements.txt
     ```
     完成 !!! 如果您没有 GPU，您应该能够使用 `python run.py` 命令运行 roop。请注意，在首次运行程序时，它将下载一些模型，这可能会根据您的网络连接花费一些时间。
 ### GPU 加速
