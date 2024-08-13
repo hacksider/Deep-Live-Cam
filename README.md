@@ -23,6 +23,7 @@
     然后将这两个文件放在“**models**”文件夹中。
 4. **安装依赖项**:
     我们强烈建议使用 `venv` 以避免问题。
+   
     (适用于 Python3.12.x)
     ```
     pip install -r requirements.txt
