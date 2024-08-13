@@ -23,10 +23,12 @@
     然后将这两个文件放在“**models**”文件夹中。
 4. **安装依赖项**:
     我们强烈建议使用 `venv` 以避免问题。
-    ```(适用于 Python3.12.x)
+    (适用于 Python3.12.x)
+    ```
     pip install -r requirements.txt
     ```
-    ```(适用于 Python3.10.x)
+    (适用于 Python3.10.x)
+    ```
     pip install -r orginal_requirements.txt
     ```
     完成 !!! 如果您没有 GPU，您应该能够使用 `python run.py` 命令运行 roop。请注意，在首次运行程序时，它将下载一些模型，这可能会根据您的网络连接花费一些时间。
