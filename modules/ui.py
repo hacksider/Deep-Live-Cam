@@ -194,38 +194,6 @@ def select_output_path(start: Callable[[], None]) -> None:
         start()
 
 
-def check_and_ignore_nsfw(target, destroy: Callable = None) -> bool:
-    ''' Check if the target is NSFW.
-    TODO: Consider to make blur the target.
-    '''
-    from numpy import ndarray
-    from modules.predicter import predict_image, predict_video, predict_frame
-    if type(target) is str: # image/video file path
-        check_nsfw = predict_image if has_image_extension(target) else predict_video
-    elif type(target) is ndarray: # frame object
-        check_nsfw = predict_frame
-    if check_nsfw and check_nsfw(target):
-        if destroy: destroy(to_quit=False) # Do not need to destroy the window frame if the target is NSFW
-        update_status('Processing ignored!')
-        return True
-    else: return False
-
-
-def fit_image_to_size(image, width: int, height: int):
-    if width is None and height is None:
-      return image
-    h, w, _ = image.shape
-    ratio_h = 0.0
-    ratio_w = 0.0
-    if width > height:
-        ratio_h = height / h
-    else:
-        ratio_w = width  / w
-    ratio = max(ratio_w, ratio_h)
-    new_size = (int(ratio * w), int(ratio * h))
-    return cv2.resize(image, dsize=new_size)
-
-
 def render_image_preview(image_path: str, size: Tuple[int, int]) -> ctk.CTkImage:
     image = Image.open(image_path)
     if size:
@@ -323,7 +291,7 @@ def webcam_preview():
         for frame_processor in frame_processors:
             temp_frame = frame_processor.process_frame(source_image, temp_frame)
 
-        image = cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB)  # Convert the image to RGB format to display it with Tkinter
+        image = cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB)  # Convert the image to RGB format to display it with Tkinter        
         image = Image.fromarray(image)
         image = ImageOps.contain(image, (temp_frame.shape[1], temp_frame.shape[0]), Image.LANCZOS)
         image = ctk.CTkImage(image, size=image.size)

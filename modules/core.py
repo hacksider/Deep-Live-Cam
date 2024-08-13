@@ -5,6 +5,8 @@ if any(arg.startswith('--execution-provider') for arg in sys.argv):
     os.environ['OMP_NUM_THREADS'] = '1'
 # reduce tensorflow log level
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+# Force TensorFlow to use Metal
+os.environ['TENSORFLOW_METAL'] = '1'
 import warnings
 from typing import List
 import platform
@@ -35,9 +37,9 @@ def parse_args() -> None:
     program.add_argument('-t', '--target', help='select an target image or video', dest='target_path')
     program.add_argument('-o', '--output', help='select output file or directory', dest='output_path')
     program.add_argument('--frame-processor', help='pipeline of frame processors', dest='frame_processor', default=['face_swapper'], choices=['face_swapper', 'face_enhancer'], nargs='+')
-    program.add_argument('--keep-fps', help='keep original fps', dest='keep_fps', action='store_true', default=False)
+    program.add_argument('--keep-fps', help='keep original fps', dest='keep_fps', action='store_true', default=True)
     program.add_argument('--keep-audio', help='keep original audio', dest='keep_audio', action='store_true', default=True)
-    program.add_argument('--keep-frames', help='keep temporary frames', dest='keep_frames', action='store_true', default=False)
+    program.add_argument('--keep-frames', help='keep temporary frames', dest='keep_frames', action='store_true', default=True)
     program.add_argument('--many-faces', help='process every face', dest='many_faces', action='store_true', default=False)
     program.add_argument('--nsfw-filter', help='filter the NSFW image or video', dest='nsfw_filter', action='store_true', default=False)
     program.add_argument('--video-encoder', help='adjust output video encoder', dest='video_encoder', default='libx264', choices=['libx264', 'libx265', 'libvpx-vp9'])
@@ -45,15 +47,9 @@ def parse_args() -> None:
     program.add_argument('--live-mirror', help='The live camera display as you see it in the front-facing camera frame', dest='live_mirror', action='store_true', default=False)
     program.add_argument('--live-resizable', help='The live camera frame is resizable', dest='live_resizable', action='store_true', default=False)
     program.add_argument('--max-memory', help='maximum amount of RAM in GB', dest='max_memory', type=int, default=suggest_max_memory())
-    program.add_argument('--execution-provider', help='execution provider', dest='execution_provider', default=['cpu'], choices=suggest_execution_providers(), nargs='+')
+    program.add_argument('--execution-provider', help='execution provider', dest='execution_provider', default=['coreml'], choices=suggest_execution_providers(), nargs='+')
     program.add_argument('--execution-threads', help='number of execution threads', dest='execution_threads', type=int, default=suggest_execution_threads())
     program.add_argument('-v', '--version', action='version', version=f'{modules.metadata.name} {modules.metadata.version}')
-
-    # register deprecated args
-    program.add_argument('-f', '--face', help=argparse.SUPPRESS, dest='source_path_deprecated')
-    program.add_argument('--cpu-cores', help=argparse.SUPPRESS, dest='cpu_cores_deprecated', type=int)
-    program.add_argument('--gpu-vendor', help=argparse.SUPPRESS, dest='gpu_vendor_deprecated')
-    program.add_argument('--gpu-threads', help=argparse.SUPPRESS, dest='gpu_threads_deprecated', type=int)
 
     args = program.parse_args()
 
@@ -72,10 +68,9 @@ def parse_args() -> None:
     modules.globals.live_mirror = args.live_mirror
     modules.globals.live_resizable = args.live_resizable
     modules.globals.max_memory = args.max_memory
-    modules.globals.execution_providers = decode_execution_providers(args.execution_provider)
+    modules.globals.execution_providers = ['CoreMLExecutionProvider']  # Force CoreML
     modules.globals.execution_threads = args.execution_threads
 
-    #for ENHANCER tumbler:
     if 'face_enhancer' in args.frame_processor:
         modules.globals.fp_ui['face_enhancer'] = True
     else:
@@ -119,39 +114,22 @@ def suggest_max_memory() -> int:
 
 
 def suggest_execution_providers() -> List[str]:
-    return encode_execution_providers(onnxruntime.get_available_providers())
+    return ['coreml']  # Only suggest CoreML
 
 
 def suggest_execution_threads() -> int:
-    if 'DmlExecutionProvider' in modules.globals.execution_providers:
-        return 1
-    if 'ROCMExecutionProvider' in modules.globals.execution_providers:
-        return 1
     return 8
 
 
 def limit_resources() -> None:
-    # prevent tensorflow memory leak
-    gpus = tensorflow.config.experimental.list_physical_devices('GPU')
-    for gpu in gpus:
-        tensorflow.config.experimental.set_memory_growth(gpu, True)
-    # limit memory usage
     if modules.globals.max_memory:
-        memory = modules.globals.max_memory * 1024 ** 3
-        if platform.system().lower() == 'darwin':
-            memory = modules.globals.max_memory * 1024 ** 6
-        if platform.system().lower() == 'windows':
-            import ctypes
-            kernel32 = ctypes.windll.kernel32
-            kernel32.SetProcessWorkingSetSize(-1, ctypes.c_size_t(memory), ctypes.c_size_t(memory))
-        else:
-            import resource
-            resource.setrlimit(resource.RLIMIT_DATA, (memory, memory))
+        memory = modules.globals.max_memory * 1024 ** 6
+        import resource
+        resource.setrlimit(resource.RLIMIT_DATA, (memory, memory))
 
 
 def release_resources() -> None:
-    if 'CUDAExecutionProvider' in modules.globals.execution_providers:
-        torch.cuda.empty_cache()
+    pass  # No need to release CUDA resources
 
 
 def pre_check() -> bool:
@@ -173,15 +151,13 @@ def start() -> None:
     for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
         if not frame_processor.pre_start():
             return
-    update_status('Processing...')
     # process image to image
     if has_image_extension(modules.globals.target_path):
-        if modules.globals.nsfw_filter and ui.check_and_ignore_nsfw(modules.globals.target_path, destroy):
-            return
-        try:
-            shutil.copy2(modules.globals.target_path, modules.globals.output_path)
-        except Exception as e:
-            print("Error copying file:", str(e))
+        if modules.globals.nsfw == False:
+            from modules.predicter import predict_image
+            if predict_image(modules.globals.target_path):
+                destroy()
+        shutil.copy2(modules.globals.target_path, modules.globals.output_path)
         for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
             update_status('Progressing...', frame_processor.NAME)
             frame_processor.process_image(modules.globals.source_path, modules.globals.output_path, modules.globals.output_path)
@@ -192,8 +168,10 @@ def start() -> None:
             update_status('Processing to image failed!')
         return
     # process image to videos
-    if modules.globals.nsfw_filter and ui.check_and_ignore_nsfw(modules.globals.target_path, destroy):
-        return
+    if modules.globals.nsfw == False:
+        from modules.predicter import predict_video
+        if predict_video(modules.globals.target_path):
+            destroy()
     update_status('Creating temp resources...')
     create_temp(modules.globals.target_path)
     update_status('Extracting frames...')
@@ -202,8 +180,6 @@ def start() -> None:
     for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
         update_status('Progressing...', frame_processor.NAME)
         frame_processor.process_video(modules.globals.source_path, temp_frame_paths)
-        release_resources()
-    # handles fps
     if modules.globals.keep_fps:
         update_status('Detecting fps...')
         fps = detect_fps(modules.globals.target_path)
@@ -212,7 +188,6 @@ def start() -> None:
     else:
         update_status('Creating video with 30.0 fps...')
         create_video(modules.globals.target_path)
-    # handle audio
     if modules.globals.keep_audio:
         if modules.globals.keep_fps:
             update_status('Restoring audio...')
@@ -221,7 +196,6 @@ def start() -> None:
         restore_audio(modules.globals.target_path, modules.globals.output_path)
     else:
         move_temp(modules.globals.target_path, modules.globals.output_path)
-    # clean and validate
     clean_temp(modules.globals.target_path)
     if is_video(modules.globals.target_path):
         update_status('Processing to video succeed!')
@@ -243,6 +217,69 @@ def run() -> None:
         if not frame_processor.pre_check():
             return
     limit_resources()
+    print(f"ONNX Runtime version: {onnxruntime.__version__}")
+    print(f"Available execution providers: {onnxruntime.get_available_providers()}")
+    print(f"Selected execution provider: CoreMLExecutionProvider")
+    
+    # Configure ONNX Runtime to use only CoreML
+    onnxruntime.set_default_logger_severity(3)  # Set to WARNING level
+    options = onnxruntime.SessionOptions()
+    options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
+    
+    # Test CoreML with a dummy model
+    try:
+        import numpy as np
+        from onnx import helper, TensorProto
+        
+        # Create a simple ONNX model
+        X = helper.make_tensor_value_info('input', TensorProto.FLOAT, [1, 3, 224, 224])
+        Y = helper.make_tensor_value_info('output', TensorProto.FLOAT, [1, 3, 224, 224])
+        node = helper.make_node('Identity', ['input'], ['output'])
+        graph = helper.make_graph([node], 'test_model', [X], [Y])
+        model = helper.make_model(graph)
+        
+        # Save the model
+        model_path = 'test_model.onnx'
+        with open(model_path, 'wb') as f:
+            f.write(model.SerializeToString())
+        
+        # Create a CoreML session
+        session = onnxruntime.InferenceSession(model_path, options, providers=['CoreMLExecutionProvider'])
+        
+        # Run inference
+        input_data = np.random.rand(1, 3, 224, 224).astype(np.float32)
+        output = session.run(None, {'input': input_data})
+        
+        print("CoreML init successful and being used")
+        print(f"Input shape: {input_data.shape}, Output shape: {output[0].shape}")
+        
+        # Clean up
+        os.remove(model_path)
+    except Exception as e:
+        print(f"Error testing CoreML: {str(e)}")
+        print("The application may not be able to use GPU acceleration")
+    
+    # Configure TensorFlow to use Metal
+    try:
+        tf_devices = tensorflow.config.list_physical_devices()
+        print("TensorFlow devices:", tf_devices)
+        if any('GPU' in device.name for device in tf_devices):
+            print("TensorFlow is using GPU (Metal)")
+        else:
+            print("TensorFlow is not using GPU")
+    except Exception as e:
+        print(f"Error configuring TensorFlow: {str(e)}")
+    
+    # Configure PyTorch to use MPS (Metal Performance Shaders)
+    try:
+        if torch.backends.mps.is_available():
+            print("PyTorch is using MPS (Metal Performance Shaders)")
+            torch.set_default_device('mps')
+        else:
+            print("PyTorch MPS is not available")
+    except Exception as e:
+        print(f"Error configuring PyTorch: {str(e)}")
+    
     if modules.globals.headless:
         start()
     else:
