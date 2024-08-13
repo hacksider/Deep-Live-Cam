@@ -6,13 +6,14 @@ __pycache__/
 .todo
 *.log
 *.backup
-
+tf_env/
 *.png
 *.mp4
 *.mkv
 
 .tmp/
 temp/
+.venv/
 venv/
 env/
 workflow/
