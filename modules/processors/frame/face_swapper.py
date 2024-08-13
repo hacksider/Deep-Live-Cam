@@ -2,6 +2,7 @@ from typing import Any, List
 import cv2
 import insightface
 import threading
+import numpy as np
 
 import modules.globals
 import modules.processors.frame.core
@@ -15,7 +16,6 @@ THREAD_LOCK = threading.Lock()
 NAME = 'DLC.FACE-SWAPPER'
 
 
-# model update to use GPU / Metal on MacOS
 def pre_check() -> bool:
     download_directory_path = resolve_relative_path('../models')
     conditional_download(download_directory_path, ['https://huggingface.co/hacksider/deep-live-cam/blob/main/inswapper_128.onnx'])
@@ -46,7 +46,18 @@ def get_face_swapper() -> Any:
 
 
 def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
-    return get_face_swapper().get(temp_frame, target_face, source_face, paste_back=True)
+    try:
+        print("Debug: Starting face swap")
+        print(f"Debug: temp_frame shape: {temp_frame.shape}, dtype: {temp_frame.dtype}")
+        print(f"Debug: target_face keys: {target_face.keys()}")
+        print(f"Debug: source_face keys: {source_face.keys()}")
+        
+        result = get_face_swapper().get(temp_frame, target_face, source_face, paste_back=True)
+        print("Debug: Face swap completed successfully")
+        return result
+    except Exception as e:
+        print(f"Error in swap_face: {str(e)}")
+        return temp_frame
 
 
 def process_frame(source_face: Face, temp_frame: Frame) -> Frame:

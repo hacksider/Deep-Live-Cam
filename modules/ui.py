@@ -1,9 +1,10 @@
 import os
+import time
 import webbrowser
 import customtkinter as ctk
 from typing import Callable, Tuple
-import cv2
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, ImageDraw, ImageFont
+import numpy as np
 
 import modules.globals
 import modules.metadata
@@ -17,8 +18,8 @@ ROOT_HEIGHT = 700
 ROOT_WIDTH = 600
 
 PREVIEW = None
-PREVIEW_MAX_HEIGHT = 700
-PREVIEW_MAX_WIDTH = 1200
+PREVIEW_MAX_HEIGHT = 720
+PREVIEW_MAX_WIDTH = 1280
 
 RECENT_DIRECTORY_SOURCE = None
 RECENT_DIRECTORY_TARGET = None
@@ -75,7 +76,6 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     keep_frames_switch = ctk.CTkSwitch(root, text='Keep frames', variable=keep_frames_value, cursor='hand2', command=lambda: setattr(modules.globals, 'keep_frames', keep_frames_value.get()))
     keep_frames_switch.place(relx=0.1, rely=0.65)
 
-    # for FRAME PROCESSOR ENHANCER tumbler:
     enhancer_value = ctk.BooleanVar(value=modules.globals.fp_ui['face_enhancer'])
     enhancer_switch = ctk.CTkSwitch(root, text='Face Enhancer', variable=enhancer_value, cursor='hand2', command=lambda: update_tumbler('face_enhancer',enhancer_value.get()))
     enhancer_switch.place(relx=0.1, rely=0.7)
@@ -92,23 +92,36 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     nsfw_switch = ctk.CTkSwitch(root, text='NSFW', variable=nsfw_value, cursor='hand2', command=lambda: setattr(modules.globals, 'nsfw', nsfw_value.get()))
     nsfw_switch.place(relx=0.6, rely=0.7)
 
+    video_processor_label = ctk.CTkLabel(root, text="Video Processor:")
+    video_processor_label.place(relx=0.1, rely=0.75)
+    video_processor_var = ctk.StringVar(value=modules.globals.video_processor)
+    video_processor_menu = ctk.CTkOptionMenu(root, variable=video_processor_var, values=["cv2", "ffmpeg"], command=lambda choice: setattr(modules.globals, 'video_processor', choice))
+    video_processor_menu.place(relx=0.3, rely=0.75)
+
+    model_label = ctk.CTkLabel(root, text="Model:")
+    model_label.place(relx=0.1, rely=0.8)
+    model_var = ctk.StringVar(value=modules.globals.model)
+    model_entry = ctk.CTkEntry(root, textvariable=model_var)
+    model_entry.place(relx=0.3, rely=0.8, relwidth=0.4)
+    model_entry.bind("<FocusOut>", lambda event: setattr(modules.globals, 'model', model_var.get()))
+
     start_button = ctk.CTkButton(root, text='Start', cursor='hand2', command=lambda: select_output_path(start))
-    start_button.place(relx=0.15, rely=0.80, relwidth=0.2, relheight=0.05)
+    start_button.place(relx=0.15, rely=0.85, relwidth=0.2, relheight=0.05)
 
     stop_button = ctk.CTkButton(root, text='Destroy', cursor='hand2', command=lambda: destroy())
-    stop_button.place(relx=0.4, rely=0.80, relwidth=0.2, relheight=0.05)
+    stop_button.place(relx=0.4, rely=0.85, relwidth=0.2, relheight=0.05)
 
     preview_button = ctk.CTkButton(root, text='Preview', cursor='hand2', command=lambda: toggle_preview())
-    preview_button.place(relx=0.65, rely=0.80, relwidth=0.2, relheight=0.05)
+    preview_button.place(relx=0.65, rely=0.85, relwidth=0.2, relheight=0.05)
 
     live_button = ctk.CTkButton(root, text='Live', cursor='hand2', command=lambda: webcam_preview())
-    live_button.place(relx=0.40, rely=0.86, relwidth=0.2, relheight=0.05)
+    live_button.place(relx=0.40, rely=0.91, relwidth=0.2, relheight=0.05)
 
     status_label = ctk.CTkLabel(root, text=None, justify='center')
-    status_label.place(relx=0.1, rely=0.9, relwidth=0.8)
+    status_label.place(relx=0.1, rely=0.95, relwidth=0.8)
 
     donate_label = ctk.CTkLabel(root, text='Deep Live Cam', justify='center', cursor='hand2')
-    donate_label.place(relx=0.1, rely=0.95, relwidth=0.8)
+    donate_label.place(relx=0.1, rely=0.98, relwidth=0.8)
     donate_label.configure(text_color=ctk.ThemeManager.theme.get('URL').get('text_color'))
     donate_label.bind('<Button>', lambda event: webbrowser.open('https://paypal.me/hacksider'))
 
@@ -200,17 +213,32 @@ def render_image_preview(image_path: str, size: Tuple[int, int]) -> ctk.CTkImage
 
 
 def render_video_preview(video_path: str, size: Tuple[int, int], frame_number: int = 0) -> ctk.CTkImage:
-    capture = cv2.VideoCapture(video_path)
-    if frame_number:
-        capture.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
-    has_frame, frame = capture.read()
-    if has_frame:
-        image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-        if size:
-            image = ImageOps.fit(image, size, Image.LANCZOS)
+    if modules.globals.video_processor == 'cv2':
+        import cv2
+        capture = cv2.VideoCapture(video_path)
+        if frame_number:
+            capture.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+        has_frame, frame = capture.read()
+        if has_frame:
+            image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+            if size:
+                image = ImageOps.fit(image, size, Image.LANCZOS)
+            return ctk.CTkImage(image, size=image.size)
+        capture.release()
+        cv2.destroyAllWindows()
+    else:
+        import ffmpeg
+        probe = ffmpeg.probe(video_path)
+        time = float(probe['streams'][0]['duration']) // 2
+        out, _ = (
+            ffmpeg
+            .input(video_path, ss=time)
+            .filter('scale', size[0], size[1])
+            .output('pipe:', vframes=1, format='rawvideo', pix_fmt='rgb24')
+            .run(capture_stdout=True)
+        )
+        image = Image.frombytes('RGB', size, out)
         return ctk.CTkImage(image, size=image.size)
-    capture.release()
-    cv2.destroyAllWindows()
 
 
 def toggle_preview() -> None:
@@ -241,13 +269,19 @@ def update_preview(frame_number: int = 0) -> None:
                 quit()
         for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
             temp_frame = frame_processor.process_frame(
-                get_one_face(cv2.imread(modules.globals.source_path)),
+                get_one_face(modules.globals.source_path),
                 temp_frame
             )
-        image = Image.fromarray(cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB))
+        image = Image.fromarray(temp_frame)
         image = ImageOps.contain(image, (PREVIEW_MAX_WIDTH, PREVIEW_MAX_HEIGHT), Image.LANCZOS)
         image = ctk.CTkImage(image, size=image.size)
         preview_label.configure(image=image)
+
+def draw_fps(image, fps):
+    draw = ImageDraw.Draw(image)
+    font = ImageFont.truetype("/System/Library/Fonts/Supplemental/Arial.ttf", 36)
+    draw.text((10, 10), f"FPS: {fps:.2f}", font=font, fill=(255, 255, 255))
+    return image
 
 def webcam_preview():
     if modules.globals.source_path is None:
@@ -256,12 +290,31 @@ def webcam_preview():
     
     global preview_label, PREVIEW
 
-    cap = cv2.VideoCapture(0)  # Use index for the webcam (adjust the index accordingly if necessary)    
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1024)  # Set the width of the resolution
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 768)  # Set the height of the resolution
-    cap.set(cv2.CAP_PROP_FPS, 60)  # Set the frame rate of the webcam
-    PREVIEW_MAX_WIDTH = 1024
-    PREVIEW_MAX_HEIGHT = 768
+    if modules.globals.video_processor == 'cv2':
+        import cv2
+        cap = cv2.VideoCapture(0)  # Use index for the webcam (adjust the index accordingly if necessary)
+        if not cap.isOpened():
+            update_status("Error: Unable to open webcam. Please check your camera connection.")
+            return
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)  # Set the width of the resolution
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)  # Set the height of the resolution
+        cap.set(cv2.CAP_PROP_FPS, 30)  # Set the frame rate of the webcam
+    else:
+        import ffmpeg
+        import subprocess
+
+        command = [
+            'ffmpeg',
+            '-f', 'avfoundation',
+            '-framerate', '30',
+            '-video_size', '1280x720',
+            '-i', '0:none',
+            '-f', 'rawvideo',
+            '-pix_fmt', 'rgb24',
+            '-'
+        ]
+        
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
     preview_label.configure(image=None)  # Reset the preview image before startup
 
@@ -269,28 +322,51 @@ def webcam_preview():
 
     frame_processors = get_frame_processors_modules(modules.globals.frame_processors)
 
-    source_image = None  # Initialize variable for the selected face image
+    # Load the source image
+    if modules.globals.video_processor == 'cv2':
+        import cv2
+        source_image = cv2.imread(modules.globals.source_path)
+        source_image = cv2.cvtColor(source_image, cv2.COLOR_BGR2RGB)
+    else:
+        source_image = np.array(Image.open(modules.globals.source_path))
+    
+    source_face = get_one_face(source_image)
+
+    prev_frame_time = time.time()
+    fps = 0
 
     while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
-
-        # Select and save face image only once
-        if source_image is None and modules.globals.source_path:
-            source_image = get_one_face(cv2.imread(modules.globals.source_path))
-
-        temp_frame = frame.copy()  #Create a copy of the frame
+        if modules.globals.video_processor == 'cv2':
+            ret, frame = cap.read()
+            if not ret:
+                break
+            temp_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        else:
+            in_bytes = process.stdout.read(1280 * 720 * 3)
+            if not in_bytes:
+                break
+            temp_frame = np.frombuffer(in_bytes, np.uint8).reshape([720, 1280, 3])
 
         for frame_processor in frame_processors:
-            temp_frame = frame_processor.process_frame(source_image, temp_frame)
+            temp_frame = frame_processor.process_frame(source_face, temp_frame)
 
-        image = cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB)  # Convert the image to RGB format to display it with Tkinter        
-        image = Image.fromarray(image)
+        # Calculate FPS
+        current_time = time.time()
+        fps = 1 / (current_time - prev_frame_time)
+        prev_frame_time = current_time
+
+        image = Image.fromarray(temp_frame)
         image = ImageOps.contain(image, (PREVIEW_MAX_WIDTH, PREVIEW_MAX_HEIGHT), Image.LANCZOS)
+        
+        # Draw FPS on the image
+        image = draw_fps(image, fps)
+        
         image = ctk.CTkImage(image, size=image.size)
         preview_label.configure(image=image)
         ROOT.update()
 
-    cap.release()
+    if modules.globals.video_processor == 'cv2':
+        cap.release()
+    else:
+        process.terminate()
     PREVIEW.withdraw()  # Close preview window when loop is finished

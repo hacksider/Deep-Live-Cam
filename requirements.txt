@@ -3,12 +3,11 @@
 # Core dependencies
 numpy==1.26.4
 onnxruntime-silicon==1.16.3
-opencv-python==4.8.1.78
 pillow==9.5.0
 insightface==0.7.3
-torch==2.1.0  # Add the specific version you're using
-tensorflow-macos==2.16.2  # Add the specific version you're using
-tensorflow-metal==1.1.0  # Add the specific version you're using
+torch==2.1.0
+tensorflow-macos==2.16.2
+tensorflow-metal==1.1.0
 
 # Image processing
 scikit-image==0.24.0
@@ -21,6 +20,10 @@ scikit-learn==1.5.1
 tqdm==4.66.4
 requests==2.32.3
 prettytable==3.11.0
+
+# Video processing (optional)
+opencv-python==4.8.1.78  # Optional: for cv2 video processing
+ffmpeg-python==0.2.0  # For ffmpeg video processing
 
 # Optional dependencies (comment out if not needed)
 # albumentations==1.4.13

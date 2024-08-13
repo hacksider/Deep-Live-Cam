@@ -29,6 +29,40 @@ if 'ROCMExecutionProvider' in modules.globals.execution_providers:
 warnings.filterwarnings('ignore', category=FutureWarning, module='insightface')
 warnings.filterwarnings('ignore', category=UserWarning, module='torchvision')
 
+def get_system_memory() -> int:
+    """
+    Get the total system memory in GB.
+    
+    Returns:
+        int: Total system memory in GB.
+    """
+    if platform.system().lower() == 'darwin':
+        try:
+            import psutil
+            return psutil.virtual_memory().total // (1024 ** 3)
+        except ImportError:
+            # If psutil is not available, return a default value
+            return 16  # Assuming 16GB as a default for macOS
+    else:
+        # For other systems, we can use psutil if available, or implement system-specific methods
+        try:
+            import psutil
+            return psutil.virtual_memory().total // (1024 ** 3)
+        except ImportError:
+            # If psutil is not available, return a default value
+            return 8  # Assuming 8GB as a default for other systems
+
+def suggest_max_memory() -> int:
+    """
+    Suggest the maximum memory to use based on the system's total memory.
+    
+    Returns:
+        int: Suggested maximum memory in GB.
+    """
+    total_memory = get_system_memory()
+    # Suggest using 70% of total memory, but not more than 64GB
+    suggested_memory = min(int(total_memory * 0.7), 64)
+    return max(suggested_memory, 4)  # Ensure at least 4GB is suggested
 
 def parse_args() -> None:
     signal.signal(signal.SIGINT, lambda signal_number, frame: destroy())
@@ -46,6 +80,8 @@ def parse_args() -> None:
     program.add_argument('--max-memory', help='maximum amount of RAM in GB', dest='max_memory', type=int, default=suggest_max_memory())
     program.add_argument('--execution-provider', help='execution provider', dest='execution_provider', default=['coreml'], choices=suggest_execution_providers(), nargs='+')
     program.add_argument('--execution-threads', help='number of execution threads', dest='execution_threads', type=int, default=suggest_execution_threads())
+    program.add_argument('--video-processor', help='video processor to use', dest='video_processor', default='cv2', choices=['cv2', 'ffmpeg'])
+    program.add_argument('--model', help='model to use for face swapping', dest='model', default='inswapper_128v2.fp16.onnx')
     program.add_argument('-v', '--version', action='version', version=f'{modules.metadata.name} {modules.metadata.version}')
 
     args = program.parse_args()
@@ -64,6 +100,8 @@ def parse_args() -> None:
     modules.globals.max_memory = args.max_memory
     modules.globals.execution_providers = ['CoreMLExecutionProvider']  # Force CoreML
     modules.globals.execution_threads = args.execution_threads
+    modules.globals.video_processor = args.video_processor
+    modules.globals.model = args.model
 
     if 'face_enhancer' in args.frame_processor:
         modules.globals.fp_ui['face_enhancer'] = True
@@ -88,7 +126,6 @@ def suggest_execution_threads() -> int:
         return 12
     return 4
     
-
 
 def limit_resources() -> None:
     if modules.globals.max_memory:
@@ -150,7 +187,10 @@ def process_video():
     update_status('Creating temp resources...')
     create_temp(modules.globals.target_path)
     update_status('Extracting frames...')
-    extract_frames(modules.globals.target_path)
+    if modules.globals.video_processor == 'cv2':
+        extract_frames_cv2(modules.globals.target_path)
+    else:
+        extract_frames_ffmpeg(modules.globals.target_path)
     temp_frame_paths = get_temp_frame_paths(modules.globals.target_path)
     for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
         update_status('Progressing...', frame_processor.NAME)
@@ -176,6 +216,30 @@ def process_video():
         update_status('Processing to video succeed!')
     else:
         update_status('Processing to video failed!')
+
+
+def extract_frames_cv2(target_path: str) -> None:
+    import cv2
+    capture = cv2.VideoCapture(target_path)
+    frame_num = 0
+    while True:
+        success, frame = capture.read()
+        if not success:
+            break
+        cv2.imwrite(f'{get_temp_frame_paths(target_path)}/%04d.png' % frame_num, frame)
+        frame_num += 1
+    capture.release()
+
+
+def extract_frames_ffmpeg(target_path: str) -> None:
+    import ffmpeg
+    (
+        ffmpeg
+        .input(target_path)
+        .output(f'{get_temp_frame_paths(target_path)}/%04d.png', start_number=0)
+        .overwrite_output()
+        .run(capture_stdout=True, capture_stderr=True)
+    )
 
 
 def destroy() -> None:
