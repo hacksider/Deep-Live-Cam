@@ -1,179 +1,122 @@
-![demo-gif](demo.gif)
-
-
-## Disclaimer
-This software is meant to be a productive contribution to the rapidly growing AI-generated media industry. It will help artists with tasks such as animating a custom character or using the character as a model for clothing etc.
-
-The developers of this software are aware of its possible unethical applications and are committed to take preventative measures against them. It has a built-in check which prevents the program from working on inappropriate media including but not limited to nudity, graphic content, sensitive material such as war footage etc. We will continue to develop this project in the positive direction while adhering to law and ethics. This project may be shut down or include watermarks on the output if requested by law.
-
-Users of this software are expected to use this software responsibly while abiding the local law. If face of a real person is being used, users are suggested to get consent from the concerned person and clearly mention that it is a deepfake when posting content online. Developers of this software will not be responsible for actions of end-users.
-
-## How do I install it?
-
-
-### Basic: It is more likely to work on your computer but it will also be very slow. You can follow instructions for the basic install (This usually runs via **CPU**)
-#### 1.Setup your platform
--   python (3.10 recommended)
--   pip
--   git
--   [ffmpeg](https://www.youtube.com/watch?v=OlNWCpFdVMA) 
--   [visual studio 2022 runtimes (windows)](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
-#### 2. Clone Repository
+**免责声明**
+**这个分支经过 NITSC 的修改，只经过我们（NITSC）的电脑验证，没有经过大众验证。**
+这款软件旨在为蓬勃发展的AI生成媒体行业做出积极贡献，帮助艺术家完成动画自定义角色、使用角色作为服装模型等任务。
+开发人员意识到该软件可能存在不道德的应用，并承诺采取预防措施。它内置了检查功能，防止程序在包括裸露、图形内容、战争画面等在内的不适当媒体上运行。我们将继续积极开发该项目，并遵守法律和道德规范。如果法律要求，该项目可能会关闭或在输出中包含水印。
+用户应负责任地使用该软件，并遵守当地法律。如果使用真实人物的面孔，建议用户从相关人员那里获得许可，并在在线发布内容时明确说明这是深度伪造视频。该软件的开发人员不承担最终用户行为的责任。
+**如何安装**？
+### 基本安装 (CPU)
+1. **设置平台**:
+    - python (推荐使用 3.10)
+    - pip
+    - git
+    - [ffmpeg](https://www.youtube.com/watch?v=OlNWCpFdVMA) 
+    - [visual studio 2022 runtimes (windows)](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
+2. **克隆仓库**:
+    ```
     https://github.com/hacksider/Deep-Live-Cam.git
-
-#### 3. Download Models
-
- 1. [GFPGANv1.4](https://huggingface.co/hacksider/deep-live-cam/resolve/main/GFPGANv1.4.pth)
- 2. [inswapper_128_fp16.onnx](https://huggingface.co/hacksider/deep-live-cam/resolve/main/inswapper_128_fp16.onnx)
-
-Then put those 2 files on the "**models**" folder
-
-#### 4. Install dependency
-We highly recommend to work with a  `venv`  to avoid issues.
-```
-pip install -r requirements.txt
-```
-##### DONE!!! If you dont have any GPU, You should be able to run roop using `python run.py` command. Keep in mind that while running the program for first time, it will download some models which can take time depending on your network connection.
-
-### *Proceed if you want to use GPU Acceleration
-### CUDA Execution Provider (Nvidia)*
-
-1.  Install  [CUDA Toolkit 11.8](https://developer.nvidia.com/cuda-11-8-0-download-archive)
+    ```
+3. **下载模型**:
+    1. [GFPGANv1.4](https://huggingface.co/hacksider/deep-live-cam/resolve/main/GFPGANv1.4.pth)
+    2. [inswapper_128_fp16.onnx](https://huggingface.co/hacksider/deep-live-cam/resolve/main/inswapper_128_fp16.onnx)
+    然后将这两个文件放在“**models**”文件夹中。
+4. **安装依赖项**:
+    我们强烈建议使用 `venv` 以避免问题。
+    ```
+    pip install -r requirements.txt
+    ```
+    完成 !!! 如果您没有 GPU，您应该能够使用 `python run.py` 命令运行 roop。请注意，在首次运行程序时，它将下载一些模型，这可能会根据您的网络连接花费一些时间。
+### GPU 加速
+#### CUDA 执行提供程序 (Nvidia)
+1.  安装 [CUDA Toolkit 11.8](https://developer.nvidia.com/cuda-11-8-0-download-archive)
     
-2.  Install dependencies:
-    
-
-```
-pip uninstall onnxruntime onnxruntime-gpu
-pip install onnxruntime-gpu==1.16.3
-
-```
-
-3.  Usage in case the provider is available:
-
-```
-python run.py --execution-provider cuda
-
-```
-
-### [](https://github.com/s0md3v/roop/wiki/2.-Acceleration#coreml-execution-provider-apple-silicon)CoreML Execution Provider (Apple Silicon)
-
-1.  Install dependencies:
-
-```
-pip uninstall onnxruntime onnxruntime-silicon
-pip install onnxruntime-silicon==1.13.1
-
-```
-
-2.  Usage in case the provider is available:
-
-```
-python run.py --execution-provider coreml
-
-```
-
-### [](https://github.com/s0md3v/roop/wiki/2.-Acceleration#coreml-execution-provider-apple-legacy)CoreML Execution Provider (Apple Legacy)
-
-1.  Install dependencies:
-
-```
-pip uninstall onnxruntime onnxruntime-coreml
-pip install onnxruntime-coreml==1.13.1
-
-```
-
-2.  Usage in case the provider is available:
-
-```
-python run.py --execution-provider coreml
-
-```
-
-### [](https://github.com/s0md3v/roop/wiki/2.-Acceleration#directml-execution-provider-windows)DirectML Execution Provider (Windows)
-
-1.  Install dependencies:
-
-```
-pip uninstall onnxruntime onnxruntime-directml
-pip install onnxruntime-directml==1.15.1
-
-```
-
-2.  Usage in case the provider is available:
-
-```
-python run.py --execution-provider directml
-
-```
-
-### [](https://github.com/s0md3v/roop/wiki/2.-Acceleration#openvino-execution-provider-intel)OpenVINO™ Execution Provider (Intel)
-
-1.  Install dependencies:
-
-```
-pip uninstall onnxruntime onnxruntime-openvino
-pip install onnxruntime-openvino==1.15.0
-
-```
-
-2.  Usage in case the provider is available:
-
-```
-python run.py --execution-provider openvino
-```
-
-## How do I use it?
-> Note: When you run this program for the first time, it will download some models ~300MB in size.
-
-Executing `python run.py` command will launch this window:
+2.  安装依赖项:
+    ```
+    pip uninstall onnxruntime onnxruntime-gpu
+    pip install onnxruntime-gpu==1.16.3
+    ```
+3.  如果提供程序可用，则使用:
+    ```
+    python run.py --execution-provider cuda
+    ```
+#### CoreML 执行提供程序 (Apple Silicon)
+1.  安装依赖项:
+    ```
+    pip uninstall onnxruntime onnxruntime-silicon
+    pip install onnxruntime-silicon==1.13.1
+    ```
+2.  如果提供程序可用，则使用:
+    ```
+    python run.py --execution-provider coreml
+    ```
+#### CoreML 执行提供程序 (Apple Legacy)
+1.  安装依赖项:
+    ```
+    pip uninstall onnxruntime onnxruntime-coreml
+    pip install onnxruntime-coreml==1.13.1
+    ```
+2.  如果提供程序可用，则使用:
+    ```
+    python run.py --execution-provider coreml
+    ```
+#### DirectML 执行提供程序 (Windows)
+1.  安装依赖项:
+    ```
+    pip uninstall onnxruntime onnxruntime-directml
+    pip install onnxruntime-directml==1.15.1
+    ```
+2.  如果提供程序可用，则使用:
+    ```
+    python run.py --execution-provider directml
+    ```
+#### OpenVINO™ 执行提供程序 (Intel)
+1.  安装依赖项:
+    ```
+    pip uninstall onnxruntime onnxruntime-openvino
+    pip install onnxruntime-openvino==1.15.0
+    ```
+2.  如果提供程序可用，则使用:
+    ```
+    python run.py --execution-provider openvino
+    ```
+**如何使用**？
+> 注意：首次运行此程序时，它将下载一些模型，大小约为 300MB。
+执行 `python run.py` 命令将启动以下窗口：
 ![gui-demo](instruction.png)
-
-Choose a face (image with desired face) and the target image/video (image/video in which you want to replace the face) and click on `Start`. Open file explorer and navigate to the directory you select your output to be in. You will find a directory named `<video_title>` where you can see the frames being swapped in realtime. Once the processing is done, it will create the output file. That's it.
-
-## For the webcam mode
-Just follow the clicks on the screenshot
-1. Select a face
-2. Click live
-3. Wait for a few seconds (it takes a longer time, usually 10 to 30 seconds before the preview shows up)
-
+选择一个面部 (包含所需面部的图像) 和目标图像/视频 (您想要替换面部的图像/视频)，然后单击“开始”。打开文件资源管理器，导航到您选择的输出目录。您将找到名为 `<video_title>` 的目录，其中可以实时查看交换的帧。处理完成后，它将创建输出文件。就这样。
+**网络摄像头模式**
+只需按照屏幕截图上的步骤操作：
+1. 选择一个面部
+2. 单击“实时”
+3. 等待几秒钟 (通常需要 10 到 30 秒才能显示预览)
 ![demo-gif](demo.gif)
-
-Just use your favorite screencapture to stream like OBS
-> Note: In case you want to change your face, just select another picture, the preview mode will then restart (so just wait a bit).
-
-
-Additional command line arguments are given below. To learn out what they do, check [this guide](https://github.com/s0md3v/roop/wiki/Advanced-Options).
-
+只需使用您喜欢的屏幕录制软件进行直播，例如 OBS。
+> 注意：如果您想更改您的面部，只需选择另一张图片，预览模式将重新启动 (所以只需等待一会儿)。
+以下是一些额外的命令行参数。要了解它们的功能，请查看 [此指南](https://github.com/s0md3v/roop/wiki/Advanced-Options)。
 ```
 options:
-  -h, --help                                               show this help message and exit
-  -s SOURCE_PATH, --source SOURCE_PATH                     select an source image
-  -t TARGET_PATH, --target TARGET_PATH                     select an target image or video
-  -o OUTPUT_PATH, --output OUTPUT_PATH                     select output file or directory
-  --frame-processor FRAME_PROCESSOR [FRAME_PROCESSOR ...]  frame processors (choices: face_swapper, face_enhancer, ...)
-  --keep-fps                                               keep original fps
-  --keep-audio                                             keep original audio
-  --keep-frames                                            keep temporary frames
-  --many-faces                                             process every face
-  --video-encoder {libx264,libx265,libvpx-vp9}             adjust output video encoder
-  --video-quality [0-51]                                   adjust output video quality
-  --max-memory MAX_MEMORY                                  maximum amount of RAM in GB
-  --execution-provider {cpu} [{cpu} ...]                   available execution provider (choices: cpu, ...)
-  --execution-threads EXECUTION_THREADS                    number of execution threads
-  -v, --version                                            show program's version number and exit
+  -h, --help                                               显示此帮助消息并退出
+  -s SOURCE_PATH, --source SOURCE_PATH                     选择源图像
+  -t TARGET_PATH, --target TARGET_PATH                     选择目标图像或视频
+  -o OUTPUT_PATH, --output OUTPUT_PATH                     选择输出文件或目录
+  --frame-processor FRAME_PROCESSOR [FRAME_PROCESSOR ...]  帧处理器 (choices: face_swapper, face_enhancer, ...)
+  --keep-fps                                               保持原始 fps
+  --keep-audio                                             保持原始音频
+  --keep-frames                                            保留临时帧
+  --many-faces                                             处理每个面部
+  --video-encoder {libx264,libx265,libvpx-vp9}             调整输出视频编码器
+  --video-quality [0-51]                                   调整输出视频质量
+  --max-memory MAX_MEMORY                                  最大 RAM 量 (GB)
+  --execution-provider {cpu} [{cpu} ...]                   可用的执行提供程序 (choices: cpu, ...)
+  --execution-threads EXECUTION_THREADS                    执行线程数
+  -v, --version                                            显示程序的版本号并退出
 ```
-
-Looking for a CLI mode? Using the -s/--source argument will make the run program in cli mode.
-
-## Want the Next Update Now?
-If you want the latest and greatest build, or want to see some new great features, go to our [experimental branch](https://github.com/hacksider/Deep-Live-Cam/tree/experimental) and experience what the contributors have given.
-
-## Credits
-
-- [ffmpeg](https://ffmpeg.org/): for making video related operations easy
-- [deepinsight](https://github.com/deepinsight): for their [insightface](https://github.com/deepinsight/insightface) project which provided a well-made library and models.
-- [havok2-htwo](https://github.com/havok2-htwo) : for sharing the code for webcam
-- [GosuDRM](https://github.com/GosuDRM/nsfw-roop) : for uncensoring roop
-- and [all developers](https://github.com/hacksider/Deep-Live-Cam/graphs/contributors) behind libraries used in this project.
-- Foot Note: [This is originally roop-cam, see the full history of the code here.](https://github.com/hacksider/roop-cam) Please be informed that the base author of the code is [s0md3v](https://github.com/s0md3v/roop)
+想要 CLI 模式？使用 -s/--source 参数将使 run 程序以 CLI 模式运行。
+**想要立即获得下一个更新**？
+如果您想要最新的构建版本或想体验一些新的功能，请转到我们的 [experimental branch](https://github.com/hacksider/Deep-Live-Cam/tree/experimental) 并体验贡献者带来的功能。
+**致谢**
+- [ffmpeg](https://ffmpeg.org/): 让视频相关操作变得容易
+- [deepinsight](https://github.com/deepinsight): 他们的 [insightface](https://github.com/deepinsight/insightface) 项目提供了一个制作精良的库和模型。
+- [havok2-htwo](https://github.com/havok2-htwo) : 分享用于网络摄像头的代码
+- [GosuDRM](https://github.com/GosuDRM/nsfw-roop) : 解除 roop 的审查
+- 以及 [所有开发者](https://github.com/hacksider/Deep-Live-Cam/graphs/contributors) 在该项目中使用的库背后的所有开发者。
+- 脚注：[这原本是 roop-cam，请在此处查看代码的完整历史。](https://github.com/hacksider/roop-cam) 请注意，代码的基础作者是 [s0md3v](https://github.com/s0md3v/roop)
