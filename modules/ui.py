@@ -257,11 +257,11 @@ def webcam_preview():
     global preview_label, PREVIEW
 
     cap = cv2.VideoCapture(0)  # Use index for the webcam (adjust the index accordingly if necessary)    
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 960)  # Set the width of the resolution
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 540)  # Set the height of the resolution
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1024)  # Set the width of the resolution
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 768)  # Set the height of the resolution
     cap.set(cv2.CAP_PROP_FPS, 60)  # Set the frame rate of the webcam
-    PREVIEW_MAX_WIDTH = 960
-    PREVIEW_MAX_HEIGHT = 540
+    PREVIEW_MAX_WIDTH = 1024
+    PREVIEW_MAX_HEIGHT = 768
 
     preview_label.configure(image=None)  # Reset the preview image before startup
 
@@ -285,7 +285,7 @@ def webcam_preview():
         for frame_processor in frame_processors:
             temp_frame = frame_processor.process_frame(source_image, temp_frame)
 
-        image = cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB)  # Convert the image to RGB format to display it with Tkinter
+        image = cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB)  # Convert the image to RGB format to display it with Tkinter        
         image = Image.fromarray(image)
         image = ImageOps.contain(image, (PREVIEW_MAX_WIDTH, PREVIEW_MAX_HEIGHT), Image.LANCZOS)
         image = ctk.CTkImage(image, size=image.size)

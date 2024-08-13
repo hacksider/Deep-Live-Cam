@@ -9,6 +9,7 @@ import urllib
 from pathlib import Path
 from typing import List, Any
 from tqdm import tqdm
+import cv2
 
 import modules.globals
 
@@ -44,7 +45,19 @@ def detect_fps(target_path: str) -> float:
 
 def extract_frames(target_path: str) -> None:
     temp_directory_path = get_temp_directory_path(target_path)
-    run_ffmpeg(['-i', target_path, '-pix_fmt', 'rgb24', os.path.join(temp_directory_path, '%04d.png')])
+    cap = cv2.VideoCapture(target_path)
+    
+    frame_count = 0
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        # Save the frame
+        cv2.imwrite(os.path.join(temp_directory_path, f'{frame_count:04d}.png'), frame)
+        frame_count += 1
+    
+    cap.release()
 
 
 def create_video(target_path: str, fps: float = 30.0) -> None:
