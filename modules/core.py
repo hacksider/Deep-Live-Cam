@@ -222,12 +222,18 @@ def start() -> None:
 
 
 def process_image_to_image() -> None:
-    if not modules.globals.nsfw:
+    if modules.globals.nsfw:
         from modules.predicter import predict_image
         if predict_image(modules.globals.target_path):
-            destroy()
+            destroy(to_quit=False)
+            update_status('Processing to image ignored!')
+            return
 
-    shutil.copy2(modules.globals.target_path, modules.globals.output_path)
+    try:
+        shutil.copy2(modules.globals.target_path, modules.globals.output_path)
+    except Exception as e:
+        print("Error copying file:", str(e))
+
     for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
         update_status('Processing...', frame_processor.NAME)
         frame_processor.process_image(modules.globals.source_path, modules.globals.output_path, modules.globals.output_path)
@@ -240,10 +246,12 @@ def process_image_to_image() -> None:
 
 
 def process_image_to_video() -> None:
-    if not modules.globals.nsfw:
+    if modules.globals.nsfw:
         from modules.predicter import predict_video
         if predict_video(modules.globals.target_path):
-            destroy()
+            destroy(to_quit=False)
+            update_status('Processing to video ignored!')
+            return
 
     update_status('Creating temporary resources...')
     create_temp(modules.globals.target_path)
@@ -287,10 +295,10 @@ def handle_video_audio() -> None:
         move_temp(modules.globals.target_path, modules.globals.output_path)
 
 
-def destroy() -> None:
+def destroy(to_quit=True) -> None:
     if modules.globals.target_path:
         clean_temp(modules.globals.target_path)
-    quit()
+    if to_quit: quit()
 
 
 def run() -> None:
