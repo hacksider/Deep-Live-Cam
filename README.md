@@ -18,9 +18,9 @@ docker run --gpus all \
       -v ./input:/app/input \
       -v ./output:/app/output \
       deep-live-cam \
-      -s input/face.jpg \
-      -t input/video.mp4\
-      -o output
+      -s input/face.jpg  # Source image for face swapping
+      -t input/video.mp4 # Target video to apply face swap
+      -o output          # Output directory for results
 ```
 
 ## How do I install it?
