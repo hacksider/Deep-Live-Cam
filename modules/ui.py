@@ -39,6 +39,7 @@ status_label = None
 
 img_ft, vid_ft = modules.globals.file_types
 
+camera = None
 
 def check_camera_permissions():
     """Check and request camera access permission on macOS."""
@@ -274,6 +275,11 @@ def toggle_preview() -> None:
         init_preview()
         update_preview()
         PREVIEW.deiconify()
+    global camera
+    if PREVIEW.state() == 'withdrawn':
+        if camera and camera.isOpened():
+            camera.release()
+            camera = None
 
 
 def init_preview() -> None:
@@ -319,15 +325,16 @@ def webcam_preview(camera_name: str):
     # Use OpenCV's camera index for cross-platform compatibility
     camera_index = get_camera_index_by_name(camera_name)
 
-    cap = cv2.VideoCapture(camera_index)
+    global camera
+    camera = cv2.VideoCapture(camera_index)
 
-    if not cap.isOpened():
+    if not camera.isOpened():
         update_status(f"Error: Could not open camera {camera_name}")
         return
 
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 960)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 540)
-    cap.set(cv2.CAP_PROP_FPS, 60)
+    camera.set(cv2.CAP_PROP_FRAME_WIDTH, 960)
+    camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 540)
+    camera.set(cv2.CAP_PROP_FPS, 60)
 
     PREVIEW_MAX_WIDTH = 960
     PREVIEW_MAX_HEIGHT = 540
@@ -338,8 +345,8 @@ def webcam_preview(camera_name: str):
     frame_processors = get_frame_processors_modules(modules.globals.frame_processors)
     source_image = get_one_face(cv2.imread(modules.globals.source_path))
 
-    while True:
-        ret, frame = cap.read()
+    while camera:
+        ret, frame = camera.read()
         if not ret:
             update_status(f"Error: Frame not received from camera.")
             break
@@ -355,7 +362,7 @@ def webcam_preview(camera_name: str):
         preview_label.configure(image=image)
         ROOT.update()
 
-    cap.release()
+    if camera: camera.release()
     PREVIEW.withdraw()
 
 
