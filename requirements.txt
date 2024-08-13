@@ -7,7 +7,8 @@ opencv-python==4.8.1.78
 pillow==9.5.0
 insightface==0.7.3
 torch==2.1.0  # Add the specific version you're using
-tensorflow==2.16.1  # Add the specific version you're using
+tensorflow-macos==2.16.2  # Add the specific version you're using
+tensorflow-metal==1.1.0  # Add the specific version you're using
 
 # Image processing
 scikit-image==0.24.0
