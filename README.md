@@ -13,6 +13,15 @@
     - git
     - [ffmpeg](https://www.youtube.com/watch?v=OlNWCpFdVMA) 
     - [visual studio 2022 runtimes (windows)](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
+    - C:\Users\<用户名>\.keras\keras.json 改为以下内容：
+   ```
+    {
+    "image_data_format": "channels_last",
+    "epsilon": 1e-07,
+    "floatx": "float32",
+    "backend": "tensorflow"
+    }
+   ```
 2. **克隆仓库**:
     ```
     https://github.com/hacksider/Deep-Live-Cam.git
