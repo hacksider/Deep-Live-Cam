@@ -83,7 +83,7 @@
     ```
 2.  如果提供程序可用，则使用:
     ```
-    python run.py --execution-provider directml
+    python run.py --execution-provider dml
     ```
 #### OpenVINO™ 执行提供程序 (Intel)
 1.  安装依赖项:
