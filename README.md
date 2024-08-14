@@ -171,8 +171,8 @@ If you want the latest and greatest build, or want to see some new great feature
 
 ## Credits
 
-- [ffmpeg](https://ffmpeg.org/): for making video related operations easy
-- [deepinsight](https://github.com/deepinsight): for their [insightface](https://github.com/deepinsight/insightface) project which provided a well-made library and models.
+- [Ffmpeg](https://ffmpeg.org/): for making video related operations easy
+- [Deep Insight](https://github.com/deepinsight): for their [insightface](https://github.com/deepinsight/insightface) project which provided a well-made library and models.
 - [havok2-htwo](https://github.com/havok2-htwo) : for sharing the code for webcam
 - [GosuDRM](https://github.com/GosuDRM/nsfw-roop) : for uncensoring roop
 - and [all developers](https://github.com/hacksider/Deep-Live-Cam/graphs/contributors) behind libraries used in this project.
