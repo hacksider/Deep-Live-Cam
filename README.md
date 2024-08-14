@@ -33,6 +33,10 @@ We highly recommend to work with a  `venv`  to avoid issues.
 ```
 pip install -r requirements.txt
 ```
+For MAC OS, You have to install or upgrade python-tk pacakage:
+```
+brew install python-tk@3.10
+```
 ##### DONE!!! If you dont have any GPU, You should be able to run roop using `python run.py` command. Keep in mind that while running the program for first time, it will download some models which can take time depending on your network connection.
 
 ### *Proceed if you want to use GPU Acceleration
