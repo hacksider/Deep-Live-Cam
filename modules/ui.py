@@ -21,11 +21,13 @@ from modules.utilities import is_image, is_video, resolve_relative_path
 
 ROOT = None
 ROOT_HEIGHT = 700
-ROOT_WIDTH = 600
+ROOT_WIDTH  = 600
 
 PREVIEW = None
 PREVIEW_MAX_HEIGHT = 700
-PREVIEW_MAX_WIDTH = 1200
+PREVIEW_MAX_WIDTH  = 1200
+PREVIEW_DEFAULT_WIDTH  = 960
+PREVIEW_DEFAULT_HEIGHT = 540
 
 RECENT_DIRECTORY_SOURCE = None
 RECENT_DIRECTORY_TARGET = None
@@ -178,7 +180,7 @@ def create_preview(parent: ctk.CTk) -> ctk.CTkToplevel:
     preview.withdraw()
     preview.title('Preview')
     preview.protocol('WM_DELETE_WINDOW', toggle_preview)
-    preview.resizable(width=False, height=False)
+    preview.resizable(width=True, height=True)
 
     preview_label = ctk.CTkLabel(preview, text=None)
     preview_label.pack(fill='both', expand=True)
@@ -310,6 +312,20 @@ def update_preview(frame_number: int = 0) -> None:
         preview_label.configure(image=image)
 
 
+def fit_image_to_size(image, width: int, height: int):
+    if width is None and height is None:
+      return image
+    h, w, _ = image.shape
+    ratio_h = 0.0
+    ratio_w = 0.0
+    if width > height:
+        ratio_h = height / h
+    else:
+        ratio_w = width  / w
+    ratio = max(ratio_w, ratio_h)
+    new_size = (int(ratio * w), int(ratio * h))
+    return cv2.resize(image, dsize=new_size)
+
 def webcam_preview(camera_name: str):
     if modules.globals.source_path is None:
         return
@@ -336,10 +352,7 @@ def webcam_preview(camera_name: str):
     camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 540)
     camera.set(cv2.CAP_PROP_FPS, 60)
 
-    PREVIEW_MAX_WIDTH = 960
-    PREVIEW_MAX_HEIGHT = 540
-
-    preview_label.configure(image=None)
+    preview_label.configure(width=PREVIEW_DEFAULT_WIDTH, height=PREVIEW_DEFAULT_HEIGHT)
     PREVIEW.deiconify()
 
     frame_processors = get_frame_processors_modules(modules.globals.frame_processors)
@@ -353,11 +366,17 @@ def webcam_preview(camera_name: str):
 
         temp_frame = frame.copy()
 
+        if modules.globals.live_mirror:
+            temp_frame = cv2.flip(temp_frame, 1) # horizontal flipping
+
+        if modules.globals.live_resizable:
+            temp_frame = fit_image_to_size(temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height())
+
         for frame_processor in frame_processors:
             temp_frame = frame_processor.process_frame(source_image, temp_frame)
 
         image = Image.fromarray(cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB))
-        image = ImageOps.contain(image, (PREVIEW_MAX_WIDTH, PREVIEW_MAX_HEIGHT), Image.LANCZOS)
+        image = ImageOps.contain(image, (temp_frame.shape[1], temp_frame.shape[0]), Image.LANCZOS)
         image = ctk.CTkImage(image, size=image.size)
         preview_label.configure(image=image)
         ROOT.update()
