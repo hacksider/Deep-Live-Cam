@@ -62,11 +62,11 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     target_label = ctk.CTkLabel(root, text=None)
     target_label.place(relx=0.6, rely=0.1, relwidth=0.3, relheight=0.25)
 
-    source_button = ctk.CTkButton(root, text='Select a face', cursor='hand2', command=lambda: select_source_path())
-    source_button.place(relx=0.1, rely=0.4, relwidth=0.3, relheight=0.1)
+    select_face_button = ctk.CTkButton(root, text='Select a face', cursor='hand2', command=lambda: select_source_path())
+    select_face_button.place(relx=0.1, rely=0.4, relwidth=0.3, relheight=0.1)
 
-    target_button = ctk.CTkButton(root, text='Select a target', cursor='hand2', command=lambda: select_target_path())
-    target_button.place(relx=0.6, rely=0.4, relwidth=0.3, relheight=0.1)
+    select_target_button = ctk.CTkButton(root, text='Select a target', cursor='hand2', command=lambda: select_target_path())
+    select_target_button.place(relx=0.6, rely=0.4, relwidth=0.3, relheight=0.1)
 
     keep_fps_value = ctk.BooleanVar(value=modules.globals.keep_fps)
     keep_fps_checkbox = ctk.CTkSwitch(root, text='Keep fps', variable=keep_fps_value, cursor='hand2', command=lambda: setattr(modules.globals, 'keep_fps', not modules.globals.keep_fps))
@@ -88,9 +88,9 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     many_faces_switch = ctk.CTkSwitch(root, text='Many faces', variable=many_faces_value, cursor='hand2', command=lambda: setattr(modules.globals, 'many_faces', many_faces_value.get()))
     many_faces_switch.place(relx=0.6, rely=0.65)
 
-    nsfw_value = ctk.BooleanVar(value=modules.globals.nsfw)
-    nsfw_switch = ctk.CTkSwitch(root, text='NSFW', variable=nsfw_value, cursor='hand2', command=lambda: setattr(modules.globals, 'nsfw', nsfw_value.get()))
-    nsfw_switch.place(relx=0.6, rely=0.7)
+#    nsfw_value = ctk.BooleanVar(value=modules.globals.nsfw)
+#    nsfw_switch = ctk.CTkSwitch(root, text='NSFW', variable=nsfw_value, cursor='hand2', command=lambda: setattr(modules.globals, 'nsfw', nsfw_value.get()))
+#    nsfw_switch.place(relx=0.6, rely=0.7)
 
     video_processor_label = ctk.CTkLabel(root, text="Video Processor:")
     video_processor_label.place(relx=0.1, rely=0.75)
@@ -287,7 +287,7 @@ def webcam_preview():
     if modules.globals.source_path is None:
         # No image selected
         return
-    
+
     global preview_label, PREVIEW
 
     if modules.globals.video_processor == 'cv2':
@@ -364,6 +364,9 @@ def webcam_preview():
         image = ctk.CTkImage(image, size=image.size)
         preview_label.configure(image=image)
         ROOT.update()
+
+        if PREVIEW.state() == 'withdrawn':
+            break
 
     if modules.globals.video_processor == 'cv2':
         cap.release()

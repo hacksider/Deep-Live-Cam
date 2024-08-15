@@ -107,7 +107,7 @@ def parse_args() -> None:
         modules.globals.fp_ui['face_enhancer'] = True
     else:
         modules.globals.fp_ui['face_enhancer'] = False
-    
+
     modules.globals.nsfw = False
 
 
@@ -152,7 +152,6 @@ def update_status(message: str, scope: str = 'DLC.CORE') -> None:
     print(f'[{scope}] {message}')
     if not modules.globals.headless:
         ui.update_status(message)
-
 
 def start() -> None:
     for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
