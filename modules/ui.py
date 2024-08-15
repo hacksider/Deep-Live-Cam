@@ -105,69 +105,69 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     root.protocol('WM_DELETE_WINDOW', lambda: destroy())
 
     source_label = ctk.CTkLabel(root, text=None)
-    source_label.place(relx=0.1, rely=0.1*700/800, relwidth=0.3, relheight=0.25)
+    source_label.place(relx=0.1, rely=0.0875, relwidth=0.3, relheight=0.25)
 
     target_label = ctk.CTkLabel(root, text=None)
-    target_label.place(relx=0.6, rely=0.1*700/800, relwidth=0.3, relheight=0.25)
+    target_label.place(relx=0.6, rely=0.0875, relwidth=0.3, relheight=0.25)
 
     source_button = ctk.CTkButton(root, text='Select a face', cursor='hand2', command=select_source_path)
-    source_button.place(relx=0.1, rely=0.4*700/800, relwidth=0.3, relheight=0.1)
+    source_button.place(relx=0.1, rely=0.35, relwidth=0.3, relheight=0.1)
 
     target_button = ctk.CTkButton(root, text='Select a target', cursor='hand2', command=select_target_path)
-    target_button.place(relx=0.6, rely=0.4*700/800, relwidth=0.3, relheight=0.1)
+    target_button.place(relx=0.6, rely=0.35, relwidth=0.3, relheight=0.1)
 
     keep_fps_value = ctk.BooleanVar(value=modules.globals.keep_fps)
     keep_fps_checkbox = ctk.CTkSwitch(root, text='Keep fps', variable=keep_fps_value, cursor='hand2', command=lambda: setattr(modules.globals, 'keep_fps', not modules.globals.keep_fps))
-    keep_fps_checkbox.place(relx=0.1, rely=0.6*700/800)
+    keep_fps_checkbox.place(relx=0.1, rely=0.525)
 
     keep_frames_value = ctk.BooleanVar(value=modules.globals.keep_frames)
     keep_frames_switch = ctk.CTkSwitch(root, text='Keep frames', variable=keep_frames_value, cursor='hand2', command=lambda: setattr(modules.globals, 'keep_frames', keep_frames_value.get()))
-    keep_frames_switch.place(relx=0.1, rely=0.65*700/800)
+    keep_frames_switch.place(relx=0.1, rely=0.56875)
 
     enhancer_value = ctk.BooleanVar(value=modules.globals.fp_ui['face_enhancer'])
     enhancer_switch = ctk.CTkSwitch(root, text='Face Enhancer', variable=enhancer_value, cursor='hand2', command=lambda: update_tumbler('face_enhancer', enhancer_value.get()))
-    enhancer_switch.place(relx=0.1, rely=0.7*700/800)
+    enhancer_switch.place(relx=0.1, rely=0.6125)
 
     keep_audio_value = ctk.BooleanVar(value=modules.globals.keep_audio)
     keep_audio_switch = ctk.CTkSwitch(root, text='Keep audio', variable=keep_audio_value, cursor='hand2', command=lambda: setattr(modules.globals, 'keep_audio', keep_audio_value.get()))
-    keep_audio_switch.place(relx=0.6, rely=0.6*700/800)
+    keep_audio_switch.place(relx=0.6, rely=0.525)
 
     many_faces_value = ctk.BooleanVar(value=modules.globals.many_faces)
     many_faces_switch = ctk.CTkSwitch(root, text='Many faces', variable=many_faces_value, cursor='hand2', command=lambda: setattr(modules.globals, 'many_faces', many_faces_value.get()))
-    many_faces_switch.place(relx=0.6, rely=0.65*700/800)
+    many_faces_switch.place(relx=0.6, rely=0.56875)
 
     nsfw_value = ctk.BooleanVar(value=modules.globals.nsfw)
     nsfw_switch = ctk.CTkSwitch(root, text='NSFW', variable=nsfw_value, cursor='hand2', command=lambda: setattr(modules.globals, 'nsfw', nsfw_value.get()))
-    nsfw_switch.place(relx=0.6, rely=0.7*700/800)
+    nsfw_switch.place(relx=0.6, rely=0.6125)
 
     start_button = ctk.CTkButton(root, text='Start', cursor='hand2', command=lambda: select_output_path(start))
-    start_button.place(relx=0.15, rely=0.8*700/800, relwidth=0.2, relheight=0.05)
+    start_button.place(relx=0.15, rely=0.7, relwidth=0.2, relheight=0.05)
 
     stop_button = ctk.CTkButton(root, text='Destroy', cursor='hand2', command=destroy)
-    stop_button.place(relx=0.4, rely=0.8*700/800, relwidth=0.2, relheight=0.05)
+    stop_button.place(relx=0.4, rely=0.7, relwidth=0.2, relheight=0.05)
 
     preview_button = ctk.CTkButton(root, text='Preview', cursor='hand2', command=toggle_preview)
-    preview_button.place(relx=0.65, rely=0.8*700/800, relwidth=0.2, relheight=0.05)
+    preview_button.place(relx=0.65, rely=0.7, relwidth=0.2, relheight=0.05)
 
     camera_label = ctk.CTkLabel(root, text="Select Camera:")
-    camera_label.place(relx=0.4, rely=0.86*700/800, relwidth=0.2, relheight=0.05)
+    camera_label.place(relx=0.4, rely=0.7525, relwidth=0.2, relheight=0.05)
 
     available_cameras = get_available_cameras()
     available_camera_strings = [str(cam) for cam in available_cameras]
 
     camera_variable = ctk.StringVar(value=available_camera_strings[0] if available_camera_strings else "No cameras found")
     camera_optionmenu = ctk.CTkOptionMenu(root, variable=camera_variable, values=available_camera_strings)
-    camera_optionmenu.place(relx=0.65, rely=0.86*700/800, relwidth=0.2, relheight=0.05)
+    camera_optionmenu.place(relx=0.65, rely=0.7525, relwidth=0.2, relheight=0.05)
 
     virtual_cam_out_value = ctk.BooleanVar(value=False)
     virtual_cam_out_switch = ctk.CTkSwitch(root, text='Virtual Cam Output (OBS)', variable=virtual_cam_out_value, cursor='hand2')
-    virtual_cam_out_switch.place(relx=0.4, rely=0.92*700/800)
+    virtual_cam_out_switch.place(relx=0.4, rely=0.805)
 
     live_button = ctk.CTkButton(root, text='Live', cursor='hand2', command=lambda: webcam_preview(camera_variable.get(), virtual_cam_out_value.get()))
-    live_button.place(relx=0.15, rely=0.86*700/800, relwidth=0.2, relheight=0.05)
+    live_button.place(relx=0.15, rely=0.7525, relwidth=0.2, relheight=0.05)
 
     status_label = ctk.CTkLabel(root, text=None, justify='center')
-    status_label.place(relx=0.1, relwidth=0.8, rely=1*700/800)
+    status_label.place(relx=0.1, relwidth=0.8, rely=0.875)
 
     donate_label = ctk.CTkLabel(root, text='Deep Live Cam', justify='center', cursor='hand2')
     donate_label.place(relx=0.1, rely=0.95, relwidth=0.8)
