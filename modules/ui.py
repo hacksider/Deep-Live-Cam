@@ -5,6 +5,7 @@ import customtkinter as ctk
 from typing import Callable, Tuple
 import cv2
 from PIL import Image, ImageOps
+from pygrabber.dshow_graph import FilterGraph
 
 # Import OS-specific modules only when necessary
 if platform.system() == 'Darwin':  # macOS
@@ -310,6 +311,10 @@ def webcam_preview(camera_name: str):
 
     global preview_label, PREVIEW
 
+    WIDTH = 960
+    HEIGHT = 540
+    FPS = 60
+
     # Select the camera by its name
     selected_camera = select_camera(camera_name)
     if selected_camera is None:
@@ -325,12 +330,12 @@ def webcam_preview(camera_name: str):
         update_status(f"Error: Could not open camera {camera_name}")
         return
 
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 960)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 540)
-    cap.set(cv2.CAP_PROP_FPS, 60)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, WIDTH)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, HEIGHT)
+    cap.set(cv2.CAP_PROP_FPS, FPS)
 
-    PREVIEW_MAX_WIDTH = 960
-    PREVIEW_MAX_HEIGHT = 540
+    PREVIEW_MAX_WIDTH = WIDTH
+    PREVIEW_MAX_HEIGHT = HEIGHT
 
     preview_label.configure(image=None)
     PREVIEW.deiconify()
@@ -354,6 +359,9 @@ def webcam_preview(camera_name: str):
         image = ctk.CTkImage(image, size=image.size)
         preview_label.configure(image=image)
         ROOT.update()
+
+        if PREVIEW.state() == 'withdrawn':
+            break
 
     cap.release()
     PREVIEW.withdraw()
@@ -389,12 +397,7 @@ def get_available_cameras():
                 print(f"Skipping Continuity Camera: {device.localizedName()}")
     elif platform.system() == 'Windows' or platform.system() == 'Linux':
         # Use OpenCV to detect camera indexes
-        index = 0
-        while True:
-            cap = cv2.VideoCapture(index)
-            if not cap.isOpened():
-                break
-            available_cameras.append(f"Camera {index}")
-            cap.release()
-            index += 1
+        devices = FilterGraph().get_input_devices()
+
+        available_cameras = devices
     return available_cameras
