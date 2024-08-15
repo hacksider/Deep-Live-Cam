@@ -7,6 +7,7 @@ from types import ModuleType
 import cv2
 from PIL import Image, ImageOps
 from pygrabber.dshow_graph import FilterGraph
+import pyvirtualcam
 
 # Import OS-specific modules only when necessary
 if platform.system() == 'Darwin':  # macOS
@@ -309,7 +310,7 @@ def update_preview(frame_number: int = 0) -> None:
         image = ctk.CTkImage(image, size=image.size)
         preview_label.configure(image=image)
 
-def webcam_preview_loop(cap: cv2.VideoCapture, source_image: Any, frame_processors: List[ModuleType]):
+def webcam_preview_loop(cap: cv2.VideoCapture, source_image: Any, frame_processors: List[ModuleType], virtual_cam: pyvirtualcam.Camera = None) -> bool:
     global preview_label, PREVIEW
 
     ret, frame = cap.read()
@@ -326,7 +327,14 @@ def webcam_preview_loop(cap: cv2.VideoCapture, source_image: Any, frame_processo
     image = ImageOps.contain(image, (PREVIEW_MAX_WIDTH, PREVIEW_MAX_HEIGHT), Image.LANCZOS)
     image = ctk.CTkImage(image, size=image.size)
     preview_label.configure(image=image)
+    if virtual_cam:
+        virtual_cam.send(temp_frame)
+        virtual_cam.sleep_until_next_frame()
     ROOT.update()
+
+    if PREVIEW.state() == 'withdrawn':
+        return False
+    
     return True
 
 def webcam_preview(camera_name: str, virtual_cam_output: bool):
@@ -369,11 +377,15 @@ def webcam_preview(camera_name: str, virtual_cam_output: bool):
 
     preview_running = True
 
+    if virtual_cam_output:
+        with pyvirtualcam.Camera(width=WIDTH, height=HEIGHT, fps=FPS, fmt=pyvirtualcam.PixelFormat.BGR) as virtual_cam:
+            while preview_running:
+                preview_running = webcam_preview_loop(cap, source_image, frame_processors, virtual_cam)
+
     while preview_running:
         preview_running = webcam_preview_loop(cap, source_image, frame_processors)
 
-        if PREVIEW.state() == 'withdrawn':
-            break
+        
 
     cap.release()
     PREVIEW.withdraw()
