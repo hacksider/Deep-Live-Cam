@@ -60,6 +60,10 @@ def parse_args() -> None:
                          choices=['libx264', 'libx265', 'libvpx-vp9'])
     program.add_argument('--video-quality', help='Adjust output video quality', dest='video_quality', type=int, default=18,
                          choices=range(52), metavar='[0-51]')
+    program.add_argument('--live-mirror', help='The live camera display as you see it in the front-facing camera frame',
+                         dest='live_mirror', action='store_true', default=False)
+    program.add_argument('--live-resizable', help='The live camera frame is resizable',
+                         dest='live_resizable', action='store_true', default=False)
     program.add_argument('--max-memory', help='Maximum amount of RAM in GB', dest='max_memory', type=int,
                          default=suggest_max_memory())
     program.add_argument('--execution-provider', help='Execution provider', dest='execution_provider', default=['cpu'],
@@ -89,6 +93,8 @@ def parse_args() -> None:
     modules.globals.many_faces = args.many_faces
     modules.globals.video_encoder = args.video_encoder
     modules.globals.video_quality = args.video_quality
+    modules.globals.live_mirror = args.live_mirror
+    modules.globals.live_resizable = args.live_resizable
     modules.globals.max_memory = args.max_memory
     modules.globals.execution_providers = decode_execution_providers(args.execution_provider)
     modules.globals.execution_threads = args.execution_threads
