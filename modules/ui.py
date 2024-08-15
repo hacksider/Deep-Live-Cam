@@ -318,10 +318,10 @@ def update_preview(frame_number: int = 0) -> None:
         image = ctk.CTkImage(image, size=image.size)
         preview_label.configure(image=image)
 
-def webcam_preview_loop(cap: cv2.VideoCapture, source_image: Any, frame_processors: List[ModuleType], virtual_cam: pyvirtualcam.Camera = None) -> bool:
+def webcam_preview_loop(camera: cv2.VideoCapture, source_image: Any, frame_processors: List[ModuleType], virtual_cam: pyvirtualcam.Camera = None) -> bool:
     global preview_label, PREVIEW
 
-    ret, frame = cap.read()
+    ret, frame = camera.read()
     if not ret:
         update_status(f"Error: Frame not received from camera.")
         return False
@@ -409,12 +409,10 @@ def webcam_preview(camera_name: str, virtual_cam_output: bool):
     if virtual_cam_output:
         with pyvirtualcam.Camera(width=WIDTH, height=HEIGHT, fps=FPS, fmt=pyvirtualcam.PixelFormat.BGR) as virtual_cam:
             while preview_running:
-                preview_running = webcam_preview_loop(cap, source_image, frame_processors, virtual_cam)
+                preview_running = webcam_preview_loop(camera, source_image, frame_processors, virtual_cam)
 
     while preview_running:
-        preview_running = webcam_preview_loop(cap, source_image, frame_processors)
-
-        
+        preview_running = webcam_preview_loop(camera, source_image, frame_processors)
 
     if camera: camera.release()
     PREVIEW.withdraw()
