@@ -142,6 +142,7 @@ Just follow the clicks on the screenshot
 Just use your favorite screencapture to stream like OBS
 > Note: In case you want to change your face, just select another picture, the preview mode will then restart (so just wait a bit).
 
+You can now use the virtual camera output (uses pyvirtualcam) by turning on the `Virtual Cam Output (OBS)` toggle which should output to the OBS Virtual Camera. Note: this may not work on macOS. You will get a preview as before, but now you will also have a virtual camera output which can be used in applications like Zoom.
 
 Additional command line arguments are given below. To learn out what they do, check [this guide](https://github.com/s0md3v/roop/wiki/Advanced-Options).
 
