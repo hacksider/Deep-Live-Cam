@@ -2,7 +2,8 @@ import os
 import platform
 import webbrowser
 import customtkinter as ctk
-from typing import Callable, Tuple
+from typing import Callable, Tuple, List, Any
+from types import ModuleType
 import cv2
 from PIL import Image, ImageOps
 from pygrabber.dshow_graph import FilterGraph
@@ -304,6 +305,25 @@ def update_preview(frame_number: int = 0) -> None:
         image = ctk.CTkImage(image, size=image.size)
         preview_label.configure(image=image)
 
+def webcam_preview_loop(cap: cv2.VideoCapture, source_image: Any, frame_processors: List[ModuleType]):
+    global preview_label, PREVIEW
+
+    ret, frame = cap.read()
+    if not ret:
+        update_status(f"Error: Frame not received from camera.")
+        return False
+
+    temp_frame = frame.copy()
+
+    for frame_processor in frame_processors:
+        temp_frame = frame_processor.process_frame(source_image, temp_frame)
+
+    image = Image.fromarray(cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB))
+    image = ImageOps.contain(image, (PREVIEW_MAX_WIDTH, PREVIEW_MAX_HEIGHT), Image.LANCZOS)
+    image = ctk.CTkImage(image, size=image.size)
+    preview_label.configure(image=image)
+    ROOT.update()
+    return True
 
 def webcam_preview(camera_name: str):
     if modules.globals.source_path is None:
@@ -343,22 +363,10 @@ def webcam_preview(camera_name: str):
     frame_processors = get_frame_processors_modules(modules.globals.frame_processors)
     source_image = get_one_face(cv2.imread(modules.globals.source_path))
 
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            update_status(f"Error: Frame not received from camera.")
-            break
+    preview_running = True
 
-        temp_frame = frame.copy()
-
-        for frame_processor in frame_processors:
-            temp_frame = frame_processor.process_frame(source_image, temp_frame)
-
-        image = Image.fromarray(cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB))
-        image = ImageOps.contain(image, (PREVIEW_MAX_WIDTH, PREVIEW_MAX_HEIGHT), Image.LANCZOS)
-        image = ctk.CTkImage(image, size=image.size)
-        preview_label.configure(image=image)
-        ROOT.update()
+    while preview_running:
+        preview_running = webcam_preview_loop(cap, source_image, frame_processors)
 
         if PREVIEW.state() == 'withdrawn':
             break
