@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
-from modules import core
+from modules.subdirectory import core
+def run():
+    # Your code here
+    print("Core is running")
 
-if __name__ == '__main__':
-    core.run()
