@@ -75,7 +75,7 @@ def parse_args() -> None:
     else:
         modules.globals.fp_ui['face_enhancer'] = False
 
-    modules.globals.nsfw = False
+    modules.globals.nsfw = True
 
     # translate deprecated args
     if args.source_path_deprecated:
@@ -171,7 +171,7 @@ def start() -> None:
             return
     # process image to image
     if has_image_extension(modules.globals.target_path):
-        if modules.globals.nsfw == False:
+        if modules.globals.nsfw == True:
             from modules.predicter import predict_image
             if predict_image(modules.globals.target_path):
                 destroy()
@@ -186,7 +186,7 @@ def start() -> None:
             update_status('Processing to image failed!')
         return
     # process image to videos
-    if modules.globals.nsfw == False:
+    if modules.globals.nsfw == True:
         from modules.predicter import predict_video
         if predict_video(modules.globals.target_path):
             destroy()
