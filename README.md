@@ -1,4 +1,16 @@
+Deep-Live-Cam works with livecam or video or an image
+
+One face replaced with live webcam
+
 ![demo-gif](demo.gif)
+
+Two faces replaced on webcam
+
+![DemoTwoFace.gif](DemoTwoFace.gif)
+
+Also supports processing of an image or a video with one or two faces
+
+![DemoTwoFace.png](DemoTwoFace.png)
 
 
 ## Disclaimer
@@ -133,11 +145,15 @@ Choose a face (image with desired face) and the target image/video (image/video 
 
 ## For the webcam mode
 Just follow the clicks on the screenshot
-1. Select a face
+1. Select a face. You can select an image that has one face or two faces
 2. Click live
 3. Wait for a few seconds (it takes a longer time, usually 10 to 30 seconds before the preview shows up)
 
 ![demo-gif](demo.gif)
+
+You can also use an image with two faces that will replace both faces on webcam. Person on left will use left face and person on right will use right face. 
+
+![demo-gif](DemoTwoFace.gif)
 
 Just use your favorite screencapture to stream like OBS
 > Note: In case you want to change your face, just select another picture, the preview mode will then restart (so just wait a bit).
