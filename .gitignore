@@ -16,7 +16,7 @@ temp/
 venv/
 env/
 workflow/
-deepfake/
+workenv/
 gfpgan/
 models/inswapper_128.onnx
 models/GFPGANv1.4.pth
