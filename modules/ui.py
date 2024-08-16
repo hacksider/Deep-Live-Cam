@@ -156,10 +156,10 @@ def update_tumbler(var: str, value: bool) -> None:
     modules.globals.fp_ui[var] = value
 
 def drop_source_file(e) -> None:
-    set_source_path( e.data.replace("{","").replace("}", ""))
+    set_source_path( e.data.strip('{}'))
 
 def drop_target_file(e) -> None:
-    set_target_path( e.data.replace("{","").replace("}", ""))
+    set_target_path( e.data.strip('{}'))
 
 def select_source_path() -> None:
     global RECENT_DIRECTORY_SOURCE, img_ft, vid_ft
