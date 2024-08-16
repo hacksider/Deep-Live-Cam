@@ -7,7 +7,6 @@ __pycache__/
 *.log
 *.backup
 tf_env/
-*.png
 *.mp4
 *.mkv
 
