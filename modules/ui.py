@@ -1,6 +1,8 @@
 import os
 import webbrowser
 import customtkinter as ctk
+from tkinterdnd2 import *
+from tkinterdnd2 import TkinterDnD, DND_FILES, DND_ALL
 from typing import Callable, Tuple
 import cv2
 from PIL import Image, ImageOps
@@ -32,8 +34,12 @@ status_label = None
 
 img_ft, vid_ft = modules.globals.file_types
 
+class CTk(ctk.CTk, TkinterDnD.DnDWrapper):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.TkdndVersion = TkinterDnD._require(self)
 
-def init(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.CTk:
+def init(start: Callable[[], None], destroy: Callable[[], None]) -> CTk:
     global ROOT, PREVIEW
 
     ROOT = create_root(start, destroy)
@@ -42,29 +48,38 @@ def init(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.CTk:
     return ROOT
 
 
-def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.CTk:
+def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> CTk:
     global source_label, target_label, status_label
 
     ctk.deactivate_automatic_dpi_awareness()
     ctk.set_appearance_mode('system')
     ctk.set_default_color_theme(resolve_relative_path('ui.json'))
 
-    root = ctk.CTk()
+    root = CTk()
+
     root.minsize(ROOT_WIDTH, ROOT_HEIGHT)
     root.title(f'{modules.metadata.name} {modules.metadata.version} {modules.metadata.edition}')
     root.configure()
     root.protocol('WM_DELETE_WINDOW', lambda: destroy())
 
     source_label = ctk.CTkLabel(root, text=None)
+    source_label.drop_target_register(DND_FILES)
+    source_label.dnd_bind("<<Drop>>", drop_source_file )
     source_label.place(relx=0.1, rely=0.1, relwidth=0.3, relheight=0.25)
 
     target_label = ctk.CTkLabel(root, text=None)
+    target_label.drop_target_register(DND_FILES)
+    target_label.dnd_bind("<<Drop>>", drop_target_file )
     target_label.place(relx=0.6, rely=0.1, relwidth=0.3, relheight=0.25)
 
     select_face_button = ctk.CTkButton(root, text='Select a face', cursor='hand2', command=lambda: select_source_path())
+    select_face_button.drop_target_register(DND_FILES)
+    select_face_button.dnd_bind("<<Drop>>", drop_source_file )
     select_face_button.place(relx=0.1, rely=0.4, relwidth=0.3, relheight=0.1)
 
     select_target_button = ctk.CTkButton(root, text='Select a target', cursor='hand2', command=lambda: select_target_path())
+    select_target_button.drop_target_register(DND_FILES)
+    select_target_button.dnd_bind("<<Drop>>", drop_target_file )
     select_target_button.place(relx=0.6, rely=0.4, relwidth=0.3, relheight=0.1)
 
     keep_fps_value = ctk.BooleanVar(value=modules.globals.keep_fps)
@@ -114,7 +129,6 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
 
     return root
 
-
 def create_preview(parent: ctk.CTkToplevel) -> ctk.CTkToplevel:
     global preview_label, preview_slider
 
@@ -141,12 +155,21 @@ def update_status(text: str) -> None:
 def update_tumbler(var: str, value: bool) -> None:
     modules.globals.fp_ui[var] = value
 
+def drop_source_file(e) -> None:
+    set_source_path( e.data.replace("{","").replace("}", ""))
+
+def drop_target_file(e) -> None:
+    set_target_path( e.data.replace("{","").replace("}", ""))
 
 def select_source_path() -> None:
     global RECENT_DIRECTORY_SOURCE, img_ft, vid_ft
 
     PREVIEW.withdraw()
     source_path = ctk.filedialog.askopenfilename(title='select an source image', initialdir=RECENT_DIRECTORY_SOURCE, filetypes=[img_ft])
+    set_source_path(source_path)
+
+def set_source_path(source_path: str) -> None:
+    PREVIEW.withdraw()
     if is_image(source_path):
         modules.globals.source_path = source_path
         RECENT_DIRECTORY_SOURCE = os.path.dirname(modules.globals.source_path)
@@ -156,12 +179,16 @@ def select_source_path() -> None:
         modules.globals.source_path = None
         source_label.configure(image=None)
 
-
 def select_target_path() -> None:
     global RECENT_DIRECTORY_TARGET, img_ft, vid_ft
 
     PREVIEW.withdraw()
     target_path = ctk.filedialog.askopenfilename(title='select an target image or video', initialdir=RECENT_DIRECTORY_TARGET, filetypes=[img_ft, vid_ft])
+    set_target_path(target_path)
+    
+
+def set_target_path( target_path: str) -> None:
+    PREVIEW.withdraw()
     if is_image(target_path):
         modules.globals.target_path = target_path
         RECENT_DIRECTORY_TARGET = os.path.dirname(modules.globals.target_path)
@@ -175,7 +202,7 @@ def select_target_path() -> None:
     else:
         modules.globals.target_path = None
         target_label.configure(image=None)
-
+    
 
 def select_output_path(start: Callable[[], None]) -> None:
     global RECENT_DIRECTORY_OUTPUT, img_ft, vid_ft
