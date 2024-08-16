@@ -168,6 +168,7 @@ Just follow the clicks on the screenshot
 
 5. For Image swap add the source and target image, enable Remote Processor, click on preview
 
+![demo-gif](colab_demo.gif)
 Just use your favorite screencapture to stream like OBS
 
 > Note: In case you want to change your face, just select another picture, the preview mode will then restart (so just wait a bit).
