@@ -1,7 +1,7 @@
 ![demo-gif](demo.gif)
 
-
 ## Disclaimer
+
 This software is meant to be a productive contribution to the rapidly growing AI-generated media industry. It will help artists with tasks such as animating a custom character or using the character as a model for clothing etc.
 
 The developers of this software are aware of its possible unethical applications and are committed to take preventative measures against them. It has a built-in check which prevents the program from working on inappropriate media including but not limited to nudity, graphic content, sensitive material such as war footage etc. We will continue to develop this project in the positive direction while adhering to law and ethics. This project may be shut down or include watermarks on the output if requested by law.
@@ -10,38 +10,43 @@ Users of this software are expected to use this software responsibly while abidi
 
 ## How do I install it?
 
-
 ### Basic: It is more likely to work on your computer but it will also be very slow. You can follow instructions for the basic install (This usually runs via **CPU**)
+
 #### 1.Setup your platform
--   python (3.10 recommended)
--   pip
--   git
--   [ffmpeg](https://www.youtube.com/watch?v=OlNWCpFdVMA) 
--   [visual studio 2022 runtimes (windows)](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
+
+- python (3.10 recommended)
+- pip
+- git
+- [ffmpeg](https://www.youtube.com/watch?v=OlNWCpFdVMA)
+- [visual studio 2022 runtimes (windows)](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
+
 #### 2. Clone Repository
+
     https://github.com/hacksider/Deep-Live-Cam.git
 
 #### 3. Download Models
 
- 1. [GFPGANv1.4](https://huggingface.co/hacksider/deep-live-cam/resolve/main/GFPGANv1.4.pth)
- 2. [inswapper_128_fp16.onnx](https://huggingface.co/hacksider/deep-live-cam/resolve/main/inswapper_128_fp16.onnx)
+1.  [GFPGANv1.4](https://huggingface.co/hacksider/deep-live-cam/resolve/main/GFPGANv1.4.pth)
+2.  [inswapper_128_fp16.onnx](https://huggingface.co/hacksider/deep-live-cam/resolve/main/inswapper_128_fp16.onnx)
 
 Then put those 2 files on the "**models**" folder
 
 #### 4. Install dependency
-We highly recommend to work with a  `venv`  to avoid issues.
+
+We highly recommend to work with a `venv` to avoid issues.
+
 ```
 pip install -r requirements.txt
 ```
+
 ##### DONE!!! If you dont have any GPU, You should be able to run roop using `python run.py` command. Keep in mind that while running the program for first time, it will download some models which can take time depending on your network connection.
 
-### *Proceed if you want to use GPU Acceleration
-### CUDA Execution Provider (Nvidia)*
+### \*Proceed if you want to use GPU Acceleration
 
-1.  Install  [CUDA Toolkit 11.8](https://developer.nvidia.com/cuda-11-8-0-download-archive)
-    
+### CUDA Execution Provider (Nvidia)\*
+
+1.  Install [CUDA Toolkit 11.8](https://developer.nvidia.com/cuda-11-8-0-download-archive)
 2.  Install dependencies:
-    
 
 ```
 pip uninstall onnxruntime onnxruntime-gpu
@@ -124,6 +129,7 @@ python run.py --execution-provider openvino
 ```
 
 ## How do I use it?
+
 > Note: When you run this program for the first time, it will download some models ~300MB in size.
 
 Executing `python run.py` command will launch this window:
@@ -132,16 +138,39 @@ Executing `python run.py` command will launch this window:
 Choose a face (image with desired face) and the target image/video (image/video in which you want to replace the face) and click on `Start`. Open file explorer and navigate to the directory you select your output to be in. You will find a directory named `<video_title>` where you can see the frames being swapped in realtime. Once the processing is done, it will create the output file. That's it.
 
 ## For the webcam mode
+
 Just follow the clicks on the screenshot
+
 1. Select a face
 2. Click live
 3. Wait for a few seconds (it takes a longer time, usually 10 to 30 seconds before the preview shows up)
 
 ![demo-gif](demo.gif)
 
-Just use your favorite screencapture to stream like OBS
-> Note: In case you want to change your face, just select another picture, the preview mode will then restart (so just wait a bit).
+## TO USE WITH GOOGLE COLAB
 
+1. Upload the colab file in /google-colab/DeepLive_Google_Colab.ipynb to your google colab
+2. Follow the instructions to run the colab file.
+   Note: For TCP Tunneling you can use either Ngrok or FRP.
+   i. For Ngrok you would need an api key and payment details added to use the tcp connection
+   ii. For FRP its free but you need to host the FRPS server on a VPS and replace '194.113.64.71' with your vps address
+3. Follow the image instruction to input the tcp address appropriately
+   On Colab
+
+   ![gui-demo](colab_tcp_tunnel.png)
+
+   On your Machine
+
+   ![gui-demo](colab_instruction.png)
+   colab_instruction.png
+
+4. For live Mode add the source image, enable Remote Processor,Fill the tcp correctly and click on live
+
+5. For Image swap add the source and target image, enable Remote Processor, click on preview
+
+Just use your favorite screencapture to stream like OBS
+
+> Note: In case you want to change your face, just select another picture, the preview mode will then restart (so just wait a bit).
 
 Additional command line arguments are given below. To learn out what they do, check [this guide](https://github.com/s0md3v/roop/wiki/Advanced-Options).
 
@@ -167,6 +196,7 @@ options:
 Looking for a CLI mode? Using the -s/--source argument will make the run program in cli mode.
 
 ## Want the Next Update Now?
+
 If you want the latest and greatest build, or want to see some new great features, go to our [experimental branch](https://github.com/hacksider/Deep-Live-Cam/tree/experimental) and experience what the contributors have given.
 
 ## Credits

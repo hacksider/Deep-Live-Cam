@@ -34,7 +34,7 @@ def parse_args() -> None:
     program.add_argument('-s', '--source', help='select an source image', dest='source_path')
     program.add_argument('-t', '--target', help='select an target image or video', dest='target_path')
     program.add_argument('-o', '--output', help='select output file or directory', dest='output_path')
-    program.add_argument('--frame-processor', help='pipeline of frame processors', dest='frame_processor', default=['face_swapper'], choices=['face_swapper', 'face_enhancer'], nargs='+')
+    program.add_argument('--frame-processor', help='pipeline of frame processors', dest='frame_processor', default=['face_swapper'], choices=['face_swapper', 'face_enhancer','remote_processor'], nargs='+')
     program.add_argument('--keep-fps', help='keep original fps', dest='keep_fps', action='store_true', default=False)
     program.add_argument('--keep-audio', help='keep original audio', dest='keep_audio', action='store_true', default=True)
     program.add_argument('--keep-frames', help='keep temporary frames', dest='keep_frames', action='store_true', default=False)
@@ -74,7 +74,11 @@ def parse_args() -> None:
         modules.globals.fp_ui['face_enhancer'] = True
     else:
         modules.globals.fp_ui['face_enhancer'] = False
-
+        #for Remote tumbler:
+    if 'remote_processor' in args.frame_processor:
+        modules.globals.fp_ui['remote_processor'] = True
+    else:
+        modules.globals.fp_ui['remote_processor'] = False
     modules.globals.nsfw = False
 
     # translate deprecated args

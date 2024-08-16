@@ -1,6 +1,8 @@
+import sys
 import os
 import webbrowser
 import customtkinter as ctk
+import tkinter as tk
 from typing import Callable, Tuple
 import cv2
 from PIL import Image, ImageOps
@@ -14,7 +16,7 @@ from modules.utilities import is_image, is_video, resolve_relative_path
 
 ROOT = None
 ROOT_HEIGHT = 700
-ROOT_WIDTH = 600
+ROOT_WIDTH = 800
 
 PREVIEW = None
 PREVIEW_MAX_HEIGHT = 700
@@ -62,47 +64,80 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     target_label.place(relx=0.6, rely=0.1, relwidth=0.3, relheight=0.25)
 
     select_face_button = ctk.CTkButton(root, text='Select a face', cursor='hand2', command=lambda: select_source_path())
-    select_face_button.place(relx=0.1, rely=0.4, relwidth=0.3, relheight=0.1)
+    select_face_button.place(relx=0.1, rely=0.3, relwidth=0.3, relheight=0.1)
 
     select_target_button = ctk.CTkButton(root, text='Select a target', cursor='hand2', command=lambda: select_target_path())
-    select_target_button.place(relx=0.6, rely=0.4, relwidth=0.3, relheight=0.1)
+    select_target_button.place(relx=0.6, rely=0.3, relwidth=0.3, relheight=0.1)
 
     keep_fps_value = ctk.BooleanVar(value=modules.globals.keep_fps)
     keep_fps_checkbox = ctk.CTkSwitch(root, text='Keep fps', variable=keep_fps_value, cursor='hand2', command=lambda: setattr(modules.globals, 'keep_fps', not modules.globals.keep_fps))
-    keep_fps_checkbox.place(relx=0.1, rely=0.6)
+    keep_fps_checkbox.place(relx=0.1, rely=0.5)
 
     keep_frames_value = ctk.BooleanVar(value=modules.globals.keep_frames)
     keep_frames_switch = ctk.CTkSwitch(root, text='Keep frames', variable=keep_frames_value, cursor='hand2', command=lambda: setattr(modules.globals, 'keep_frames', keep_frames_value.get()))
-    keep_frames_switch.place(relx=0.1, rely=0.65)
+    keep_frames_switch.place(relx=0.1, rely=0.55)
 
     # for FRAME PROCESSOR ENHANCER tumbler:
     enhancer_value = ctk.BooleanVar(value=modules.globals.fp_ui['face_enhancer'])
     enhancer_switch = ctk.CTkSwitch(root, text='Face Enhancer', variable=enhancer_value, cursor='hand2', command=lambda: update_tumbler('face_enhancer',enhancer_value.get()))
-    enhancer_switch.place(relx=0.1, rely=0.7)
+    enhancer_switch.place(relx=0.1, rely=0.6)
+
+    remote_process_value = ctk.BooleanVar(value=modules.globals.fp_ui['remote_processor'])
+    remote_process_switch = ctk.CTkSwitch(root, text='Remote Processor', variable=remote_process_value, cursor='hand2', command=lambda: update_tumbler('remote_processor',remote_process_value.get()))
+    remote_process_switch.place(relx=0.1, rely=0.65)
+   
+    def on_text_change(event=None):
+        setattr(modules.globals, 'pull_addr', text_box_addr_in.get("1.0", tk.END).strip())
+    
+    def on_text_change_out(event=None):
+        setattr(modules.globals, 'push_addr', text_box_addr_out.get("1.0", tk.END).strip())
+    def on_text_change_out_two(event=None):
+        setattr(modules.globals, 'push_addr_two', text_box_addr_out_t.get("1.0", tk.END).strip())
 
     keep_audio_value = ctk.BooleanVar(value=modules.globals.keep_audio)
     keep_audio_switch = ctk.CTkSwitch(root, text='Keep audio', variable=keep_audio_value, cursor='hand2', command=lambda: setattr(modules.globals, 'keep_audio', keep_audio_value.get()))
-    keep_audio_switch.place(relx=0.6, rely=0.6)
+    keep_audio_switch.place(relx=0.6, rely=0.5)
 
     many_faces_value = ctk.BooleanVar(value=modules.globals.many_faces)
     many_faces_switch = ctk.CTkSwitch(root, text='Many faces', variable=many_faces_value, cursor='hand2', command=lambda: setattr(modules.globals, 'many_faces', many_faces_value.get()))
-    many_faces_switch.place(relx=0.6, rely=0.65)
+    many_faces_switch.place(relx=0.6, rely=0.55)
 
-#    nsfw_value = ctk.BooleanVar(value=modules.globals.nsfw)
-#    nsfw_switch = ctk.CTkSwitch(root, text='NSFW', variable=nsfw_value, cursor='hand2', command=lambda: setattr(modules.globals, 'nsfw', nsfw_value.get()))
-#    nsfw_switch.place(relx=0.6, rely=0.7)
+    nsfw_value = ctk.BooleanVar(value=modules.globals.nsfw)
+    nsfw_switch = ctk.CTkSwitch(root, text='NSFW', variable=nsfw_value, cursor='hand2', command=lambda: setattr(modules.globals, 'nsfw', nsfw_value.get()))
+    nsfw_switch.place(relx=0.6, rely=0.6)
+    
+    #Label a text box
+    label = ctk.CTkLabel(root, text="In:")
+    label.place(relx=0.1, rely=0.72, anchor=tk.E)
+    #Label a text box
+    label = ctk.CTkLabel(root, text="OutS:")
+    label.place(relx=0.6, rely=0.72, anchor=tk.E)
+    # Create a text box
+    text_box_addr_in = ctk.CTkTextbox(root, width=200, height=10)
+    text_box_addr_in.place(relx=0.1, rely=0.7)
+    text_box_addr_in.bind("<KeyRelease>", on_text_change)
+
+    # Create a text box
+    text_box_addr_out = ctk.CTkTextbox(root, width=100, height=10)
+    text_box_addr_out.place(relx=0.6, rely=0.7)
+    text_box_addr_out.bind("<KeyRelease>", on_text_change_out)
+
+    # Create a text box
+    text_box_addr_out_t = ctk.CTkTextbox(root, width=100, height=10)
+    text_box_addr_out_t.place(relx=0.8, rely=0.7)
+    text_box_addr_out_t.bind("<KeyRelease>", on_text_change_out_two)
 
     start_button = ctk.CTkButton(root, text='Start', cursor='hand2', command=lambda: select_output_path(start))
-    start_button.place(relx=0.15, rely=0.80, relwidth=0.2, relheight=0.05)
+    start_button.place(relx=0.15, rely=0.75, relwidth=0.2, relheight=0.05)
 
     stop_button = ctk.CTkButton(root, text='Destroy', cursor='hand2', command=lambda: destroy())
-    stop_button.place(relx=0.4, rely=0.80, relwidth=0.2, relheight=0.05)
+    stop_button.place(relx=0.4, rely=0.75, relwidth=0.2, relheight=0.05)
 
     preview_button = ctk.CTkButton(root, text='Preview', cursor='hand2', command=lambda: toggle_preview())
-    preview_button.place(relx=0.65, rely=0.80, relwidth=0.2, relheight=0.05)
+    preview_button.place(relx=0.65, rely=0.75, relwidth=0.2, relheight=0.05)
 
     live_button = ctk.CTkButton(root, text='Live', cursor='hand2', command=lambda: webcam_preview())
-    live_button.place(relx=0.40, rely=0.86, relwidth=0.2, relheight=0.05)
+    live_button.place(relx=0.40, rely=0.85, relwidth=0.2, relheight=0.05)
 
     status_label = ctk.CTkLabel(root, text=None, justify='center')
     status_label.place(relx=0.1, rely=0.9, relwidth=0.8)
@@ -235,15 +270,28 @@ def init_preview() -> None:
 def update_preview(frame_number: int = 0) -> None:
     if modules.globals.source_path and modules.globals.target_path:
         temp_frame = get_video_frame(modules.globals.target_path, frame_number)
+        remote_process=False
         if modules.globals.nsfw == False:
             from modules.predicter import predict_frame
             if predict_frame(temp_frame):
                 quit()
         for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
-            temp_frame = frame_processor.process_frame(
-                get_one_face(cv2.imread(modules.globals.source_path)),
-                temp_frame
-            )
+            if 'remote_processor' in modules.globals.frame_processors :
+                remote_process = True
+                if frame_processor.__name__ =="modules.processors.frame.remote_processor":
+                    print('------- Remote Process ----------')
+                    source_data = cv2.imread(modules.globals.source_path)
+                    if not frame_processor.pre_check():
+                        print("No Input and Output Address")
+                        sys.exit()
+                    temp_frame=frame_processor.process_frame(source_data,temp_frame)
+                    
+
+            if not remote_process:
+                temp_frame = frame_processor.process_frame(
+                    get_one_face(cv2.imread(modules.globals.source_path)),
+                    temp_frame
+                )
         image = Image.fromarray(cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB))
         image = ImageOps.contain(image, (PREVIEW_MAX_WIDTH, PREVIEW_MAX_HEIGHT), Image.LANCZOS)
         image = ctk.CTkImage(image, size=image.size)
@@ -257,6 +305,7 @@ def webcam_preview():
     global preview_label, PREVIEW
 
     cap = cv2.VideoCapture(0)  # Use index for the webcam (adjust the index accordingly if necessary)    
+    cap.set(cv2.CAP_PROP_BUFFERSIZE,3)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 960)  # Set the width of the resolution
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 540)  # Set the height of the resolution
     cap.set(cv2.CAP_PROP_FPS, 60)  # Set the frame rate of the webcam
@@ -270,30 +319,63 @@ def webcam_preview():
     frame_processors = get_frame_processors_modules(modules.globals.frame_processors)
 
     source_image = None  # Initialize variable for the selected face image
+    remote_process=False # By default remote process is set to disabled
+    stream_out = None   # Both veriable stores the subprocess runned by ffmpeg
+    stream_in = None
 
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
+    if 'remote_processor' in modules.globals.frame_processors :
+        remote_modules = get_frame_processors_modules(['remote_processor'])
+        source_data = cv2.imread(modules.globals.source_path)
+        remote_modules[1].send_source_frame(source_data)
+        #start ffmpeg stream out subprocess
+        stream_out = remote_modules[1].send_streams(cap)
+        #start ffmpeg stream In subprocess
+        stream_in = remote_modules[1].recieve_streams(cap)
+        
+        remote_process = True
+    try:
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
 
-        # Select and save face image only once
-        if source_image is None and modules.globals.source_path:
-            source_image = get_one_face(cv2.imread(modules.globals.source_path))
+            # Select and save face image only once
+            if source_image is None and modules.globals.source_path:
+                source_image = get_one_face(cv2.imread(modules.globals.source_path))
 
-        temp_frame = frame.copy()  #Create a copy of the frame
+            temp_frame = frame.copy()  #Create a copy of the frame
 
-        for frame_processor in frame_processors:
-            temp_frame = frame_processor.process_frame(source_image, temp_frame)
+            for frame_processor in frame_processors:
+                if remote_process:
+                    if frame_processor.__name__ =="modules.processors.frame.remote_processor":
+                        #print('------- Remote Process ----------')
+                        if not frame_processor.pre_check():
+                            print("No Input and Output Address")
+                            sys.exit()
+                        _frame = frame_processor.stream_frame(temp_frame,stream_out,stream_in)
+                        if _frame is not None:
+                            temp_frame = _frame
+                        
 
-        image = cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB)  # Convert the image to RGB format to display it with Tkinter
-        image = Image.fromarray(image)
-        image = ImageOps.contain(image, (PREVIEW_MAX_WIDTH, PREVIEW_MAX_HEIGHT), Image.LANCZOS)
-        image = ctk.CTkImage(image, size=image.size)
-        preview_label.configure(image=image)
-        ROOT.update()
-
-        if PREVIEW.state() == 'withdrawn':
-            break
-
-    cap.release()
-    PREVIEW.withdraw()  # Close preview window when loop is finished
+                if not remote_process:
+                    temp_frame = frame_processor.process_frame(source_image, temp_frame)
+            if not remote_process:
+                image = cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB)  # Convert the image to RGB format to display it with Tkinter
+                image = Image.fromarray(image)
+                image = ImageOps.contain(image, (PREVIEW_MAX_WIDTH, PREVIEW_MAX_HEIGHT), Image.LANCZOS)
+                image = ctk.CTkImage(image, size=image.size)
+                preview_label.configure(image=image)
+                ROOT.update()
+            elif _frame is not None:
+                image = cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB)  # Convert the image to RGB format to display it with Tkinter
+                image = Image.fromarray(image)
+                image = ImageOps.contain(image, (PREVIEW_MAX_WIDTH, PREVIEW_MAX_HEIGHT), Image.LANCZOS)
+                image = ctk.CTkImage(image, size=image.size)
+                preview_label.configure(image=image)
+                ROOT.update()
+                
+            if PREVIEW.state() == 'withdrawn':
+                break
+    finally:
+        cap.release()
+        PREVIEW.withdraw()  # Close preview window when loop is finished

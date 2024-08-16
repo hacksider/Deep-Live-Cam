@@ -1,3 +1,3 @@
 name = 'Deep Live Cam'
-version = '1.3.0'
-edition = 'Portable'
+version = '1.3.1'
+edition = 'Portable-Colab'
