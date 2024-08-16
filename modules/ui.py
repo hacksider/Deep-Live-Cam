@@ -7,7 +7,7 @@ from PIL import Image, ImageOps
 
 import modules.globals
 import modules.metadata
-from modules.face_analyser import get_one_face
+from modules.face_analyser import get_one_face,get_one_face_left,get_one_face_right
 from modules.capturer import get_video_frame, get_video_frame_total
 from modules.processors.frame.core import get_frame_processors_modules
 from modules.utilities import is_image, is_video, resolve_relative_path
@@ -61,7 +61,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     target_label = ctk.CTkLabel(root, text=None)
     target_label.place(relx=0.6, rely=0.1, relwidth=0.3, relheight=0.25)
 
-    select_face_button = ctk.CTkButton(root, text='Select a face', cursor='hand2', command=lambda: select_source_path())
+    select_face_button = ctk.CTkButton(root, text='Select a face/s \n(left face)(right face)', cursor='hand2', command=lambda: select_source_path())
     select_face_button.place(relx=0.1, rely=0.4, relwidth=0.3, relheight=0.1)
 
     select_target_button = ctk.CTkButton(root, text='Select a target', cursor='hand2', command=lambda: select_target_path())
@@ -239,9 +239,16 @@ def update_preview(frame_number: int = 0) -> None:
             from modules.predicter import predict_frame
             if predict_frame(temp_frame):
                 quit()
+        source_image_left = None  # Initialize variable for the selected face image
+        source_image_right = None  # Initialize variable for the selected face image
+        
+        if source_image_left is None and modules.globals.source_path:
+            source_image_left = get_one_face_left(cv2.imread(modules.globals.source_path))
+        if source_image_right is None and modules.globals.source_path:
+            source_image_right = get_one_face_right(cv2.imread(modules.globals.source_path))
+
         for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
-            temp_frame = frame_processor.process_frame(
-                get_one_face(cv2.imread(modules.globals.source_path)),
+            temp_frame = frame_processor.process_frame([source_image_left,source_image_right],
                 temp_frame
             )
         image = Image.fromarray(cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB))
@@ -269,7 +276,8 @@ def webcam_preview():
 
     frame_processors = get_frame_processors_modules(modules.globals.frame_processors)
 
-    source_image = None  # Initialize variable for the selected face image
+    source_image_left = None  # Initialize variable for the selected face image
+    source_image_right = None  # Initialize variable for the selected face image
 
     while True:
         ret, frame = cap.read()
@@ -277,13 +285,15 @@ def webcam_preview():
             break
 
         # Select and save face image only once
-        if source_image is None and modules.globals.source_path:
-            source_image = get_one_face(cv2.imread(modules.globals.source_path))
+        if source_image_left is None and modules.globals.source_path:
+            source_image_left = get_one_face_left(cv2.imread(modules.globals.source_path))
+        if source_image_right is None and modules.globals.source_path:
+            source_image_right = get_one_face_right(cv2.imread(modules.globals.source_path))
 
         temp_frame = frame.copy()  #Create a copy of the frame
 
         for frame_processor in frame_processors:
-            temp_frame = frame_processor.process_frame(source_image, temp_frame)
+            temp_frame = frame_processor.process_frame([source_image_left,source_image_right], temp_frame)
 
         image = cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB)  # Convert the image to RGB format to display it with Tkinter
         image = Image.fromarray(image)

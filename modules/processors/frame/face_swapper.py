@@ -6,7 +6,7 @@ import threading
 import modules.globals
 import modules.processors.frame.core
 from modules.core import update_status
-from modules.face_analyser import get_one_face, get_many_faces
+from modules.face_analyser import get_one_face, get_many_faces,get_one_face_left,get_one_face_right
 from modules.typing import Face, Frame
 from modules.utilities import conditional_download, resolve_relative_path, is_image, is_video
 
@@ -47,26 +47,50 @@ def get_face_swapper() -> Any:
 def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
     return get_face_swapper().get(temp_frame, target_face, source_face, paste_back=True)
 
+def get_two_faces(frame: Frame) -> List[Face]:
+    faces = get_many_faces(frame)
+    if faces:
+        # Sort faces from left to right based on the x-coordinate of the bounding box
+        sorted_faces = sorted(faces, key=lambda x: x.bbox[0])
+        return sorted_faces[:2]  # Return up to two faces, leftmost and rightmost
+    return []
 
-def process_frame(source_face: Face, temp_frame: Frame) -> Frame:
+def process_frame(source_face: List[Face], temp_frame: Frame) -> Frame:
     if modules.globals.many_faces:
         many_faces = get_many_faces(temp_frame)
         if many_faces:
             for target_face in many_faces:
-                temp_frame = swap_face(source_face, target_face, temp_frame)
+                temp_frame = swap_face(source_face[0], target_face, temp_frame)
     else:
-        target_face = get_one_face(temp_frame)
-        if target_face:
-            temp_frame = swap_face(source_face, target_face, temp_frame)
+        target_faces = get_two_faces(temp_frame)
+        if len(target_faces) >= 2:
+            # Swap the first face
+            temp_frame = swap_face(source_face[0], target_faces[0], temp_frame)
+            # Swap the second face
+            temp_frame = swap_face(source_face[1], target_faces[1], temp_frame)
+        elif len(target_faces) == 1:
+            # If only one face is found, swap with the first source face
+            temp_frame = swap_face(source_face[0], target_faces[0], temp_frame)
+
     return temp_frame
 
 
 def process_frames(source_path: str, temp_frame_paths: List[str], progress: Any = None) -> None:
+    
+    source_image_left = None  # Initialize variable for the selected face image
+    source_image_right = None  # Initialize variable for the selected face image
+
+    if source_image_left is None and source_path:
+        source_image_left = get_one_face_left(cv2.imread(source_path))
+    if source_image_right is None and source_path:
+        source_image_right = get_one_face_right(cv2.imread(source_path))
+
+
     source_face = get_one_face(cv2.imread(source_path))
     for temp_frame_path in temp_frame_paths:
         temp_frame = cv2.imread(temp_frame_path)
         try:
-            result = process_frame(source_face, temp_frame)
+            result = process_frame([source_image_left,source_image_right], temp_frame)
             cv2.imwrite(temp_frame_path, result)
         except Exception as exception:
             print(exception)
