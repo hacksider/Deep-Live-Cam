@@ -1,4 +1,16 @@
+Deep-Live-Cam is compatible with webcam, video or an image
+
+One face replaced with live webcam
+
 ![demo-gif](demo.gif)
+
+Two faces replaced on webcam
+
+![DemoTwoFace.gif](DemoTwoFace.gif)
+
+Also supports processing of an image or video file with one or two faces in source image
+
+![DemoTwoFace.png](DemoTwoFace.png)
 
 
 ## Disclaimer
@@ -133,7 +145,7 @@ Choose a face (image with desired face) and the target image/video (image/video 
 
 ## For the webcam mode
 Just follow the clicks on the screenshot
-1. Select a face
+1. Select a face. You can select an image that has one face or two faces. Left face will be used as face one and right face will be used as face two.
 2. Click live
 3. Wait for a few seconds (it takes a longer time, usually 10 to 30 seconds before the preview shows up)
 
@@ -141,6 +153,23 @@ Just follow the clicks on the screenshot
 
 Just use your favorite screencapture to stream like OBS
 > Note: In case you want to change your face, just select another picture, the preview mode will then restart (so just wait a bit).
+
+When you select an image with two faces then both faces will be replaced on webcam. Person on left will use left face and person on right will use right face from your image.
+
+![DemoTwoFace.gif](DemoTwoFace.gif)
+
+## One/Two face controls for webcam mode, video or image
+You can control how a face/s is replaced on target face
+
+![FaceControls.png](FaceControls.png)
+
+1. Show both faces - When you select an image with two faces you will need to enable this option to replace both target faces on webcam, video or image. By default left face is always used.
+
+2. Flip left/right faces - You can flip both source faces in your image. By default left face will replace left target face and right face will replace right target face. Turning on this option will flip source faces on target to right->left
+
+3. Detect face from right - When using one face by default the target face is detected from left of webcam, video or image. Turning on this option will replace target face detected from right.
+
+
 
 
 Additional command line arguments are given below. To learn out what they do, check [this guide](https://github.com/s0md3v/roop/wiki/Advanced-Options).
@@ -156,6 +185,9 @@ options:
   --keep-audio                                             keep original audio
   --keep-frames                                            keep temporary frames
   --many-faces                                             process every face
+  --both-faces                                             use two faces in source image
+  --flip-faces                                             flip two faces in source image from right to left
+  --detect-face-right                                      detect target face from right of frame
   --video-encoder {libx264,libx265,libvpx-vp9}             adjust output video encoder
   --video-quality [0-51]                                   adjust output video quality
   --max-memory MAX_MEMORY                                  maximum amount of RAM in GB

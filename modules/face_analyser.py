@@ -29,3 +29,17 @@ def get_many_faces(frame: Frame) -> Any:
         return get_face_analyser().get(frame)
     except IndexError:
         return None
+    
+def get_one_face_left(frame: Frame) -> Any:
+    face = get_face_analyser().get(frame)
+    try:
+        return min(face, key=lambda x: x.bbox[0])
+    except ValueError:
+        return None
+    
+def get_one_face_right(frame: Frame) -> Any:
+    face = get_face_analyser().get(frame)
+    try:
+        return max(face, key=lambda x: x.bbox[0])
+    except ValueError:
+        return None

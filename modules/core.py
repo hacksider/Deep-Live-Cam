@@ -46,6 +46,10 @@ def parse_args() -> None:
     program.add_argument('--execution-threads', help='number of execution threads', dest='execution_threads', type=int, default=suggest_execution_threads())
     program.add_argument('-v', '--version', action='version', version=f'{modules.metadata.name} {modules.metadata.version}')
 
+    program.add_argument('--both-faces', help='use two faces in source image', dest='both_faces', action='store_true', default=False)
+    program.add_argument('--flip-faces', help='flip two faces in source image from right to left', dest='flip_faces', action='store_true', default=False)
+    program.add_argument('--detect-face-right', help='detect target face from right of frame', dest='detect_face_right', action='store_true', default=False)
+
     # register deprecated args
     program.add_argument('-f', '--face', help=argparse.SUPPRESS, dest='source_path_deprecated')
     program.add_argument('--cpu-cores', help=argparse.SUPPRESS, dest='cpu_cores_deprecated', type=int)
@@ -68,6 +72,10 @@ def parse_args() -> None:
     modules.globals.max_memory = args.max_memory
     modules.globals.execution_providers = decode_execution_providers(args.execution_provider)
     modules.globals.execution_threads = args.execution_threads
+    modules.globals.both_faces = args.both_faces
+    modules.globals.flip_faces = args.flip_faces
+    modules.globals.detect_face_right = args.detect_face_right
+
 
     #for ENHANCER tumbler:
     if 'face_enhancer' in args.frame_processor:
