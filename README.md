@@ -188,6 +188,7 @@ options:
   --many-faces                                             process every face
   --both-faces                                             use two faces in source image
   --flip-faces                                             flip two faces in source image from right to
+  --detect-face-right                                      detect target face from right of frame
   --video-encoder {libx264,libx265,libvpx-vp9}             adjust output video encoder
   --video-quality [0-51]                                   adjust output video quality
   --max-memory MAX_MEMORY                                  maximum amount of RAM in GB
