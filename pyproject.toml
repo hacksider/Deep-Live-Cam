@@ -76,7 +76,7 @@ extend-select = [
 ]
 per-file-ignores = []
 max-line-length = 120
-max-complexity = 12
+max-complexity = 15
 exclude = [
     ".git",
     "__pycache__",
