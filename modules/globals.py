@@ -28,3 +28,6 @@ fp_ui: Dict[str, bool] = {}
 nsfw = None
 camera_input_combobox = None
 webcam_preview_running = False
+both_faces = None
+flip_faces = None
+detect_face_right = None

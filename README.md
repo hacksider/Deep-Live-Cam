@@ -1,4 +1,16 @@
+Deep-Live-Cam is compatible with webcam, video or an image
+
+One face replaced with live webcam
+
 ![demo-gif](demo.gif)
+
+Two faces replaced on webcam
+
+![DemoTwoFace.gif](DemoTwoFace.gif)
+
+Also supports processing of an image or video file with one or two faces in source image
+
+![DemoTwoFace.png](DemoTwoFace.png)
 
 
 ## Disclaimer
@@ -137,7 +149,7 @@ Choose a face (image with desired face) and the target image/video (image/video 
 
 ## For the webcam mode
 Just follow the clicks on the screenshot
-1. Select a face
+1. Select a face. You can select an image that has one face or two faces. Left face will be used as face one and right face will be used as face two.
 2. Click live
 3. Wait for a few seconds (it takes a longer time, usually 10 to 30 seconds before the preview shows up)
 
@@ -146,6 +158,20 @@ Just follow the clicks on the screenshot
 Just use your favorite screencapture to stream like OBS
 > Note: In case you want to change your face, just select another picture, the preview mode will then restart (so just wait a bit).
 
+When you select an image with two faces then both faces will be replaced on webcam. Person on left will use left face and person on right will use right face from your image.
+
+![DemoTwoFace.gif](DemoTwoFace.gif)
+
+## One/Two face controls for webcam mode, video or image
+You can control how a face/s is replaced on target face
+
+![FaceControls.png](FaceControls.png)
+
+1. Show both faces - When you select a source image with two faces you will need to enable this option to replace both target faces on webcam, video or image. By default left face is always used. If your video has one target face or two target faces and one target face goes out of frame than left face is always used on target face.
+
+2. Flip left/right faces - Turning on this option will flip source faces on target faces to right->left. You can flip both source faces in your webcam, video or image when two target faces are present. By default left face will replace left target face and right face will replace right target face. 
+
+3. Detect face from right - Turning on this option will replace target face detected from right of frame when two target faces are present. By default the target face/s is detected from left of webcam, video or image. 
 
 Additional command line arguments are given below. To learn out what they do, check [this guide](https://github.com/s0md3v/roop/wiki/Advanced-Options).
 
