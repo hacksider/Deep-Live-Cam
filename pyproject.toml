@@ -64,6 +64,7 @@ ignore = [
     "E501",  # Line too long (82 > 79 characters)
     "E701",  # Multiple statements on one line (colon)
     "B902",  # Invalid first argument used for method
+    "E402",  # Module level import not at top of file, this rule gets ignored because of wild dependencies
 ]
 extend-ignore = [
     "E722",  # Do not use bare except, specify exception instead
