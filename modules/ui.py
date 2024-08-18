@@ -68,29 +68,65 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     select_target_button.place(relx=0.6, rely=0.4, relwidth=0.3, relheight=0.1)
 
     keep_fps_value = ctk.BooleanVar(value=modules.globals.keep_fps)
-    keep_fps_checkbox = ctk.CTkSwitch(root, text='Keep fps', variable=keep_fps_value, cursor='hand2', command=lambda: setattr(modules.globals, 'keep_fps', not modules.globals.keep_fps))
+    keep_fps_checkbox = ctk.CTkSwitch(
+        root,
+        text='Keep fps',
+        variable=keep_fps_value,
+        cursor='hand2',
+        command=lambda: setattr(modules.globals, 'keep_fps', not modules.globals.keep_fps)
+    )
     keep_fps_checkbox.place(relx=0.1, rely=0.6)
 
     keep_frames_value = ctk.BooleanVar(value=modules.globals.keep_frames)
-    keep_frames_switch = ctk.CTkSwitch(root, text='Keep frames', variable=keep_frames_value, cursor='hand2', command=lambda: setattr(modules.globals, 'keep_frames', keep_frames_value.get()))
+    keep_frames_switch = ctk.CTkSwitch(
+        root,
+        text='Keep frames',
+        variable=keep_frames_value,
+        cursor='hand2',
+        command=lambda: setattr(modules.globals, 'keep_frames', keep_frames_value.get())
+    )
     keep_frames_switch.place(relx=0.1, rely=0.65)
 
     # for FRAME PROCESSOR ENHANCER tumbler:
     enhancer_value = ctk.BooleanVar(value=modules.globals.fp_ui['face_enhancer'])
-    enhancer_switch = ctk.CTkSwitch(root, text='Face Enhancer', variable=enhancer_value, cursor='hand2', command=lambda: update_tumbler('face_enhancer',enhancer_value.get()))
+    enhancer_switch = ctk.CTkSwitch(
+        root,
+        text='Face Enhancer',
+        variable=enhancer_value,
+        cursor='hand2',
+        command=lambda: update_tumbler('face_enhancer', enhancer_value.get())
+    )
     enhancer_switch.place(relx=0.1, rely=0.7)
 
     keep_audio_value = ctk.BooleanVar(value=modules.globals.keep_audio)
-    keep_audio_switch = ctk.CTkSwitch(root, text='Keep audio', variable=keep_audio_value, cursor='hand2', command=lambda: setattr(modules.globals, 'keep_audio', keep_audio_value.get()))
+    keep_audio_switch = ctk.CTkSwitch(
+        root,
+        text='Keep audio',
+        variable=keep_audio_value,
+        cursor='hand2',
+        command=lambda: setattr(modules.globals, 'keep_audio', keep_audio_value.get())
+    )
     keep_audio_switch.place(relx=0.6, rely=0.6)
 
     many_faces_value = ctk.BooleanVar(value=modules.globals.many_faces)
-    many_faces_switch = ctk.CTkSwitch(root, text='Many faces', variable=many_faces_value, cursor='hand2', command=lambda: setattr(modules.globals, 'many_faces', many_faces_value.get()))
+    many_faces_switch = ctk.CTkSwitch(
+        root,
+        text='Many faces',
+        variable=many_faces_value,
+        cursor='hand2',
+        command=lambda: setattr(modules.globals, 'many_faces', many_faces_value.get())
+    )
     many_faces_switch.place(relx=0.6, rely=0.65)
 
-#    nsfw_value = ctk.BooleanVar(value=modules.globals.nsfw)
-#    nsfw_switch = ctk.CTkSwitch(root, text='NSFW', variable=nsfw_value, cursor='hand2', command=lambda: setattr(modules.globals, 'nsfw', nsfw_value.get()))
-#    nsfw_switch.place(relx=0.6, rely=0.7)
+    # nsfw_value = ctk.BooleanVar(value=modules.globals.nsfw)
+    # nsfw_switch = ctk.CTkSwitch(
+    #     root,
+    #     text='NSFW',
+    #     variable=nsfw_value,
+    #     cursor='hand2',
+    #     command=lambda: setattr(modules.globals, 'nsfw', nsfw_value.get())
+    # )
+    # nsfw_switch.place(relx=0.6, rely=0.7)
 
     start_button = ctk.CTkButton(root, text='Start', cursor='hand2', command=lambda: select_output_path(start))
     start_button.place(relx=0.15, rely=0.80, relwidth=0.2, relheight=0.05)
@@ -146,7 +182,11 @@ def select_source_path() -> None:
     global RECENT_DIRECTORY_SOURCE, img_ft, vid_ft
 
     PREVIEW.withdraw()
-    source_path = ctk.filedialog.askopenfilename(title='select an source image', initialdir=RECENT_DIRECTORY_SOURCE, filetypes=[img_ft])
+    source_path = ctk.filedialog.askopenfilename(
+        title='select an source image',
+        initialdir=RECENT_DIRECTORY_SOURCE,
+        filetypes=[img_ft]
+    )
     if is_image(source_path):
         modules.globals.source_path = source_path
         RECENT_DIRECTORY_SOURCE = os.path.dirname(modules.globals.source_path)
@@ -161,7 +201,11 @@ def select_target_path() -> None:
     global RECENT_DIRECTORY_TARGET, img_ft, vid_ft
 
     PREVIEW.withdraw()
-    target_path = ctk.filedialog.askopenfilename(title='select an target image or video', initialdir=RECENT_DIRECTORY_TARGET, filetypes=[img_ft, vid_ft])
+    target_path = ctk.filedialog.askopenfilename(
+        title='select an target image or video',
+        initialdir=RECENT_DIRECTORY_TARGET,
+        filetypes=[img_ft, vid_ft]
+    )
     if is_image(target_path):
         modules.globals.target_path = target_path
         RECENT_DIRECTORY_TARGET = os.path.dirname(modules.globals.target_path)
@@ -181,9 +225,21 @@ def select_output_path(start: Callable[[], None]) -> None:
     global RECENT_DIRECTORY_OUTPUT, img_ft, vid_ft
 
     if is_image(modules.globals.target_path):
-        output_path = ctk.filedialog.asksaveasfilename(title='save image output file', filetypes=[img_ft], defaultextension='.png', initialfile='output.png', initialdir=RECENT_DIRECTORY_OUTPUT)
+        output_path = ctk.filedialog.asksaveasfilename(
+            title='save image output file',
+            filetypes=[img_ft],
+            defaultextension='.png',
+            initialfile='output.png',
+            initialdir=RECENT_DIRECTORY_OUTPUT
+        )
     elif is_video(modules.globals.target_path):
-        output_path = ctk.filedialog.asksaveasfilename(title='save video output file', filetypes=[vid_ft], defaultextension='.mp4', initialfile='output.mp4', initialdir=RECENT_DIRECTORY_OUTPUT)
+        output_path = ctk.filedialog.asksaveasfilename(
+            title='save video output file',
+            filetypes=[vid_ft],
+            defaultextension='.mp4',
+            initialfile='output.mp4',
+            initialdir=RECENT_DIRECTORY_OUTPUT
+        )
     else:
         output_path = None
     if output_path:
@@ -235,7 +291,7 @@ def init_preview() -> None:
 def update_preview(frame_number: int = 0) -> None:
     if modules.globals.source_path and modules.globals.target_path:
         temp_frame = get_video_frame(modules.globals.target_path, frame_number)
-        if modules.globals.nsfw == False:
+        if not modules.globals.nsfw:
             from modules.predicter import predict_frame
             if predict_frame(temp_frame):
                 quit()
@@ -249,6 +305,7 @@ def update_preview(frame_number: int = 0) -> None:
         image = ctk.CTkImage(image, size=image.size)
         preview_label.configure(image=image)
 
+
 def webcam_preview():
     if modules.globals.source_path is None:
         # No image selected
@@ -256,7 +313,7 @@ def webcam_preview():
 
     global preview_label, PREVIEW
 
-    cap = cv2.VideoCapture(0)  # Use index for the webcam (adjust the index accordingly if necessary)    
+    cap = cv2.VideoCapture(0)  # Use index for the webcam (adjust the index accordingly if necessary)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 960)  # Set the width of the resolution
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 540)  # Set the height of the resolution
     cap.set(cv2.CAP_PROP_FPS, 60)  # Set the frame rate of the webcam
@@ -280,7 +337,7 @@ def webcam_preview():
         if source_image is None and modules.globals.source_path:
             source_image = get_one_face(cv2.imread(modules.globals.source_path))
 
-        temp_frame = frame.copy()  #Create a copy of the frame
+        temp_frame = frame.copy()  # Create a copy of the frame
 
         for frame_processor in frame_processors:
             temp_frame = frame_processor.process_frame(source_image, temp_frame)

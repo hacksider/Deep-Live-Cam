@@ -5,8 +5,8 @@ ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 WORKFLOW_DIR = os.path.join(ROOT_DIR, 'workflow')
 
 file_types = [
-    ('Image', ('*.png','*.jpg','*.jpeg','*.gif','*.bmp')),
-    ('Video', ('*.mp4','*.mkv'))
+    ('Image', ('*.png', '*.jpg', '*.jpeg', '*.gif', '*.bmp')),
+    ('Video', ('*.mp4', '*.mkv'))
 ]
 
 source_path = None

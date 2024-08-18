@@ -17,7 +17,10 @@ NAME = 'DLC.FACE-SWAPPER'
 
 def pre_check() -> bool:
     download_directory_path = resolve_relative_path('../models')
-    conditional_download(download_directory_path, ['https://huggingface.co/hacksider/deep-live-cam/blob/main/inswapper_128_fp16.onnx'])
+    conditional_download(
+        download_directory_path,
+        ['https://huggingface.co/hacksider/deep-live-cam/blob/main/inswapper_128_fp16.onnx']
+    )
     return True
 
 

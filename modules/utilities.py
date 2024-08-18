@@ -32,7 +32,18 @@ def run_ffmpeg(args: List[str]) -> bool:
 
 
 def detect_fps(target_path: str) -> float:
-    command = ['ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=r_frame_rate', '-of', 'default=noprint_wrappers=1:nokey=1', target_path]
+    command = [
+        'ffprobe',
+        '-v',
+        'error',
+        '-select_streams',
+        'v:0',
+        '-show_entries',
+        'stream=r_frame_rate',
+        '-of',
+        'default=noprint_wrappers=1:nokey=1',
+        target_path
+    ]
     output = subprocess.check_output(command).decode().strip().split('/')
     try:
         numerator, denominator = map(int, output)
@@ -50,12 +61,40 @@ def extract_frames(target_path: str) -> None:
 def create_video(target_path: str, fps: float = 30.0) -> None:
     temp_output_path = get_temp_output_path(target_path)
     temp_directory_path = get_temp_directory_path(target_path)
-    run_ffmpeg(['-r', str(fps), '-i', os.path.join(temp_directory_path, '%04d.png'), '-c:v', modules.globals.video_encoder, '-crf', str(modules.globals.video_quality), '-pix_fmt', 'yuv420p', '-vf', 'colorspace=bt709:iall=bt601-6-625:fast=1', '-y', temp_output_path])
+    run_ffmpeg([
+        '-r',
+        str(fps),
+        '-i',
+        os.path.join(temp_directory_path, '%04d.png'),
+        '-c:v',
+        modules.globals.video_encoder,
+        '-crf',
+        str(modules.globals.video_quality),
+        '-pix_fmt',
+        'yuv420p',
+        '-vf',
+        'colorspace=bt709:iall=bt601-6-625:fast=1',
+        '-y',
+        temp_output_path
+    ])
 
 
 def restore_audio(target_path: str, output_path: str) -> None:
     temp_output_path = get_temp_output_path(target_path)
-    done = run_ffmpeg(['-i', temp_output_path, '-i', target_path, '-c:v', 'copy', '-map', '0:v:0', '-map', '1:a:0', '-y', output_path])
+    done = run_ffmpeg([
+        '-i',
+        temp_output_path,
+        '-i',
+        target_path,
+        '-c:v',
+        'copy',
+        '-map',
+        '0:v:0',
+        '-map',
+        '1:a:0',
+        '-y',
+        output_path
+    ])
     if not done:
         move_temp(target_path, output_path)
 
@@ -131,10 +170,16 @@ def conditional_download(download_directory_path: str, urls: List[str]) -> None:
     for url in urls:
         download_file_path = os.path.join(download_directory_path, os.path.basename(url))
         if not os.path.exists(download_file_path):
-            request = urllib.request.urlopen(url) # type: ignore[attr-defined]
+            request = urllib.request.urlopen(url)  # type: ignore[attr-defined]
             total = int(request.headers.get('Content-Length', 0))
             with tqdm(total=total, desc='Downloading', unit='B', unit_scale=True, unit_divisor=1024) as progress:
-                urllib.request.urlretrieve(url, download_file_path, reporthook=lambda count, block_size, total_size: progress.update(block_size)) # type: ignore[attr-defined]
+                urllib.request.urlretrieve(
+                    url,
+                    download_file_path,
+                    reporthook=lambda count,
+                    block_size,
+                    total_size: progress.update(block_size)
+                )  # type: ignore[attr-defined]
 
 
 def resolve_relative_path(path: str) -> str:
