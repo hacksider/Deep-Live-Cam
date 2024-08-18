@@ -30,98 +30,88 @@ Then put those 2 files on the "**models**" folder
 
 #### 4. Install dependency
 We highly recommend to work with a  `venv`  to avoid issues.
-```
-pip install -r requirements.txt
-```
+Setup your local environment:
+
+- In the root of this project, create a virtual environment:
+    ```sh
+    > python -m venv venv
+    ```
+- Activate the virtual environment we just created:
+    * Windows
+        ```sh
+        > .\venv\Scripts\activate
+        ```
+    * Unix
+        ```sh
+        > source venv/bin/activate
+        ```
+    ***Note:*** *When you see something like `(venv)`, your virtual environment is activated, always make sure you are working in your virtual environment.*
+
+- Install [`pip-tools`](https://pypi.org/project/pip-tools/) and compile the requirements for this project:
+    ```sh
+    > pip install pip-tools
+    ```
+- Compile your requirements
+  | Requirements Description             | Compile Command                                                  |
+  |--------------------------------------|------------------------------------------------------------------|
+  | Compile windows requirements         | `pip-compile --extra windows -o requirements.txt pyproject.toml` |
+  | Compile darwin requirements          | `pip-compile --extra darwin -o requirements.txt pyproject.toml`  |
+  | Compile arm64 requirements           | `pip-compile --extra arm64 -o requirements.txt pyproject.toml`   |
+
+- After compiling the requirements, install them:
+    ```sh
+    > pip install -r requirements.txt
+    ```
 ##### DONE!!! If you dont have any GPU, You should be able to run roop using `python run.py` command. Keep in mind that while running the program for first time, it will download some models which can take time depending on your network connection.
 
 ### *Proceed if you want to use GPU Acceleration
 ### CUDA Execution Provider (Nvidia)*
 
 1.  Install  [CUDA Toolkit 11.8](https://developer.nvidia.com/cuda-11-8-0-download-archive)
-    
-2.  Install dependencies:
-    
 
-```
-pip uninstall onnxruntime onnxruntime-gpu
-pip install onnxruntime-gpu==1.16.3
-
-```
-
-3.  Usage in case the provider is available:
-
-```
-python run.py --execution-provider cuda
-
-```
+2.  Usage in case the provider is available:
+    ```
+    > python run.py --execution-provider cuda
+    ```
 
 ### [](https://github.com/s0md3v/roop/wiki/2.-Acceleration#coreml-execution-provider-apple-silicon)CoreML Execution Provider (Apple Silicon)
 
-1.  Install dependencies:
-
-```
-pip uninstall onnxruntime onnxruntime-silicon
-pip install onnxruntime-silicon==1.13.1
-
-```
-
-2.  Usage in case the provider is available:
-
-```
-python run.py --execution-provider coreml
-
-```
+1.  Usage in case the provider is available:
+    ```
+    > python run.py --execution-provider coreml
+    ```
 
 ### [](https://github.com/s0md3v/roop/wiki/2.-Acceleration#coreml-execution-provider-apple-legacy)CoreML Execution Provider (Apple Legacy)
 
-1.  Install dependencies:
+1.  Usage in case the provider is available:
 
-```
-pip uninstall onnxruntime onnxruntime-coreml
-pip install onnxruntime-coreml==1.13.1
-
-```
-
-2.  Usage in case the provider is available:
-
-```
-python run.py --execution-provider coreml
-
-```
+    ```
+    > python run.py --execution-provider coreml
+    ```
 
 ### [](https://github.com/s0md3v/roop/wiki/2.-Acceleration#directml-execution-provider-windows)DirectML Execution Provider (Windows)
 
 1.  Install dependencies:
-
-```
-pip uninstall onnxruntime onnxruntime-directml
-pip install onnxruntime-directml==1.15.1
-
-```
+    ```
+    > pip install onnxruntime-directml==1.15.1
+    ```
 
 2.  Usage in case the provider is available:
-
-```
-python run.py --execution-provider directml
-
-```
+    ```
+    > python run.py --execution-provider directml
+    ```
 
 ### [](https://github.com/s0md3v/roop/wiki/2.-Acceleration#openvino-execution-provider-intel)OpenVINO™ Execution Provider (Intel)
 
 1.  Install dependencies:
-
-```
-pip uninstall onnxruntime onnxruntime-openvino
-pip install onnxruntime-openvino==1.15.0
-
-```
+    ```
+    > pip install onnxruntime-openvino==1.15.0
+    ```
 
 2.  Usage in case the provider is available:
-
-```
-python run.py --execution-provider openvino
-```
+    ```
+    > python run.py --execution-provider openvino
+    ```
 
 ## How do I use it?
 > Note: When you run this program for the first time, it will download some models ~300MB in size.
