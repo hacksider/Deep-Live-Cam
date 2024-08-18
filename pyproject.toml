@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
@@ -8,7 +8,7 @@ include = ["models*", "modules*"]
 [project]
 name = "Deep-Live-Cam"
 version = "1.0.0"
-requires-python = ">=3.12.2"
+requires-python = ">=3.10.0"
 authors = [
     { name = "hacksider" },
     { name = "Thepathakarpit" },
