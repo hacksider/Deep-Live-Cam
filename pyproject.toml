@@ -1,0 +1,86 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["models*", "modules*"]
+
+[project]
+name = "Deep-Live-Cam"
+version = "1.0.0"
+requires-python = ">=3.12.2"
+authors = [
+    { name = "hacksider" },
+    { name = "Thepathakarpit" },
+    { name = "samoylenkodmitry" },
+    { name = "c4fun" },
+    { name = "JoepdeJong" },
+    { name = "SamuraiBarbi" },
+    { name = "Saharsha-N" },
+    { name = "rahulbansal16" },
+    { name = "Rhymond" },
+    { name = "gongchandang49" },
+    { name = "bit-wrangler" },
+    { name = "gianpaj" },
+    { name = "jasonkneen" },
+    { name = "snewell92" },
+    { name = "0x78f1935" },
+]
+dependencies = [
+    "numpy",
+    "opencv-python",
+    "onnx",
+    "insightface",
+    "psutil",
+    "tk",
+    "customtkinter",
+    "pillow",
+    "opennsfw2",
+    "protobuf",
+    "tqdm",
+    "gfpgan",
+    "torch",
+    "torchvision",
+    "tensorflow",
+    "flake8",
+    "flake8-bugbear",
+    "flake8-pyproject",
+]
+
+[project.optional-dependencies]
+windows = [
+    "onnxruntime-gpu",
+]
+darwin = [
+    "onnxruntime",
+]
+arm64 = [
+    "onnxruntime-silicon",
+]
+
+[tool.flake8]
+ignore = [
+    "E722",  # Do not use bare except, specify exception instead
+    "E501",  # Line too long (82 > 79 characters)
+    "E701",  # Multiple statements on one line (colon)
+    "B902",  # Invalid first argument used for method
+]
+extend-ignore = [
+    "E722",  # Do not use bare except, specify exception instead
+    "E501",  # Line too long (82 > 79 characters)
+    "W503",  # Line break occurred before a binary operator
+]
+extend-select = [
+    "B0",
+    "B9",
+]
+per-file-ignores = []
+max-line-length = 120
+max-complexity = 12
+exclude = [
+    ".git",
+    "__pycache__",
+    "venv",
+    ".pytest_cache",
+]
+count = true
