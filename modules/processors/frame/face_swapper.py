@@ -53,7 +53,10 @@ def process_frame(source_face: List[Face], temp_frame: Frame) -> Frame:
         many_faces = get_many_faces(temp_frame)
         if many_faces:
             for target_face in many_faces:
-                temp_frame = swap_face(source_face[0], target_face, temp_frame)
+                if modules.globals.flip_faces:
+                    temp_frame = swap_face(source_face[1], target_face, temp_frame)
+                else:
+                    temp_frame = swap_face(source_face[0], target_face, temp_frame)
     else:
         target_faces = get_two_faces(temp_frame)
         # Check if more then one target face is found
