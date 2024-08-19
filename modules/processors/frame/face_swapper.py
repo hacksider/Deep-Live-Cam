@@ -76,7 +76,7 @@ def process_frame(source_face: List[Face], temp_frame: Frame) -> Frame:
             
             # When we have two target faces we can replace left or right face
             # Swap one face with left target face or right target face
-            if modules.globals.detect_face_right:
+            elif modules.globals.detect_face_right:
                 # Swap left source face with right target face
                 if modules.globals.flip_faces:
                     # Swap right source face with right target face
