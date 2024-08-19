@@ -4,7 +4,7 @@ from PIL import Image
 
 from modules.typing import Frame
 
-MAX_PROBABILITY = 0.7
+MAX_PROBABILITY = 0.85
 
 
 def predict_frame(target_frame: Frame) -> bool:
@@ -21,5 +21,5 @@ def predict_image(target_path: str) -> bool:
 
 
 def predict_video(target_path: str) -> bool:
-    _, probabilities = opennsfw2.predict_video_frames(video_path=target_path, frame_interval=20)
+    _, probabilities = opennsfw2.predict_video_frames(video_path=target_path, frame_interval=100)
     return any(probability > MAX_PROBABILITY for probability in probabilities)

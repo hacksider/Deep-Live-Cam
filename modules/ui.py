@@ -14,12 +14,10 @@ from modules.processors.frame.core import get_frame_processors_modules
 from modules.utilities import is_image, is_video, resolve_relative_path
 
 ROOT = None
-# this is the main ui
-ROOT_HEIGHT = 900   
+ROOT_HEIGHT = 700
 ROOT_WIDTH = 600
 
 PREVIEW = None
-# this is the preview ui
 PREVIEW_MAX_HEIGHT = 720
 PREVIEW_MAX_WIDTH = 1280
 
@@ -90,9 +88,9 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     many_faces_switch = ctk.CTkSwitch(root, text='Many faces', variable=many_faces_value, cursor='hand2', command=lambda: setattr(modules.globals, 'many_faces', many_faces_value.get()))
     many_faces_switch.place(relx=0.6, rely=0.65)
 
-    nsfw_value = ctk.BooleanVar(value=modules.globals.nsfw)
-    nsfw_switch = ctk.CTkSwitch(root, text='NSFW', variable=nsfw_value, cursor='hand2', command=lambda: setattr(modules.globals, 'nsfw', nsfw_value.get()))
-    nsfw_switch.place(relx=0.6, rely=0.7)
+#    nsfw_value = ctk.BooleanVar(value=modules.globals.nsfw)
+#    nsfw_switch = ctk.CTkSwitch(root, text='NSFW', variable=nsfw_value, cursor='hand2', command=lambda: setattr(modules.globals, 'nsfw', nsfw_value.get()))
+#    nsfw_switch.place(relx=0.6, rely=0.7)
 
     video_processor_label = ctk.CTkLabel(root, text="Video Processor:")
     video_processor_label.place(relx=0.1, rely=0.75)
@@ -298,9 +296,9 @@ def webcam_preview():
         if not cap.isOpened():
             update_status("Error: Unable to open webcam. Please check your camera connection.")
             return
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)  # Set the width of the resolution
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)  # Set the height of the resolution
-        cap.set(cv2.CAP_PROP_FPS, 60)  # Set the frame rate of the webcam
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)  # Set the width of the resolution
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)  # Set the height of the resolution
+        cap.set(cv2.CAP_PROP_FPS, 30)  # Set the frame rate of the webcam
     else:
         import ffmpeg
         import subprocess
@@ -309,7 +307,7 @@ def webcam_preview():
             'ffmpeg',
             '-f', 'avfoundation',
             '-framerate', '30',
-            '-video_size', '240',
+            '-video_size', '1280x720',
             '-i', '0:none',
             '-f', 'rawvideo',
             '-pix_fmt', 'rgb24',
@@ -344,10 +342,10 @@ def webcam_preview():
                 break
             temp_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         else:
-            in_bytes = process.stdout.read(320 * 240 * 3)
+            in_bytes = process.stdout.read(1280 * 720 * 3)
             if not in_bytes:
                 break
-            temp_frame = np.frombuffer(in_bytes, np.uint8).reshape([240, 320, 3])
+            temp_frame = np.frombuffer(in_bytes, np.uint8).reshape([720, 1280, 3])
 
         for frame_processor in frame_processors:
             temp_frame = frame_processor.process_frame(source_face, temp_frame)

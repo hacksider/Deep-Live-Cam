@@ -6,7 +6,6 @@ onnxruntime-silicon==1.16.3
 pillow==9.5.0
 insightface==0.7.3
 torch==2.1.0
-torchvision==0.19.0
 tensorflow-macos==2.16.2
 tensorflow-metal==1.1.0
 
@@ -25,8 +24,6 @@ prettytable==3.11.0
 # Video processing (optional)
 opencv-python==4.8.1.78  # Optional: for cv2 video processing
 ffmpeg-python==0.2.0  # For ffmpeg video processing
-
-customtkinter==5.2.2
 
 # Optional dependencies (comment out if not needed)
 # albumentations==1.4.13
