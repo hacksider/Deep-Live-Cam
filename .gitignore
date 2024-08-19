@@ -25,3 +25,5 @@ models/DMDNet.pth
 .venv/
 tf_env/
 .tf_env/
+.deepcamlive/
+deep-live-cam/
