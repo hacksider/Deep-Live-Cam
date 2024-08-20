@@ -193,7 +193,7 @@ def select_output_path(start: Callable[[], None]) -> None:
 
 
 def check_and_ignore_nsfw(target, destroy: Callable = None) -> bool:
-    ''' Check the target is NSFW or not.
+    ''' Check if the target is NSFW.
     TODO: Consider to make blur the target.
     '''
     from numpy import ndarray

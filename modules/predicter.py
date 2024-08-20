@@ -6,6 +6,7 @@ from modules.typing import Frame
 
 MAX_PROBABILITY = 0.85
 
+# Preload the model once for efficiency
 model = None
 
 def predict_frame(target_frame: Frame) -> bool:
