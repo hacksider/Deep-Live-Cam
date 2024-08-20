@@ -6,11 +6,14 @@ from modules.typing import Frame
 
 MAX_PROBABILITY = 0.85
 
+# Preload the model once for efficiency
+model = None
 
 def predict_frame(target_frame: Frame) -> bool:
     image = Image.fromarray(target_frame)
     image = opennsfw2.preprocess_image(image, opennsfw2.Preprocessing.YAHOO)
-    model = opennsfw2.make_open_nsfw_model()
+    global model
+    if model is None: model = opennsfw2.make_open_nsfw_model()
     views = numpy.expand_dims(image, axis=0)
     _, probability = model.predict(views)[0]
     return probability > MAX_PROBABILITY
