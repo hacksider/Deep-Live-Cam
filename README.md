@@ -152,14 +152,15 @@ Additional command line arguments are given below. To learn out what they do, ch
 ```
 options:
   -h, --help                                               show this help message and exit
-  -s SOURCE_PATH, --source SOURCE_PATH                     select an source image
-  -t TARGET_PATH, --target TARGET_PATH                     select an target image or video
+  -s SOURCE_PATH, --source SOURCE_PATH                     select a source image
+  -t TARGET_PATH, --target TARGET_PATH                     select a target image or video
   -o OUTPUT_PATH, --output OUTPUT_PATH                     select output file or directory
   --frame-processor FRAME_PROCESSOR [FRAME_PROCESSOR ...]  frame processors (choices: face_swapper, face_enhancer, ...)
   --keep-fps                                               keep original fps
   --keep-audio                                             keep original audio
   --keep-frames                                            keep temporary frames
   --many-faces                                             process every face
+  --nsfw-filter                                            filter the NSFW image or video.
   --video-encoder {libx264,libx265,libvpx-vp9}             adjust output video encoder
   --video-quality [0-51]                                   adjust output video quality
   --max-memory MAX_MEMORY                                  maximum amount of RAM in GB
