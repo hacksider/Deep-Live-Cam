@@ -16,6 +16,7 @@ import argparse
 import torch
 import onnxruntime
 import tensorflow
+import cv2
 
 import modules.globals
 import modules.metadata
@@ -75,27 +76,6 @@ def parse_args() -> None:
         modules.globals.fp_ui['face_enhancer'] = True
     else:
         modules.globals.fp_ui['face_enhancer'] = False
-
-    # translate deprecated args
-    if args.source_path_deprecated:
-        print('\033[33mArgument -f and --face are deprecated. Use -s and --source instead.\033[0m')
-        modules.globals.source_path = args.source_path_deprecated
-        modules.globals.output_path = normalize_output_path(args.source_path_deprecated, modules.globals.target_path, args.output_path)
-    if args.cpu_cores_deprecated:
-        print('\033[33mArgument --cpu-cores is deprecated. Use --execution-threads instead.\033[0m')
-        modules.globals.execution_threads = args.cpu_cores_deprecated
-    if args.gpu_vendor_deprecated == 'apple':
-        print('\033[33mArgument --gpu-vendor apple is deprecated. Use --execution-provider coreml instead.\033[0m')
-        modules.globals.execution_providers = decode_execution_providers(['coreml'])
-    if args.gpu_vendor_deprecated == 'nvidia':
-        print('\033[33mArgument --gpu-vendor nvidia is deprecated. Use --execution-provider cuda instead.\033[0m')
-        modules.globals.execution_providers = decode_execution_providers(['cuda'])
-    if args.gpu_vendor_deprecated == 'amd':
-        print('\033[33mArgument --gpu-vendor amd is deprecated. Use --execution-provider cuda instead.\033[0m')
-        modules.globals.execution_providers = decode_execution_providers(['rocm'])
-    if args.gpu_threads_deprecated:
-        print('\033[33mArgument --gpu-threads is deprecated. Use --execution-threads instead.\033[0m')
-        modules.globals.execution_threads = args.gpu_threads_deprecated
 
 
 def encode_execution_providers(execution_providers: List[str]) -> List[str]:
@@ -222,45 +202,25 @@ def run() -> None:
     limit_resources()
     print(f"ONNX Runtime version: {onnxruntime.__version__}")
     print(f"Available execution providers: {onnxruntime.get_available_providers()}")
-    print(f"Selected execution provider: CoreMLExecutionProvider")
+    print(f"Selected execution provider: CoreMLExecutionProvider (with CPU fallback for face detection)")
     
-    # Configure ONNX Runtime to use only CoreML
+    # Configure ONNX Runtime to use CoreML
     onnxruntime.set_default_logger_severity(3)  # Set to WARNING level
     options = onnxruntime.SessionOptions()
     options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
     
-    # Test CoreML with a dummy model
-    try:
-        import numpy as np
-        from onnx import helper, TensorProto
-        
-        # Create a simple ONNX model
-        X = helper.make_tensor_value_info('input', TensorProto.FLOAT, [1, 3, 224, 224])
-        Y = helper.make_tensor_value_info('output', TensorProto.FLOAT, [1, 3, 224, 224])
-        node = helper.make_node('Identity', ['input'], ['output'])
-        graph = helper.make_graph([node], 'test_model', [X], [Y])
-        model = helper.make_model(graph)
-        
-        # Save the model
-        model_path = 'test_model.onnx'
-        with open(model_path, 'wb') as f:
-            f.write(model.SerializeToString())
-        
-        # Create a CoreML session
-        session = onnxruntime.InferenceSession(model_path, options, providers=['CoreMLExecutionProvider'])
-        
-        # Run inference
-        input_data = np.random.rand(1, 3, 224, 224).astype(np.float32)
-        output = session.run(None, {'input': input_data})
-        
-        print("CoreML init successful and being used")
-        print(f"Input shape: {input_data.shape}, Output shape: {output[0].shape}")
-        
-        # Clean up
-        os.remove(model_path)
-    except Exception as e:
-        print(f"Error testing CoreML: {str(e)}")
-        print("The application may not be able to use GPU acceleration")
+    # Add CoreML-specific options
+    options.add_session_config_entry("session.coreml.force_precision", "FP32")
+    options.add_session_config_entry("session.coreml.enable_on_subgraph", "1")
+    
+    # Update insightface model loading to use CPU for face detection
+    from insightface.utils import face_align
+    def custom_session(model_file, providers):
+        if 'det_model.onnx' in model_file:
+            return onnxruntime.InferenceSession(model_file, providers=['CPUExecutionProvider'])
+        else:
+            return onnxruntime.InferenceSession(model_file, options, providers=['CoreMLExecutionProvider'])
+    face_align.Session = custom_session
     
     # Configure TensorFlow to use Metal
     try:
@@ -288,3 +248,22 @@ def run() -> None:
     else:
         window = ui.init(start, destroy)
         window.mainloop()
+
+def get_one_face(frame):
+    # Resize the frame to the expected input size
+    frame_resized = cv2.resize(frame, (112, 112))  # Resize to (112, 112) for recognition model
+    face = get_face_analyser().get(frame_resized)
+    return face
+
+# Ensure to use the CPUExecutionProvider if CoreML fails
+def run_model_with_cpu_fallback(model_file, providers):
+    try:
+        return onnxruntime.InferenceSession(model_file, providers=['CoreMLExecutionProvider'])
+    except Exception as e:
+        print(f"CoreML execution failed: {e}. Falling back to CPU.")
+        return onnxruntime.InferenceSession(model_file, providers=['CPUExecutionProvider'])
+
+# Update the face analysis function to use the fallback
+def get_face_analyser():
+    # Load your model here with the fallback
+    return run_model_with_cpu_fallback('/path/to/your/model.onnx', ['CoreMLExecutionProvider', 'CPUExecutionProvider'])
