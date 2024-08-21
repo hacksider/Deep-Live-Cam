@@ -16,8 +16,8 @@ Users of this software are expected to use this software responsibly while abidi
 -   python (3.10 recommended)
 -   pip
 -   git
--   [ffmpeg](https://www.youtube.com/watch?v=OlNWCpFdVMA) 
--   [visual studio 2022 runtimes (windows)](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
+-   [FFmpeg](https://www.youtube.com/watch?v=OlNWCpFdVMA) 
+-   [Visual Studio 2022 runtimes (Windows)](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
 #### 2. Clone Repository
     https://github.com/hacksider/Deep-Live-Cam.git
 
@@ -37,7 +37,7 @@ For MAC OS, You have to install or upgrade python-tk package:
 ```
 brew install python-tk@3.10
 ```
-##### DONE!!! If you dont have any GPU, You should be able to run roop using `python run.py` command. Keep in mind that while running the program for first time, it will download some models which can take time depending on your network connection.
+##### DONE!!! If you don't have any GPU, you should be able to run roop using `python run.py` command. Keep in mind that while running the program for first time, it will download some models which can take time depending on your network connection.
 
 ### *Proceed if you want to use GPU Acceleration
 ### CUDA Execution Provider (Nvidia)*
@@ -176,8 +176,8 @@ If you want the latest and greatest build, or want to see some new great feature
 
 ## Credits
 
-- [ffmpeg](https://ffmpeg.org/): for making video related operations easy
-- [deepinsight](https://github.com/deepinsight): for their [insightface](https://github.com/deepinsight/insightface) project which provided a well-made library and models.
+- [FFmpeg](https://ffmpeg.org/): for making video related operations easy
+- [Deep Insight](https://github.com/deepinsight): for their [insightface](https://github.com/deepinsight/insightface) project which provided a well-made library and models.
 - [havok2-htwo](https://github.com/havok2-htwo) : for sharing the code for webcam
 - [GosuDRM](https://github.com/GosuDRM/nsfw-roop) : for uncensoring roop
 - and [all developers](https://github.com/hacksider/Deep-Live-Cam/graphs/contributors) behind libraries used in this project.
