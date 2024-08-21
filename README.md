@@ -163,6 +163,8 @@ options:
   --nsfw-filter                                            filter the NSFW image or video
   --video-encoder {libx264,libx265,libvpx-vp9}             adjust output video encoder
   --video-quality [0-51]                                   adjust output video quality
+  --live-mirror                                            the live camera display as you see it in the front-facing camera frame
+  --live-resizable                                         the live camera frame is resizable
   --max-memory MAX_MEMORY                                  maximum amount of RAM in GB
   --execution-provider {cpu} [{cpu} ...]                   available execution provider (choices: cpu, ...)
   --execution-threads EXECUTION_THREADS                    number of execution threads
