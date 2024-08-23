@@ -177,11 +177,21 @@ Looking for a CLI mode? Using the -s/--source argument will make the run program
 ## Want the Next Update Now?
 If you want the latest and greatest build, or want to see some new great features, go to our [experimental branch](https://github.com/hacksider/Deep-Live-Cam/tree/experimental) and experience what the contributors have given.
 
+## TODO
+- [ ] Support multiple faces feature
+- [ ] Develop a version for web app/service
+- [ ] UI/UX enhancements for desktop app
+- [ ] Speed up model loading
+- [ ] Speed up real-time face swapping
+
+*Note: This is an open-source project, and we’re working on it in our free time. Therefore, features, replies, bug fixes, etc., might be delayed. We hope you understand. Thanks.*
+
 ## Credits
 
 - [ffmpeg](https://ffmpeg.org/): for making video related operations easy
 - [deepinsight](https://github.com/deepinsight): for their [insightface](https://github.com/deepinsight/insightface) project which provided a well-made library and models.
 - [havok2-htwo](https://github.com/havok2-htwo) : for sharing the code for webcam
 - [GosuDRM](https://github.com/GosuDRM/nsfw-roop) : for uncensoring roop
+- [vic4key](https://github.com/vic4key) : For supporting/contributing on this project
 - and [all developers](https://github.com/hacksider/Deep-Live-Cam/graphs/contributors) behind libraries used in this project.
 - Foot Note: [This is originally roop-cam, see the full history of the code here.](https://github.com/hacksider/roop-cam) Please be informed that the base author of the code is [s0md3v](https://github.com/s0md3v/roop)
