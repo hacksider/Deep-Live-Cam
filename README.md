@@ -176,6 +176,15 @@ Looking for a CLI mode? Using the -s/--source argument will make the run program
 ## Want the Next Update Now?
 If you want the latest and greatest build, or want to see some new great features, go to our [experimental branch](https://github.com/hacksider/Deep-Live-Cam/tree/experimental) and experience what the contributors have given.
 
+## TODO
+- [ ] Support multiple faces feature
+- [ ] Develop a version for web app/service
+- [ ] UI/UX enhancements for desktop app
+- [ ] Speed up model loading
+- [ ] Speed up real-time face swapping
+
+*Note: This is an open-source project, and we’re working on it in our free time. Therefore, features, replies, bug fixes, etc., might be delayed. We hope you understand. Thanks.*
+
 ## Credits
 
 - [ffmpeg](https://ffmpeg.org/): for making video related operations easy
