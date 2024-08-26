@@ -33,6 +33,11 @@ We highly recommend to work with a  `venv`  to avoid issues.
 ```
 pip install -r requirements.txt
 ```
+or try if above failed
+```
+pip install --use-pep517 -r requirements.txt
+
+```
 For MAC OS, You have to install or upgrade python-tk package:
 ```
 brew install python-tk@3.10
