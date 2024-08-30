@@ -24,7 +24,7 @@ Users of this software are expected to use this software responsibly while abidi
 #### 3. Download Models
 
  1. [GFPGANv1.4](https://huggingface.co/hacksider/deep-live-cam/resolve/main/GFPGANv1.4.pth)
- 2. [inswapper_128_fp16.onnx](https://huggingface.co/hacksider/deep-live-cam/resolve/main/inswapper_128_fp16.onnx)
+ 2. [inswapper_128_fp16.onnx](https://github.com/facefusion/facefusion-assets/releases/download/models/inswapper_128_fp16.onnx)
 
 Then put those 2 files on the "**models**" folder
 
