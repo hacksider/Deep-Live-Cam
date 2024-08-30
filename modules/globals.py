@@ -17,6 +17,7 @@ keep_fps = None
 keep_audio = None
 keep_frames = None
 many_faces = None
+color_correction = None  # New global variable for color correction toggle
 nsfw_filter = None
 video_encoder = None
 video_quality = None
