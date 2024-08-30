@@ -1,3 +1,4 @@
+
 ![demo-gif](demo.gif)
 
 
@@ -172,6 +173,147 @@ options:
 ```
 
 Looking for a CLI mode? Using the -s/--source argument will make the run program in cli mode.
+
+### Webcam mode on Windows 11 using WSL2 Ubuntu
+If you want to use WSL2 on Windows 11 you will notice, that Ubuntu WSL2 doesn't come with USB-Webcam support in the Kernel. You need to do two things: Compile the Kernel with the right modules integrated and forward your USB Webcam from Windows to Ubuntu with the usbipd app. Here are detailed Steps:
+
+This tutorial will guide you through the process of setting up WSL2 Ubuntu with USB webcam support, rebuilding the kernel, and preparing the environment for the Deep-Live-Cam project.  
+  
+#### 1. Install WSL2 Ubuntu  
+  
+Install WSL2 Ubuntu from the Microsoft Store or using PowerShell:  
+  
+#### 2. Enable USB Support in WSL2  
+  
+1. Install the USB/IP tool for Windows:  
+[https://learn.microsoft.com/en-us/windows/wsl/connect-usb](https://learn.microsoft.com/en-us/windows/wsl/connect-usb)  
+  
+2. In Windows PowerShell (as Administrator), connect your webcam to WSL:  
+  
+```powershell  
+usbipd list  
+usbipd bind --busid x-x # Replace x-x with your webcam's bus ID  
+usbipd attach --wsl --busid x-x # Replace x-x with your webcam's bus ID  
+```  
+ You need to redo the above every time you reboot wsl or re-connect your webcam/usb device.
+ 
+#### 3. Rebuild WSL2 Ubuntu Kernel with USB and Webcam Modules  
+  
+Follow these steps to rebuild the kernel:  
+  
+1. Start with this guide: [https://github.com/PINTO0309/wsl2_linux_kernel_usbcam_enable_conf](https://github.com/PINTO0309/wsl2_linux_kernel_usbcam_enable_conf)  
+  
+2. When you reach the `sudo wget [github.com](http://github.com/)...PINTO0309` step, which won't work for newer kernel versions, follow this video instead or alternatively follow the video tutorial from the beginning: 
+[https://www.youtube.com/watch?v=t_YnACEPmrM](https://www.youtube.com/watch?v=t_YnACEPmrM)  
+  
+Additional info: [https://askubuntu.com/questions/1413377/camera-not-working-in-cheese-in-wsl2](https://askubuntu.com/questions/1413377/camera-not-working-in-cheese-in-wsl2)  
+  
+3. After rebuilding, restart WSL with the new kernel. 
+  
+#### 4. Set Up Deep-Live-Cam Project  
+ Within Ubuntu:
+1. Clone the repository:  
+  
+```bash  
+git clone [https://github.com/hacksider/Deep-Live-Cam](https://github.com/hacksider/Deep-Live-Cam)  
+```  
+  
+2. Follow the installation instructions in the repository, including cuda toolkit 11.8, make 100% sure it's not cuda toolkit 12.x.  
+   
+#### 5. Verify and Load Kernel Modules  
+  
+1. Check if USB and webcam modules are built into the kernel:  
+  
+```bash  
+zcat /proc/config.gz | grep -i "CONFIG_USB_VIDEO_CLASS"  
+```  
+  
+2. If modules are loadable (m), not built-in (y), check if the file exists:  
+  
+```bash  
+ls /lib/modules/$(uname -r)/kernel/drivers/media/usb/uvc/  
+```  
+  
+3. Load the module and check for errors (optional if built-in):  
+  
+```bash  
+sudo modprobe uvcvideo  
+dmesg | tail  
+```  
+  
+4. Verify video devices:  
+  
+```bash  
+sudo ls -al /dev/video*  
+```  
+  
+#### 6. Set Up Permissions  
+  
+1. Add user to video group and set permissions:  
+  
+```bash  
+sudo usermod -a -G video $USER  
+sudo chgrp video /dev/video0 /dev/video1  
+sudo chmod 660 /dev/video0 /dev/video1  
+```  
+  
+2. Create a udev rule for permanent permissions:  
+  
+```bash  
+sudo nano /etc/udev/rules.d/81-webcam.rules  
+```  
+  
+Add this content:  
+  
+```  
+KERNEL=="video[0-9]*", GROUP="video", MODE="0660"  
+```  
+  
+3. Reload udev rules:  
+  
+```bash  
+sudo udevadm control --reload-rules && sudo udevadm trigger  
+```  
+  
+4. Log out and log back into your WSL session.  
+  
+5. Start Deep-Live-Cam with `python run.py --execution-provider cuda --max-memory 8` where 8 can be changed to the number of GB VRAM of your GPU has, minus 1-2GB. If you have a RTX3080 with 10GB I suggest adding 8GB. Leave some left for Windows.
+
+#### Final Notes  
+  
+- Steps 6 and 7 may be optional if the modules are built into the kernel and permissions are already set correctly.  
+- Always ensure you're using compatible versions of CUDA, ONNX, and other dependencies.  
+- If issues persist, consider checking the Deep-Live-Cam project's specific requirements and troubleshooting steps.  
+  
+By following these steps, you should have a WSL2 Ubuntu environment with USB webcam support ready for the Deep-Live-Cam project. If you encounter any issues, refer back to the specific error messages and troubleshooting steps provided.
+
+#### Troubleshooting CUDA Issues  
+
+If you encounter this error:  
+  
+```  
+[ONNXRuntimeError] : 1 : FAIL : Failed to load library [libonnxruntime_providers_cuda.so](http://libonnxruntime_providers_cuda.so/) with error: libcufft.so.10: cannot open shared object file: No such file or directory  
+```  
+  
+Follow these steps:  
+  
+1. Install CUDA Toolkit 11.8 (ONNX 1.16.3 requires CUDA 11.x, not 12.x):  
+[https://developer.nvidia.com/cuda-11-8-0-download-archive](https://developer.nvidia.com/cuda-11-8-0-download-archive)  
+  select: Linux, x86_64, WSL-Ubuntu, 2.0, deb (local)
+2. Check CUDA version:  
+  
+```bash  
+/usr/local/cuda/bin/nvcc --version  
+```  
+  
+3. If the wrong version is installed, remove it completely:  
+[https://askubuntu.com/questions/530043/removing-nvidia-cuda-toolkit-and-installing-new-one](https://askubuntu.com/questions/530043/removing-nvidia-cuda-toolkit-and-installing-new-one)  
+  
+4. Install CUDA Toolkit 11.8 again [https://developer.nvidia.com/cuda-11-8-0-download-archive](https://developer.nvidia.com/cuda-11-8-0-download-archive), select: Linux, x86_64, WSL-Ubuntu, 2.0, deb (local)
+  
+```bash  
+sudo apt-get -y install cuda-toolkit-11-8  
+```  
 
 ## Want the Next Update Now?
 If you want the latest and greatest build, or want to see some new great features, go to our [experimental branch](https://github.com/hacksider/Deep-Live-Cam/tree/experimental) and experience what the contributors have given.
