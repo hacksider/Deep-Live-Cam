@@ -93,6 +93,11 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     many_faces_switch = ctk.CTkSwitch(root, text='Many faces', variable=many_faces_value, cursor='hand2', command=lambda: setattr(modules.globals, 'many_faces', many_faces_value.get()))
     many_faces_switch.place(relx=0.6, rely=0.65)
 
+    # Add color correction toggle button
+    color_correction_value = ctk.BooleanVar(value=modules.globals.color_correction)
+    color_correction_switch = ctk.CTkSwitch(root, text='Fix Blueish Cam\n(force cv2 to use RGB instead of BGR)', variable=color_correction_value, cursor='hand2', command=lambda: setattr(modules.globals, 'color_correction', color_correction_value.get()))
+    color_correction_switch.place(relx=0.6, rely=0.70)
+
 #    nsfw_value = ctk.BooleanVar(value=modules.globals.nsfw_filter)
 #    nsfw_switch = ctk.CTkSwitch(root, text='NSFW filter', variable=nsfw_value, cursor='hand2', command=lambda: setattr(modules.globals, 'nsfw_filter', nsfw_value.get()))
 #    nsfw_switch.place(relx=0.6, rely=0.7)

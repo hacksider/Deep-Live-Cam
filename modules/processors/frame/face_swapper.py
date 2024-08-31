@@ -49,6 +49,10 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
 
 
 def process_frame(source_face: Face, temp_frame: Frame) -> Frame:
+    # Ensure the frame is in RGB format if color correction is enabled
+    if modules.globals.color_correction:
+        temp_frame = cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB)
+        
     if modules.globals.many_faces:
         many_faces = get_many_faces(temp_frame)
         if many_faces:
