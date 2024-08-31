@@ -38,27 +38,25 @@ For MAC OS, You have to install or upgrade python-tk package:
 ```
 brew install python-tk@3.10
 ```
-##### DONE!!! If you dont have any GPU, You should be able to run roop using `python run.py` command. Keep in mind that while running the program for first time, it will download some models which can take time depending on your network connection.
+##### DONE!!! If you don't have any GPU, You should be able to run roop using `python run.py` command. Keep in mind that while running the program for first time, it will download some models which can take time depending on your network connection.
 
-### *Proceed if you want to use GPU Acceleration
+#### 5. Proceed if you want to use GPU acceleration (optional)
+
+<details>
+<summary>Click to see the details</summary>
+
 ### CUDA Execution Provider (Nvidia)*
 
 1.  Install  [CUDA Toolkit 11.8](https://developer.nvidia.com/cuda-11-8-0-download-archive)
-    
 2.  Install dependencies:
-    
-
 ```
 pip uninstall onnxruntime onnxruntime-gpu
 pip install onnxruntime-gpu==1.16.3
-
 ```
 
 3.  Usage in case the provider is available:
-
 ```
 python run.py --execution-provider cuda
-
 ```
 
 ### [](https://github.com/s0md3v/roop/wiki/2.-Acceleration#coreml-execution-provider-apple-silicon)CoreML Execution Provider (Apple Silicon)
@@ -68,65 +66,52 @@ python run.py --execution-provider cuda
 ```
 pip uninstall onnxruntime onnxruntime-silicon
 pip install onnxruntime-silicon==1.13.1
-
 ```
 
 2.  Usage in case the provider is available:
-
 ```
 python run.py --execution-provider coreml
-
 ```
 
 ### [](https://github.com/s0md3v/roop/wiki/2.-Acceleration#coreml-execution-provider-apple-legacy)CoreML Execution Provider (Apple Legacy)
 
 1.  Install dependencies:
-
 ```
 pip uninstall onnxruntime onnxruntime-coreml
 pip install onnxruntime-coreml==1.13.1
-
 ```
 
 2.  Usage in case the provider is available:
-
 ```
 python run.py --execution-provider coreml
-
 ```
 
 ### [](https://github.com/s0md3v/roop/wiki/2.-Acceleration#directml-execution-provider-windows)DirectML Execution Provider (Windows)
 
 1.  Install dependencies:
-
 ```
 pip uninstall onnxruntime onnxruntime-directml
 pip install onnxruntime-directml==1.15.1
-
 ```
 
 2.  Usage in case the provider is available:
-
 ```
 python run.py --execution-provider directml
-
 ```
 
 ### [](https://github.com/s0md3v/roop/wiki/2.-Acceleration#openvino-execution-provider-intel)OpenVINO™ Execution Provider (Intel)
 
 1.  Install dependencies:
-
 ```
 pip uninstall onnxruntime onnxruntime-openvino
 pip install onnxruntime-openvino==1.15.0
-
 ```
 
 2.  Usage in case the provider is available:
-
 ```
 python run.py --execution-provider openvino
 ```
+</details>
 
 ## How do I use it?
 > Note: When you run this program for the first time, it will download some models ~300MB in size.
@@ -174,7 +159,11 @@ options:
 
 Looking for a CLI mode? Using the -s/--source argument will make the run program in cli mode.
 
-### Webcam mode on Windows 11 using WSL2 Ubuntu
+### Webcam mode on Windows 11 using WSL2 Ubuntu (optional)
+
+<details>
+<summary>Click to see the details</summary>
+
 If you want to use WSL2 on Windows 11 you will notice, that Ubuntu WSL2 doesn't come with USB-Webcam support in the Kernel. You need to do two things: Compile the Kernel with the right modules integrated and forward your USB Webcam from Windows to Ubuntu with the usbipd app. Here are detailed Steps:
 
 This tutorial will guide you through the process of setting up WSL2 Ubuntu with USB webcam support, rebuilding the kernel, and preparing the environment for the Deep-Live-Cam project.  
@@ -313,7 +302,8 @@ Follow these steps:
   
 ```bash  
 sudo apt-get -y install cuda-toolkit-11-8  
-```  
+```
+</details>
 
 ## Want the Next Update Now?
 If you want the latest and greatest build, or want to see some new great features, go to our [experimental branch](https://github.com/hacksider/Deep-Live-Cam/tree/experimental) and experience what the contributors have given.
