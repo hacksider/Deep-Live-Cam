@@ -92,6 +92,36 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         camera_var = ctk.StringVar(value="No cameras found")
         camera_dropdown = ctk.CTkLabel(root, text="No cameras found")
         camera_dropdown.place(relx=0.1, rely=0.55, relwidth=0.5, relheight=0.05)
+    keep_fps_value = ctk.BooleanVar(value=modules.globals.keep_fps)
+    keep_fps_checkbox = ctk.CTkSwitch(root, text='Keep fps', variable=keep_fps_value, cursor='hand2', command=lambda: setattr(modules.globals, 'keep_fps', not modules.globals.keep_fps))
+    keep_fps_checkbox.place(relx=0.1, rely=0.6)
+
+    keep_frames_value = ctk.BooleanVar(value=modules.globals.keep_frames)
+    keep_frames_switch = ctk.CTkSwitch(root, text='Keep frames', variable=keep_frames_value, cursor='hand2', command=lambda: setattr(modules.globals, 'keep_frames', keep_frames_value.get()))
+    keep_frames_switch.place(relx=0.1, rely=0.65)
+
+    # for FRAME PROCESSOR ENHANCER tumbler:
+    enhancer_value = ctk.BooleanVar(value=modules.globals.fp_ui['face_enhancer'])
+    enhancer_switch = ctk.CTkSwitch(root, text='Face Enhancer', variable=enhancer_value, cursor='hand2', command=lambda: update_tumbler('face_enhancer',enhancer_value.get()))
+    enhancer_switch.place(relx=0.1, rely=0.7)
+
+    keep_audio_value = ctk.BooleanVar(value=modules.globals.keep_audio)
+    keep_audio_switch = ctk.CTkSwitch(root, text='Keep audio', variable=keep_audio_value, cursor='hand2', command=lambda: setattr(modules.globals, 'keep_audio', keep_audio_value.get()))
+    keep_audio_switch.place(relx=0.6, rely=0.6)
+
+    many_faces_value = ctk.BooleanVar(value=modules.globals.many_faces)
+    many_faces_switch = ctk.CTkSwitch(root, text='Many faces', variable=many_faces_value, cursor='hand2', command=lambda: setattr(modules.globals, 'many_faces', many_faces_value.get()))
+    many_faces_switch.place(relx=0.6, rely=0.65)
+
+    # Add color correction toggle button
+    color_correction_value = ctk.BooleanVar(value=modules.globals.color_correction)
+    color_correction_switch = ctk.CTkSwitch(root, text='Fix Blueish Cam\n(force cv2 to use RGB instead of BGR)', variable=color_correction_value, cursor='hand2', command=lambda: setattr(modules.globals, 'color_correction', color_correction_value.get()))
+    color_correction_switch.place(relx=0.6, rely=0.70)
+
+#    nsfw_value = ctk.BooleanVar(value=modules.globals.nsfw_filter)
+#    nsfw_switch = ctk.CTkSwitch(root, text='NSFW filter', variable=nsfw_value, cursor='hand2', command=lambda: setattr(modules.globals, 'nsfw_filter', nsfw_value.get()))
+#    nsfw_switch.place(relx=0.6, rely=0.7)
+                                                                                                                                                                             
 
     start_button = ctk.CTkButton(root, text='Start', cursor='hand2', command=lambda: select_output_path(start))
     start_button.place(relx=0.15, rely=0.80, relwidth=0.2, relheight=0.05)
