@@ -1,5 +1,5 @@
 import os
-from typing import List, Dict
+from typing import List, Dict, Any
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 WORKFLOW_DIR = os.path.join(ROOT_DIR, 'workflow')
@@ -9,6 +9,9 @@ file_types = [
     ('Video', ('*.mp4','*.mkv'))
 ]
 
+souce_target_map = []
+simple_map = []
+
 source_path = None
 target_path = None
 output_path = None
@@ -17,6 +20,7 @@ keep_fps = None
 keep_audio = None
 keep_frames = None
 many_faces = None
+map_faces = None
 color_correction = None  # New global variable for color correction toggle
 nsfw_filter = None
 video_encoder = None
