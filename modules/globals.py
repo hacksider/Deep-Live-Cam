@@ -10,7 +10,7 @@ file_types = [
 ]
 
 souce_target_map = []
-simple_map = []
+simple_map = {}
 
 source_path = None
 target_path = None

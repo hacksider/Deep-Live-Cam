@@ -24,6 +24,16 @@ PREVIEW_MAX_WIDTH  = 1200
 PREVIEW_DEFAULT_WIDTH  = 960
 PREVIEW_DEFAULT_HEIGHT = 540
 
+POPUP_WIDTH = 750
+POPUP_HEIGHT = 810
+POPUP_SCROLL_WIDTH = 740, 
+POPUP_SCROLL_HEIGHT = 700
+
+POPUP_LIVE_WIDTH = 950
+POPUP_LIVE_HEIGHT = 820
+POPUP_LIVE_SCROLL_WIDTH = 940, 
+POPUP_LIVE_SCROLL_HEIGHT = 700
+
 MAPPER_PREVIEW_MAX_HEIGHT = 100
 MAPPER_PREVIEW_MAX_WIDTH = 100
 
@@ -165,7 +175,7 @@ def create_source_target_popup(start: Callable[[], None], root: ctk.CTk, map: li
 
     POPUP = ctk.CTkToplevel(root)
     POPUP.title("Source x Target Mapper")
-    POPUP.geometry(f"{ROOT_WIDTH+150}x{ROOT_HEIGHT+110}")
+    POPUP.geometry(f"{POPUP_WIDTH}x{POPUP_HEIGHT}")
     POPUP.focus()
 
     def on_submit_click(start):
@@ -175,7 +185,7 @@ def create_source_target_popup(start: Callable[[], None], root: ctk.CTk, map: li
         else:
             update_pop_status("Atleast 1 source with target is required!")
 
-    scrollable_frame = ctk.CTkScrollableFrame(POPUP, width=ROOT_WIDTH+140, height=ROOT_HEIGHT)
+    scrollable_frame = ctk.CTkScrollableFrame(POPUP, width=POPUP_SCROLL_WIDTH, height=POPUP_SCROLL_HEIGHT)
     scrollable_frame.grid(row=0, column=0, padx=0, pady=0, sticky='nsew')
 
     def on_button_click(map, button_num):
@@ -508,7 +518,7 @@ def create_source_target_popup_for_webcam(root: ctk.CTk, map: list) -> None:
 
     POPUP_LIVE = ctk.CTkToplevel(root)
     POPUP_LIVE.title("Source x Target Mapper")
-    POPUP_LIVE.geometry(f"{ROOT_WIDTH+350}x{ROOT_HEIGHT+120}")
+    POPUP_LIVE.geometry(f"{POPUP_LIVE_WIDTH}x{POPUP_LIVE_HEIGHT}")
     POPUP_LIVE.focus()
 
     def on_submit_click():
@@ -537,7 +547,7 @@ def create_source_target_popup_for_webcam(root: ctk.CTk, map: list) -> None:
 def refresh_data(map: list):
     global POPUP_LIVE
 
-    scrollable_frame = ctk.CTkScrollableFrame(POPUP_LIVE, width=ROOT_WIDTH+340, height=ROOT_HEIGHT)
+    scrollable_frame = ctk.CTkScrollableFrame(POPUP_LIVE, width=POPUP_LIVE_SCROLL_WIDTH, height=POPUP_LIVE_SCROLL_HEIGHT)
     scrollable_frame.grid(row=0, column=0, padx=0, pady=0, sticky='nsew')
 
     def on_sbutton_click(map, button_num):
