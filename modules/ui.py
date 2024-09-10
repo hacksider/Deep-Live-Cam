@@ -42,16 +42,6 @@ def init(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.CTk:
     PREVIEW = create_preview(ROOT)
 
     return ROOT
-    
-def list_available_cameras(max_tested: int = 10):
-    """ List all available camera indices. """
-    available_cameras = []
-    for i in range(max_tested):
-        cap = cv2.VideoCapture(i)
-        if cap.isOpened():
-            available_cameras.append(i)
-            cap.release()
-    return available_cameras
 
 
 def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.CTk:
@@ -77,21 +67,11 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     select_face_button.place(relx=0.1, rely=0.4, relwidth=0.3, relheight=0.1)
 
     swap_faces_button = ctk.CTkButton(root, text='↔', cursor='hand2', command=lambda: swap_faces_paths())
-    swap_faces_button.place(relx=0.45, relwidth=0.1, relheight=0.1)
+    swap_faces_button.place(relx=0.45, rely=0.4, relwidth=0.1, relheight=0.1)
 
     select_target_button = ctk.CTkButton(root, text='Select a target', cursor='hand2', command=lambda: select_target_path())
     select_target_button.place(relx=0.6, rely=0.4, relwidth=0.3, relheight=0.1)
 
-    # Create dropdown for camera selection
-    available_cameras = list_available_cameras()
-    if available_cameras:
-        camera_var = ctk.StringVar(value=str(available_cameras[0]))  # Default to the first available camera
-        camera_dropdown = ctk.CTkOptionMenu(root, variable=camera_var, values=[str(i) for i in available_cameras])
-        camera_dropdown.place(relx=0.1, rely=0.55, relwidth=0.5, relheight=0.05)
-    else:
-        camera_var = ctk.StringVar(value="No cameras found")
-        camera_dropdown = ctk.CTkLabel(root, text="No cameras found")
-        camera_dropdown.place(relx=0.1, rely=0.55, relwidth=0.5, relheight=0.05)
     keep_fps_value = ctk.BooleanVar(value=modules.globals.keep_fps)
     keep_fps_checkbox = ctk.CTkSwitch(root, text='Keep fps', variable=keep_fps_value, cursor='hand2', command=lambda: setattr(modules.globals, 'keep_fps', not modules.globals.keep_fps))
     keep_fps_checkbox.place(relx=0.1, rely=0.6)
@@ -121,7 +101,6 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
 #    nsfw_value = ctk.BooleanVar(value=modules.globals.nsfw_filter)
 #    nsfw_switch = ctk.CTkSwitch(root, text='NSFW filter', variable=nsfw_value, cursor='hand2', command=lambda: setattr(modules.globals, 'nsfw_filter', nsfw_value.get()))
 #    nsfw_switch.place(relx=0.6, rely=0.7)
-                                                                                                                                                                             
 
     start_button = ctk.CTkButton(root, text='Start', cursor='hand2', command=lambda: select_output_path(start))
     start_button.place(relx=0.15, rely=0.80, relwidth=0.2, relheight=0.05)
@@ -132,7 +111,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     preview_button = ctk.CTkButton(root, text='Preview', cursor='hand2', command=lambda: toggle_preview())
     preview_button.place(relx=0.65, rely=0.80, relwidth=0.2, relheight=0.05)
 
-    live_button = ctk.CTkButton(root, text='Live', cursor='hand2', command=lambda: webcam_preview(int(camera_var.get())))
+    live_button = ctk.CTkButton(root, text='Live', cursor='hand2', command=lambda: webcam_preview())
     live_button.place(relx=0.40, rely=0.86, relwidth=0.2, relheight=0.05)
 
     status_label = ctk.CTkLabel(root, text=None, justify='center')
@@ -144,8 +123,6 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     donate_label.bind('<Button>', lambda event: webbrowser.open('https://paypal.me/hacksider'))
 
     return root
-
-
 
 
 def create_preview(parent: ctk.CTkToplevel) -> ctk.CTkToplevel:
@@ -338,14 +315,14 @@ def update_preview(frame_number: int = 0) -> None:
         update_status('Processing succeed!')
         PREVIEW.deiconify()
 
-def webcam_preview(camera_index=0):
+def webcam_preview():
     if modules.globals.source_path is None:
         # No image selected
         return
 
     global preview_label, PREVIEW
 
-    camera = cv2.VideoCapture(camera_index)  # Use the selected camera index
+    camera = cv2.VideoCapture(0)                                    # Use index for the webcam (adjust the index accordingly if necessary)    
     camera.set(cv2.CAP_PROP_FRAME_WIDTH, PREVIEW_DEFAULT_WIDTH)     # Set the width of the resolution
     camera.set(cv2.CAP_PROP_FRAME_HEIGHT, PREVIEW_DEFAULT_HEIGHT)   # Set the height of the resolution
     camera.set(cv2.CAP_PROP_FPS, 60)                                # Set the frame rate of the webcam
@@ -367,10 +344,10 @@ def webcam_preview(camera_index=0):
         if source_image is None and modules.globals.source_path:
             source_image = get_one_face(cv2.imread(modules.globals.source_path))
 
-        temp_frame = frame.copy()  # Create a copy of the frame
+        temp_frame = frame.copy()  #Create a copy of the frame
 
         if modules.globals.live_mirror:
-            temp_frame = cv2.flip(temp_frame, 1)  # Horizontal flipping
+            temp_frame = cv2.flip(temp_frame, 1) # horizontal flipping
 
         if modules.globals.live_resizable:
             temp_frame = fit_image_to_size(temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height())
