@@ -29,13 +29,16 @@ POPUP_HEIGHT = 810
 POPUP_SCROLL_WIDTH = 740, 
 POPUP_SCROLL_HEIGHT = 700
 
-POPUP_LIVE_WIDTH = 950
+POPUP_LIVE_WIDTH = 900
 POPUP_LIVE_HEIGHT = 820
-POPUP_LIVE_SCROLL_WIDTH = 940, 
+POPUP_LIVE_SCROLL_WIDTH = 890, 
 POPUP_LIVE_SCROLL_HEIGHT = 700
 
 MAPPER_PREVIEW_MAX_HEIGHT = 100
 MAPPER_PREVIEW_MAX_WIDTH = 100
+
+DEFAULT_BUTTON_WIDTH = 200
+DEFAULT_BUTTON_HEIGHT = 40
 
 RECENT_DIRECTORY_SOURCE = None
 RECENT_DIRECTORY_TARGET = None
@@ -194,7 +197,7 @@ def create_source_target_popup(start: Callable[[], None], root: ctk.CTk, map: li
     for item in map:
         id = item['id']
 
-        button = ctk.CTkButton(scrollable_frame, text="Select source image", command=lambda id=id: on_button_click(map, id))
+        button = ctk.CTkButton(scrollable_frame, text="Select source image", command=lambda id=id: on_button_click(map, id), width=DEFAULT_BUTTON_WIDTH, height=DEFAULT_BUTTON_HEIGHT)
         button.grid(row=id, column=0, padx=50, pady=10)
 
         x_label = ctk.CTkLabel(scrollable_frame, text=f"X", width=MAPPER_PREVIEW_MAX_WIDTH, height=MAPPER_PREVIEW_MAX_HEIGHT)
@@ -559,14 +562,14 @@ def refresh_data(map: list):
     for item in map:
         id = item['id']
 
-        button = ctk.CTkButton(scrollable_frame, text="Select source image", command=lambda id=id: on_sbutton_click(map, id))
-        button.grid(row=id, column=0, padx=50, pady=10)
+        button = ctk.CTkButton(scrollable_frame, text="Select source image", command=lambda id=id: on_sbutton_click(map, id), width=DEFAULT_BUTTON_WIDTH, height=DEFAULT_BUTTON_HEIGHT)
+        button.grid(row=id, column=0, padx=30, pady=10)
 
         x_label = ctk.CTkLabel(scrollable_frame, text=f"X", width=MAPPER_PREVIEW_MAX_WIDTH, height=MAPPER_PREVIEW_MAX_HEIGHT)
         x_label.grid(row=id, column=2, padx=10, pady=10)
 
-        button = ctk.CTkButton(scrollable_frame, text="Select target image", command=lambda id=id: on_tbutton_click(map, id))
-        button.grid(row=id, column=3, padx=40, pady=10)
+        button = ctk.CTkButton(scrollable_frame, text="Select target image", command=lambda id=id: on_tbutton_click(map, id), width=DEFAULT_BUTTON_WIDTH, height=DEFAULT_BUTTON_HEIGHT)
+        button.grid(row=id, column=3, padx=20, pady=10)
 
         if "source" in item:
             image = Image.fromarray(cv2.cvtColor(item['source']['cv2'], cv2.COLOR_BGR2RGB))
@@ -583,7 +586,7 @@ def refresh_data(map: list):
             tk_image = ctk.CTkImage(image, size=image.size)
 
             target_image = ctk.CTkLabel(scrollable_frame, text=f"T-{id}", width=MAPPER_PREVIEW_MAX_WIDTH, height=MAPPER_PREVIEW_MAX_HEIGHT)
-            target_image.grid(row=id, column=4, padx=10, pady=10)
+            target_image.grid(row=id, column=4, padx=20, pady=10)
             target_image.configure(image=tk_image)
 
 
@@ -652,7 +655,7 @@ def update_webcam_target(scrollable_frame: ctk.CTkScrollableFrame, map: list, bu
             tk_image = ctk.CTkImage(image, size=image.size)
             
             target_image = ctk.CTkLabel(scrollable_frame, text=f"T-{button_num}", width=MAPPER_PREVIEW_MAX_WIDTH, height=MAPPER_PREVIEW_MAX_HEIGHT)
-            target_image.grid(row=button_num, column=4, padx=10, pady=10)
+            target_image.grid(row=button_num, column=4, padx=20, pady=10)
             target_image.configure(image=tk_image)
             target_label_dict_live[button_num] = target_image
         else:
