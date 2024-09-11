@@ -38,7 +38,7 @@ For MAC OS, You have to install or upgrade python-tk package:
 ```
 brew install python-tk@3.10
 ```
-##### DONE!!! If you don't have any GPU, You should be able to run roop using `python run.py` command. Keep in mind that while running the program for first time, it will download some models which can take time depending on your network connection.
+##### DONE!!! If you don't have any GPU, You should be able to run Deep-Live-Cam using `python run.py` command. Keep in mind that while running the program for first time, it will download some models which can take time depending on your network connection.
 
 #### 5. Proceed if you want to use GPU acceleration (optional)
 
