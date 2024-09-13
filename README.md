@@ -36,6 +36,10 @@ Map the faces
 And see the magic!
 
 
+## Want to skip the installation and just run it?
+Here's the link without the tedious installation script below
+[Windows / Nvidia](https://1689241962432.gumroad.com/l/vccdmm) CUDA still required
+
 ## How do I install it?
 
 
