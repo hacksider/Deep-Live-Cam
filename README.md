@@ -18,16 +18,21 @@ Dynamically improve the performance by using the --resizable parameter
 ### Face Mapping
 
 Track faces and change it on the fly
+
 ![face_mapping_source](face_mapping_source.gif)
+
 source video
 
 ![face-mapping](face_mapping.png)
+
 Tick this switch
 
 ![face-mapping2](face_mapping2.png)
+
 Map the faces
 
 ![face_mapping_result](face_mapping_result.gif)
+
 And see the magic!
 
 
