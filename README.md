@@ -11,8 +11,17 @@ Users of this software are expected to use this software responsibly while abidi
 
 ## New Features
 ### Resizable Preview Window
-Dynamically improve the performance by using the --resizable parameter
+<details>
+    Dynamically improve the performance by using the --resizable parameter
 ![resizable-gif](resizable.gif)
+</details>
+### Face Mapping
+<details>
+    Track faces and change it on the fly
+![face_mapping_source](face_mapping_source)
+![face_mapping_result](face_mapping_result.gif)
+</details>
+
 
 ## How do I install it?
 
