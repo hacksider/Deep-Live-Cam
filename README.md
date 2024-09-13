@@ -9,6 +9,11 @@ The developers of this software are aware of its possible unethical applications
 
 Users of this software are expected to use this software responsibly while abiding by local laws. If the face of a real person is being used, users are required to get consent from the concerned person and clearly mention that it is a deepfake when posting content online. Developers of this software will not be responsible for actions of end-users.
 
+## New Features
+### Resizable Preview Window
+Dynamically improve the performance by using the --resizable parameter
+![resizable-gif](resizable.gif)
+
 ## How do I install it?
 
 
