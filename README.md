@@ -310,7 +310,7 @@ sudo apt-get -y install cuda-toolkit-11-8
 If you want the latest and greatest build, or want to see some new great features, go to our [experimental branch](https://github.com/hacksider/Deep-Live-Cam/tree/experimental) and experience what the contributors have given.
 
 ## TODO
-- :heavy_check_mark: Support multiple faces feature
+:heavy_check_mark: Support multiple faces feature
 - [ ] Develop a version for web app/service
 - [ ] UI/UX enhancements for desktop app
 - [ ] Speed up model loading
