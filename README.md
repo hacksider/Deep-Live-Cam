@@ -12,7 +12,7 @@ Users of this software are expected to use this software responsibly while abidi
 ## New Features
 ### Resizable Preview Window
 
-Dynamically improve the performance by using the --resizable parameter
+Dynamically improve the performance by using the `--live-resizable` parameter
 ![resizable-gif](resizable.gif)
 
 ### Face Mapping
