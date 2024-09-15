@@ -125,6 +125,49 @@ class TargetButton(DragDropButton):
                 target_label.configure(text="")
 
 
+class DragDropLabel(ctk.CTkLabel):
+    def __init__(self, master, **kwargs):
+        super().__init__(master, **kwargs)
+        self.drop_target_register(tkdnd.DND_FILES)
+        self.dnd_bind("<<Drop>>", self.drop)
+
+    def drop(self, event):
+        file_path = event.data
+        if file_path.startswith("{"):
+            file_path = file_path[1:-1]
+        self.handle_drop(file_path)
+
+    def handle_drop(self, file_path):
+        pass
+
+
+class SourceLabel(DragDropLabel):
+    def handle_drop(self, file_path):
+        if is_image(file_path):
+            modules.globals.source_path = file_path
+            global RECENT_DIRECTORY_SOURCE
+            RECENT_DIRECTORY_SOURCE = os.path.dirname(modules.globals.source_path)
+            image = render_image_preview(modules.globals.source_path, (200, 200))
+            source_label.configure(image=image)
+            source_label.configure(text="")
+
+
+class TargetLabel(DragDropLabel):
+    def handle_drop(self, file_path):
+        global RECENT_DIRECTORY_TARGET
+        if is_image(file_path) or is_video(file_path):
+            modules.globals.target_path = file_path
+            RECENT_DIRECTORY_TARGET = os.path.dirname(modules.globals.target_path)
+            if is_image(file_path):
+                image = render_image_preview(modules.globals.target_path, (200, 200))
+                target_label.configure(image=image)
+                target_label.configure(text="")
+            elif is_video(file_path):
+                video_frame = render_video_preview(file_path, (200, 200))
+                target_label.configure(image=video_frame)
+                target_label.configure(text="")
+
+
 def init(start: Callable[[], None], destroy: Callable[[], None]) -> tkdnd.TkinterDnD.Tk:
     global ROOT, PREVIEW
 
@@ -150,19 +193,21 @@ def create_root(
     root.configure(bg="gray12")
     root.protocol("WM_DELETE_WINDOW", lambda: destroy())
 
-    source_label = ctk.CTkLabel(
+    source_label = SourceLabel(
         root,
-        text="Drag & Drop Source Image Here",
+        text="Drag & Drop\nSource Image Here",
         text_color="gray",
         font=("Arial", 16),
+        justify="center",
     )
     source_label.place(relx=0.1, rely=0.1, relwidth=0.3, relheight=0.25)
 
-    target_label = ctk.CTkLabel(
+    target_label = TargetLabel(
         root,
-        text="Drag & Drop Target Image/Video Here",
+        text="Drag & Drop\nTarget Image/Video Here",
         text_color="gray",
         font=("Arial", 16),
+        justify="center",
     )
     target_label.place(relx=0.6, rely=0.1, relwidth=0.3, relheight=0.25)
 
@@ -266,7 +311,7 @@ def create_root(
     color_correction_value = ctk.BooleanVar(value=modules.globals.color_correction)
     color_correction_switch = ctk.CTkSwitch(
         root,
-        text="Fix Blueish Cam\n(force cv2 to use RGB instead of BGR)",
+        text="Fix Blueish Cam -\nforce cv2 to\nuse RGB instead of BGR",
         variable=color_correction_value,
         cursor="hand2",
         command=lambda: setattr(
