@@ -28,27 +28,27 @@ from modules.utilities import (
 ROOT = None
 POPUP = None
 POPUP_LIVE = None
-ROOT_HEIGHT = 800
-ROOT_WIDTH = 1000
+ROOT_HEIGHT = 700
+ROOT_WIDTH = 600
 
 PREVIEW = None
-PREVIEW_MAX_HEIGHT = 800
-PREVIEW_MAX_WIDTH = 1400
-PREVIEW_DEFAULT_WIDTH = 1280
-PREVIEW_DEFAULT_HEIGHT = 720
+PREVIEW_MAX_HEIGHT = 700
+PREVIEW_MAX_WIDTH = 1200
+PREVIEW_DEFAULT_WIDTH = 960
+PREVIEW_DEFAULT_HEIGHT = 540
 
-POPUP_WIDTH = 700
-POPUP_HEIGHT = 800
-POPUP_SCROLL_WIDTH = 680
-POPUP_SCROLL_HEIGHT = 600
+POPUP_WIDTH = 750
+POPUP_HEIGHT = 810
+POPUP_SCROLL_WIDTH = 740
+POPUP_SCROLL_HEIGHT = 700
 
-POPUP_LIVE_WIDTH = 800
-POPUP_LIVE_HEIGHT = 700
-POPUP_LIVE_SCROLL_WIDTH = 780
-POPUP_LIVE_SCROLL_HEIGHT = 600
+POPUP_LIVE_WIDTH = 900
+POPUP_LIVE_HEIGHT = 820
+POPUP_LIVE_SCROLL_WIDTH = 890
+POPUP_LIVE_SCROLL_HEIGHT = 700
 
-MAPPER_PREVIEW_MAX_HEIGHT = 120
-MAPPER_PREVIEW_MAX_WIDTH = 120
+MAPPER_PREVIEW_MAX_HEIGHT = 100
+MAPPER_PREVIEW_MAX_WIDTH = 100
 
 DEFAULT_BUTTON_WIDTH = 200
 DEFAULT_BUTTON_HEIGHT = 40
@@ -71,21 +71,7 @@ target_label_dict_live = {}
 img_ft, vid_ft = modules.globals.file_types
 
 
-class ModernButton(ctk.CTkButton):
-    def __init__(self, master, **kwargs):
-        super().__init__(master, **kwargs)
-        self.configure(
-            font=("Roboto", 16, "bold"),
-            corner_radius=15,
-            border_width=2,
-            border_color="#3a7ebf",
-            hover_color="#2b5d8b",
-            fg_color="#3a7ebf",
-            text_color="white",
-        )
-
-
-class DragDropButton(ModernButton):
+class DragDropButton(ctk.CTkButton):
     def __init__(self, master, **kwargs):
         super().__init__(master, **kwargs)
         self.drop_target_register(tkdnd.DND_FILES)
@@ -107,7 +93,7 @@ class SourceButton(DragDropButton):
             modules.globals.source_path = file_path
             global RECENT_DIRECTORY_SOURCE
             RECENT_DIRECTORY_SOURCE = os.path.dirname(modules.globals.source_path)
-            image = render_image_preview(modules.globals.source_path, (250, 250))
+            image = render_image_preview(modules.globals.source_path, (200, 200))
             source_label.configure(image=image)
             source_label.configure(text="")
 
@@ -120,9 +106,7 @@ class SourceMapperButton(DragDropButton):
 
     def handle_drop(self, file_path):
         if is_image(file_path):
-            update_popup_source(
-                self.master.master, self.map, self.button_num, file_path
-            )
+            update_popup_source(self.master, self.map, self.button_num, file_path)
 
 
 class TargetButton(DragDropButton):
@@ -132,27 +116,16 @@ class TargetButton(DragDropButton):
             modules.globals.target_path = file_path
             RECENT_DIRECTORY_TARGET = os.path.dirname(modules.globals.target_path)
             if is_image(file_path):
-                image = render_image_preview(modules.globals.target_path, (250, 250))
+                image = render_image_preview(modules.globals.target_path, (200, 200))
                 target_label.configure(image=image)
                 target_label.configure(text="")
             elif is_video(file_path):
-                video_frame = render_video_preview(file_path, (250, 250))
+                video_frame = render_video_preview(file_path, (200, 200))
                 target_label.configure(image=video_frame)
                 target_label.configure(text="")
 
 
-class ModernLabel(ctk.CTkLabel):
-    def __init__(self, master, **kwargs):
-        super().__init__(master, **kwargs)
-        self.configure(
-            font=("Roboto", 16),
-            corner_radius=10,
-            fg_color="#2a2d2e",
-            text_color="white",
-        )
-
-
-class DragDropLabel(ModernLabel):
+class DragDropLabel(ctk.CTkLabel):
     def __init__(self, master, **kwargs):
         super().__init__(master, **kwargs)
         self.drop_target_register(tkdnd.DND_FILES)
@@ -174,7 +147,7 @@ class SourceLabel(DragDropLabel):
             modules.globals.source_path = file_path
             global RECENT_DIRECTORY_SOURCE
             RECENT_DIRECTORY_SOURCE = os.path.dirname(modules.globals.source_path)
-            image = render_image_preview(modules.globals.source_path, (250, 250))
+            image = render_image_preview(modules.globals.source_path, (200, 200))
             source_label.configure(image=image)
             source_label.configure(text="")
 
@@ -186,11 +159,11 @@ class TargetLabel(DragDropLabel):
             modules.globals.target_path = file_path
             RECENT_DIRECTORY_TARGET = os.path.dirname(modules.globals.target_path)
             if is_image(file_path):
-                image = render_image_preview(modules.globals.target_path, (250, 250))
+                image = render_image_preview(modules.globals.target_path, (200, 200))
                 target_label.configure(image=image)
                 target_label.configure(text="")
             elif is_video(file_path):
-                video_frame = render_video_preview(file_path, (250, 250))
+                video_frame = render_video_preview(file_path, (200, 200))
                 target_label.configure(image=video_frame)
                 target_label.configure(text="")
 
@@ -210,250 +183,215 @@ def create_root(
     global source_label, target_label, status_label
 
     ctk.set_appearance_mode("dark")
-    ctk.set_default_color_theme("blue")
+    ctk.set_default_color_theme("blue")  # Use a built-in theme
 
     root = tkdnd.TkinterDnD.Tk()
+    root.minsize(ROOT_WIDTH, ROOT_HEIGHT)
     root.title(
         f"{modules.metadata.name} {modules.metadata.version} {modules.metadata.edition}"
     )
-    root.configure(bg="#1a1a1a")
+    root.configure(bg="gray12")
     root.protocol("WM_DELETE_WINDOW", lambda: destroy())
-    root.resizable(True, True)
-
-    main_frame = ctk.CTkFrame(root, fg_color="#1a1a1a")
-    main_frame.pack(fill="both", expand=True, padx=20, pady=20)
-
-    # Create two vertical frames for source and target
-    source_frame = ctk.CTkFrame(main_frame, fg_color="#2a2d2e", corner_radius=15)
-    source_frame.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
-
-    target_frame = ctk.CTkFrame(main_frame, fg_color="#2a2d2e", corner_radius=15)
-    target_frame.grid(row=0, column=2, padx=10, pady=10, sticky="nsew")
-
-    # Create a middle frame for swap button
-    middle_frame = ctk.CTkFrame(main_frame, fg_color="#1a1a1a")
-    middle_frame.grid(row=0, column=1, padx=5, pady=10, sticky="ns")
 
     source_label = SourceLabel(
-        source_frame,
+        root,
         text="Drag & Drop\nSource Image Here",
+        text_color="gray",
+        font=("Arial", 16),
         justify="center",
-        width=250,
-        height=250,
     )
-    source_label.pack(pady=(20, 10))
+    source_label.place(relx=0.1, rely=0.1, relwidth=0.3, relheight=0.25)
 
     target_label = TargetLabel(
-        target_frame,
+        root,
         text="Drag & Drop\nTarget Image/Video Here",
+        text_color="gray",
+        font=("Arial", 16),
         justify="center",
-        width=250,
-        height=250,
     )
-    target_label.pack(pady=(20, 10))
+    target_label.place(relx=0.6, rely=0.1, relwidth=0.3, relheight=0.25)
 
     select_face_button = SourceButton(
-        source_frame,
+        root,
         text="Select a face",
         cursor="hand2",
         command=lambda: select_source_path(),
+        fg_color=("gray75", "gray25"),  # Modern button color
+        hover_color=("gray85", "gray35"),
+        corner_radius=10,  # Rounded corners
     )
-    select_face_button.pack(pady=10)
+    select_face_button.place(relx=0.1, rely=0.4, relwidth=0.3, relheight=0.1)
 
-    select_target_button = TargetButton(
-        target_frame,
-        text="Select a target",
-        cursor="hand2",
-        command=lambda: select_target_path(),
-    )
-    select_target_button.pack(pady=10)
-
-    swap_faces_button = ModernButton(
-        middle_frame,
+    swap_faces_button = ctk.CTkButton(
+        root,
         text="↔",
         cursor="hand2",
         command=lambda: swap_faces_paths(),
-        width=50,
-        height=50,
+        fg_color=("gray75", "gray25"),
+        hover_color=("gray85", "gray35"),
+        corner_radius=10,
     )
-    swap_faces_button.pack(expand=True)
+    swap_faces_button.place(relx=0.45, rely=0.4, relwidth=0.1, relheight=0.1)
 
-    options_frame = ctk.CTkFrame(main_frame, fg_color="#2a2d2e", corner_radius=15)
-    options_frame.grid(row=1, column=0, columnspan=3, padx=10, pady=10, sticky="nsew")
+    select_target_button = TargetButton(
+        root,
+        text="Select a target",
+        cursor="hand2",
+        command=lambda: select_target_path(),
+        fg_color=("gray75", "gray25"),
+        hover_color=("gray85", "gray35"),
+        corner_radius=10,
+    )
+    select_target_button.place(relx=0.6, rely=0.4, relwidth=0.3, relheight=0.1)
 
-    # Create a single column for options, centered
-    options_column = ctk.CTkFrame(options_frame, fg_color="#2a2d2e")
-    options_column.pack(expand=True)
-
-    # Switches
     keep_fps_value = ctk.BooleanVar(value=modules.globals.keep_fps)
     keep_fps_checkbox = ctk.CTkSwitch(
-        options_column,
+        root,
         text="Keep fps",
         variable=keep_fps_value,
         cursor="hand2",
         command=lambda: setattr(
             modules.globals, "keep_fps", not modules.globals.keep_fps
         ),
-        progress_color="#3a7ebf",
-        font=("Roboto", 14, "bold"),
+        fg_color=("gray75", "gray25"),  # Modern switch color
+        progress_color=("DodgerBlue", "DodgerBlue"),
     )
-    keep_fps_checkbox.pack(pady=5, anchor="w")
+    keep_fps_checkbox.place(relx=0.1, rely=0.6)
 
     keep_frames_value = ctk.BooleanVar(value=modules.globals.keep_frames)
     keep_frames_switch = ctk.CTkSwitch(
-        options_column,
+        root,
         text="Keep frames",
         variable=keep_frames_value,
         cursor="hand2",
         command=lambda: setattr(
             modules.globals, "keep_frames", keep_frames_value.get()
         ),
-        progress_color="#3a7ebf",
-        font=("Roboto", 14, "bold"),
+        fg_color=("gray75", "gray25"),
+        progress_color=("DodgerBlue", "DodgerBlue"),
     )
-    keep_frames_switch.pack(pady=5, anchor="w")
+    keep_frames_switch.place(relx=0.1, rely=0.65)
 
     enhancer_value = ctk.BooleanVar(value=modules.globals.fp_ui["face_enhancer"])
     enhancer_switch = ctk.CTkSwitch(
-        options_column,
+        root,
         text="Face Enhancer",
         variable=enhancer_value,
         cursor="hand2",
         command=lambda: update_tumbler("face_enhancer", enhancer_value.get()),
-        progress_color="#3a7ebf",
-        font=("Roboto", 14, "bold"),
+        fg_color=("gray75", "gray25"),
+        progress_color=("DodgerBlue", "DodgerBlue"),
     )
-    enhancer_switch.pack(pady=5, anchor="w")
+    enhancer_switch.place(relx=0.1, rely=0.7)
 
     keep_audio_value = ctk.BooleanVar(value=modules.globals.keep_audio)
     keep_audio_switch = ctk.CTkSwitch(
-        options_column,
+        root,
         text="Keep audio",
         variable=keep_audio_value,
         cursor="hand2",
         command=lambda: setattr(modules.globals, "keep_audio", keep_audio_value.get()),
-        progress_color="#3a7ebf",
-        font=("Roboto", 14, "bold"),
+        fg_color=("gray75", "gray25"),
+        progress_color=("DodgerBlue", "DodgerBlue"),
     )
-    keep_audio_switch.pack(pady=5, anchor="w")
+    keep_audio_switch.place(relx=0.6, rely=0.6)
 
     many_faces_value = ctk.BooleanVar(value=modules.globals.many_faces)
     many_faces_switch = ctk.CTkSwitch(
-        options_column,
+        root,
         text="Many faces",
         variable=many_faces_value,
         cursor="hand2",
         command=lambda: setattr(modules.globals, "many_faces", many_faces_value.get()),
-        progress_color="#3a7ebf",
-        font=("Roboto", 14, "bold"),
+        fg_color=("gray75", "gray25"),
+        progress_color=("DodgerBlue", "DodgerBlue"),
     )
-    many_faces_switch.pack(pady=5, anchor="w")
+    many_faces_switch.place(relx=0.6, rely=0.65)
 
     color_correction_value = ctk.BooleanVar(value=modules.globals.color_correction)
     color_correction_switch = ctk.CTkSwitch(
-        options_column,
-        text="Fix Blueish Cam",
+        root,
+        text="Fix Blueish Cam -\nforce cv2 to\nuse RGB instead of BGR",
         variable=color_correction_value,
         cursor="hand2",
         command=lambda: setattr(
             modules.globals, "color_correction", color_correction_value.get()
         ),
-        progress_color="#3a7ebf",
-        font=("Roboto", 14, "bold"),
+        fg_color=("gray75", "gray25"),
+        progress_color=("DodgerBlue", "DodgerBlue"),
     )
-    color_correction_switch.pack(pady=5, anchor="w")
+    color_correction_switch.place(relx=0.6, rely=0.70)
 
     map_faces = ctk.BooleanVar(value=modules.globals.map_faces)
     map_faces_switch = ctk.CTkSwitch(
-        options_column,
+        root,
         text="Map faces",
         variable=map_faces,
         cursor="hand2",
         command=lambda: setattr(modules.globals, "map_faces", map_faces.get()),
-        progress_color="#3a7ebf",
-        font=("Roboto", 14, "bold"),
+        fg_color=("gray75", "gray25"),
+        progress_color=("DodgerBlue", "DodgerBlue"),
     )
-    map_faces_switch.pack(pady=5, anchor="w")
+    map_faces_switch.place(relx=0.1, rely=0.75)
 
-    button_frame = ctk.CTkFrame(main_frame, fg_color="#1a1a1a")
-    button_frame.grid(row=2, column=0, columnspan=3, padx=10, pady=10, sticky="nsew")
-
-    start_button = ModernButton(
-        button_frame,
+    start_button = ctk.CTkButton(
+        root,
         text="Start",
         cursor="hand2",
         command=lambda: analyze_target(start, root),
-        fg_color="#4CAF50",
-        hover_color="#45a049",
+        fg_color=("DodgerBlue", "DodgerBlue"),  # Modern button color
+        hover_color=("RoyalBlue", "RoyalBlue"),
+        corner_radius=10,
     )
-    start_button.pack(side="left", padx=10, expand=True)
+    start_button.place(relx=0.15, rely=0.80, relwidth=0.2, relheight=0.05)
 
-    preview_button = ModernButton(
-        button_frame,
-        text="Preview",
-        cursor="hand2",
-        command=lambda: toggle_preview(),
-    )
-    preview_button.pack(side="left", padx=10, expand=True)
-
-    live_button = ModernButton(
-        button_frame,
-        text="Live",
-        cursor="hand2",
-        command=lambda: webcam_preview(root),
-    )
-    live_button.pack(side="left", padx=10, expand=True)
-
-    stop_button = ModernButton(
-        button_frame,
+    stop_button = ctk.CTkButton(
+        root,
         text="Destroy",
         cursor="hand2",
         command=lambda: destroy(),
-        fg_color="#f44336",
-        hover_color="#d32f2f",
+        fg_color=("gray75", "gray25"),
+        hover_color=("gray85", "gray35"),
+        corner_radius=10,
     )
-    stop_button.pack(side="left", padx=10, expand=True)
+    stop_button.place(relx=0.4, rely=0.80, relwidth=0.2, relheight=0.05)
 
-    status_label = ModernLabel(
-        main_frame, text=None, justify="center", fg_color="#1a1a1a"
-    )
-    status_label.grid(row=3, column=0, columnspan=3, pady=10, sticky="ew")
-
-    donate_frame = ctk.CTkFrame(main_frame, fg_color="#1a1a1a")
-    donate_frame.grid(row=4, column=0, columnspan=3, pady=5, sticky="ew")
-
-    donate_label = ModernLabel(
-        donate_frame,
-        text="Donate",
-        justify="center",
+    preview_button = ctk.CTkButton(
+        root,
+        text="Preview",
         cursor="hand2",
-        fg_color="#1870c4",
-        text_color="#1870c4",
+        command=lambda: toggle_preview(),
+        fg_color=("gray75", "gray25"),
+        hover_color=("gray85", "gray35"),
+        corner_radius=10,
     )
-    donate_label.pack(side="left", expand=True)
+    preview_button.place(relx=0.65, rely=0.80, relwidth=0.2, relheight=0.05)
+
+    live_button = ctk.CTkButton(
+        root,
+        text="Live",
+        cursor="hand2",
+        command=lambda: webcam_preview(root),
+        fg_color=("gray75", "gray25"),
+        hover_color=("gray85", "gray35"),
+        corner_radius=10,
+    )
+    live_button.place(relx=0.40, rely=0.86, relwidth=0.2, relheight=0.05)
+
+    status_label = ctk.CTkLabel(root, text=None, justify="center")
+    status_label.place(relx=0.1, rely=0.9, relwidth=0.8)
+
+    donate_label = ctk.CTkLabel(
+        root, text="Deep Live Cam", justify="center", cursor="hand2"
+    )
+    donate_label.place(relx=0.1, rely=0.95, relwidth=0.8)
+
+    # Access the URL text color directly
+    donate_label.configure(text_color="dodger blue")
 
     donate_label.bind(
         "<Button>", lambda event: webbrowser.open("https://paypal.me/hacksider")
     )
-
-    remove_donate_button = ModernButton(
-        donate_frame,
-        text="X",
-        cursor="hand2",
-        command=lambda: donate_frame.destroy(),
-        width=30,
-        height=30,
-        fg_color="#f44336",
-        hover_color="#d32f2f",
-    )
-    remove_donate_button.pack(side="right", padx=(10, 0))
-
-    main_frame.grid_columnconfigure((0, 2), weight=1)
-    main_frame.grid_rowconfigure((0, 1, 2), weight=1)
-
-    root.grid_columnconfigure(0, weight=1)
-    root.grid_rowconfigure(0, weight=1)
 
     return root
 
@@ -490,35 +428,27 @@ def create_source_target_popup(
     POPUP.title("Source x Target Mapper")
     POPUP.geometry(f"{POPUP_WIDTH}x{POPUP_HEIGHT}")
     POPUP.focus()
-    POPUP.resizable(True, True)
 
     def on_submit_click(start):
         if has_valid_map():
             POPUP.destroy()
             select_output_path(start)
         else:
-            update_pop_status("At least 1 source with target is required!")
+            update_pop_status("Atleast 1 source with target is required!")
 
     scrollable_frame = ctk.CTkScrollableFrame(
         POPUP, width=POPUP_SCROLL_WIDTH, height=POPUP_SCROLL_HEIGHT
     )
-    scrollable_frame.pack(fill="both", expand=True, padx=10, pady=10)
+    scrollable_frame.grid(row=0, column=0, padx=0, pady=0, sticky="nsew")
 
     def on_button_click(map, button_num):
         update_popup_source(scrollable_frame, map, button_num)
 
-    # Create a frame to hold the table
-    table_frame = ctk.CTkFrame(scrollable_frame)
-    table_frame.pack(expand=True)
-
     for item in map:
         id = item["id"]
 
-        row_frame = ctk.CTkFrame(table_frame)
-        row_frame.pack(fill="x", pady=5)
-
-        source_button = SourceMapperButton(
-            row_frame,
+        button = SourceMapperButton(
+            scrollable_frame,
             map,
             id,
             text="Select source image",
@@ -529,24 +459,15 @@ def create_source_target_popup(
             hover_color=("gray85", "gray35"),
             corner_radius=10,
         )
-        source_button.pack(side="left", padx=(0, 10))
-
-        source_image = ctk.CTkLabel(
-            row_frame,
-            text=f"S-{id}",
-            width=MAPPER_PREVIEW_MAX_WIDTH,
-            height=MAPPER_PREVIEW_MAX_HEIGHT,
-            font=("Arial", 14, "bold"),
-        )
-        source_image.pack(side="left", padx=(0, 10))
+        button.grid(row=id, column=0, padx=50, pady=10)
 
         x_label = ctk.CTkLabel(
-            row_frame,
+            scrollable_frame,
             text=f"X",
-            width=30,
-            font=("Arial", 14, "bold"),
+            width=MAPPER_PREVIEW_MAX_WIDTH,
+            height=MAPPER_PREVIEW_MAX_HEIGHT,
         )
-        x_label.pack(side="left", padx=(0, 10))
+        x_label.grid(row=id, column=2, padx=10, pady=10)
 
         image = Image.fromarray(cv2.cvtColor(item["target"]["cv2"], cv2.COLOR_BGR2RGB))
         image = image.resize(
@@ -555,35 +476,26 @@ def create_source_target_popup(
         tk_image = ctk.CTkImage(image, size=image.size)
 
         target_image = ctk.CTkLabel(
-            row_frame,
+            scrollable_frame,
             text=f"T-{id}",
             width=MAPPER_PREVIEW_MAX_WIDTH,
             height=MAPPER_PREVIEW_MAX_HEIGHT,
-            font=("Arial", 14, "bold"),
         )
-        target_image.pack(side="left")
+        target_image.grid(row=id, column=3, padx=10, pady=10)
         target_image.configure(image=tk_image)
 
-    popup_status_label = ctk.CTkLabel(
-        POPUP, text=None, justify="center", font=("Arial", 14, "bold")
-    )
-    popup_status_label.pack(pady=10)
+    popup_status_label = ctk.CTkLabel(POPUP, text=None, justify="center")
+    popup_status_label.grid(row=1, column=0, pady=15)
 
-    submit_button = ctk.CTkButton(
+    close_button = ctk.CTkButton(
         POPUP,
         text="Submit",
         command=lambda: on_submit_click(start),
         fg_color=("DodgerBlue", "DodgerBlue"),
         hover_color=("RoyalBlue", "RoyalBlue"),
         corner_radius=10,
-        font=("Arial", 16, "bold"),
-        width=200,
-        height=50,
     )
-    submit_button.pack(pady=10)
-
-    POPUP.update()
-    POPUP.minsize(POPUP.winfo_width(), POPUP.winfo_height())
+    close_button.grid(row=2, column=0, pady=10)
 
 
 def update_popup_source(
@@ -630,17 +542,12 @@ def update_popup_source(
             tk_image = ctk.CTkImage(image, size=image.size)
 
             source_image = ctk.CTkLabel(
-                scrollable_frame.winfo_children()[button_num],
+                scrollable_frame,
                 text=f"S-{button_num}",
                 width=MAPPER_PREVIEW_MAX_WIDTH,
                 height=MAPPER_PREVIEW_MAX_HEIGHT,
-                font=("Arial", 14, "bold"),
             )
-            source_image.pack(
-                side="left",
-                padx=(0, 10),
-                after=scrollable_frame.winfo_children()[button_num].winfo_children()[0],
-            )
+            source_image.grid(row=button_num, column=1, padx=10, pady=10)
             source_image.configure(image=tk_image)
             source_label_dict[button_num] = source_image
         else:
@@ -658,7 +565,7 @@ def create_preview(parent: ctk.CTkToplevel) -> ctk.CTkToplevel:
     preview.protocol("WM_DELETE_WINDOW", lambda: toggle_preview())
     preview.resizable(width=True, height=True)
 
-    preview_label = ctk.CTkLabel(preview, text=None, font=("Arial", 14, "bold"))
+    preview_label = ctk.CTkLabel(preview, text=None)
     preview_label.pack(fill="both", expand=True)
 
     preview_slider = ctk.CTkSlider(
@@ -671,7 +578,6 @@ def create_preview(parent: ctk.CTkToplevel) -> ctk.CTkToplevel:
         button_color=("DodgerBlue", "DodgerBlue"),
         button_hover_color=("RoyalBlue", "RoyalBlue"),
     )
-    preview_slider.pack(fill="x", padx=20, pady=10)
 
     return preview
 
@@ -989,7 +895,7 @@ def create_source_target_popup_for_webcam(root: ctk.CTk, map: list) -> None:
             simplify_maps()
             create_webcam_preview()
         else:
-            update_pop_live_status("At least 1 source with target is required!")
+            update_pop_live_status("Atleast 1 source with target is required!")
 
     def on_add_click():
         add_blank_map()
@@ -1044,11 +950,8 @@ def refresh_data(map: list):
     for item in map:
         id = item["id"]
 
-        row_frame = ctk.CTkFrame(scrollable_frame)
-        row_frame.pack(fill="x", pady=5)
-
-        source_button = ctk.CTkButton(
-            row_frame,
+        button = ctk.CTkButton(
+            scrollable_frame,
             text="Select source image",
             command=lambda id=id: on_sbutton_click(map, id),
             width=DEFAULT_BUTTON_WIDTH,
@@ -1057,7 +960,27 @@ def refresh_data(map: list):
             hover_color=("gray85", "gray35"),
             corner_radius=10,
         )
-        source_button.pack(side="left", padx=(0, 10))
+        button.grid(row=id, column=0, padx=30, pady=10)
+
+        x_label = ctk.CTkLabel(
+            scrollable_frame,
+            text=f"X",
+            width=MAPPER_PREVIEW_MAX_WIDTH,
+            height=MAPPER_PREVIEW_MAX_HEIGHT,
+        )
+        x_label.grid(row=id, column=2, padx=10, pady=10)
+
+        button = ctk.CTkButton(
+            scrollable_frame,
+            text="Select target image",
+            command=lambda id=id: on_tbutton_click(map, id),
+            width=DEFAULT_BUTTON_WIDTH,
+            height=DEFAULT_BUTTON_HEIGHT,
+            fg_color=("gray75", "gray25"),
+            hover_color=("gray85", "gray35"),
+            corner_radius=10,
+        )
+        button.grid(row=id, column=3, padx=20, pady=10)
 
         if "source" in item:
             image = Image.fromarray(
@@ -1069,7 +992,6 @@ def refresh_data(map: list):
             tk_image = ctk.CTkImage(image, size=image.size)
 
             source_image = ctk.CTkLabel(
-                row_frame,
                 scrollable_frame,
                 text=f"S-{id}",
                 width=MAPPER_PREVIEW_MAX_WIDTH,
