@@ -213,12 +213,12 @@ def create_root(
     ctk.set_default_color_theme("blue")
 
     root = tkdnd.TkinterDnD.Tk()
+    root.minsize(ROOT_WIDTH, ROOT_HEIGHT)
     root.title(
         f"{modules.metadata.name} {modules.metadata.version} {modules.metadata.edition}"
     )
     root.configure(bg="#1a1a1a")
     root.protocol("WM_DELETE_WINDOW", lambda: destroy())
-    root.resizable(True, True)
 
     main_frame = ctk.CTkFrame(root, fg_color="#1a1a1a")
     main_frame.pack(fill="both", expand=True, padx=20, pady=20)
