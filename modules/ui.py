@@ -298,7 +298,7 @@ def create_root(
         progress_color="#3a7ebf",
         font=("Roboto", 14, "bold"),
     )
-    keep_fps_checkbox.pack(pady=5)
+    keep_fps_checkbox.pack(pady=5, anchor="w")
 
     keep_frames_value = ctk.BooleanVar(value=modules.globals.keep_frames)
     keep_frames_switch = ctk.CTkSwitch(
@@ -312,7 +312,7 @@ def create_root(
         progress_color="#3a7ebf",
         font=("Roboto", 14, "bold"),
     )
-    keep_frames_switch.pack(pady=5)
+    keep_frames_switch.pack(pady=5, anchor="w")
 
     enhancer_value = ctk.BooleanVar(value=modules.globals.fp_ui["face_enhancer"])
     enhancer_switch = ctk.CTkSwitch(
@@ -324,7 +324,7 @@ def create_root(
         progress_color="#3a7ebf",
         font=("Roboto", 14, "bold"),
     )
-    enhancer_switch.pack(pady=5)
+    enhancer_switch.pack(pady=5, anchor="w")
 
     keep_audio_value = ctk.BooleanVar(value=modules.globals.keep_audio)
     keep_audio_switch = ctk.CTkSwitch(
@@ -336,7 +336,7 @@ def create_root(
         progress_color="#3a7ebf",
         font=("Roboto", 14, "bold"),
     )
-    keep_audio_switch.pack(pady=5)
+    keep_audio_switch.pack(pady=5, anchor="w")
 
     many_faces_value = ctk.BooleanVar(value=modules.globals.many_faces)
     many_faces_switch = ctk.CTkSwitch(
@@ -348,7 +348,7 @@ def create_root(
         progress_color="#3a7ebf",
         font=("Roboto", 14, "bold"),
     )
-    many_faces_switch.pack(pady=5)
+    many_faces_switch.pack(pady=5, anchor="w")
 
     color_correction_value = ctk.BooleanVar(value=modules.globals.color_correction)
     color_correction_switch = ctk.CTkSwitch(
@@ -362,7 +362,7 @@ def create_root(
         progress_color="#3a7ebf",
         font=("Roboto", 14, "bold"),
     )
-    color_correction_switch.pack(pady=5)
+    color_correction_switch.pack(pady=5, anchor="w")
 
     map_faces = ctk.BooleanVar(value=modules.globals.map_faces)
     map_faces_switch = ctk.CTkSwitch(
@@ -374,7 +374,7 @@ def create_root(
         progress_color="#3a7ebf",
         font=("Roboto", 14, "bold"),
     )
-    map_faces_switch.pack(pady=5)
+    map_faces_switch.pack(pady=5, anchor="w")
 
     button_frame = ctk.CTkFrame(main_frame, fg_color="#1a1a1a")
     button_frame.grid(row=2, column=0, columnspan=3, padx=10, pady=10, sticky="nsew")
