@@ -459,7 +459,7 @@ def create_root(
 
 
 def analyze_target(start: Callable[[], None], root: ctk.CTk):
-    if POPUP != None and POPUP.winfo_exists():
+    if POPUP is not None and POPUP.winfo_exists():
         update_status("Please complete pop-up or close it.")
         return
 
@@ -472,6 +472,9 @@ def analyze_target(start: Callable[[], None], root: ctk.CTk):
         elif is_video(modules.globals.target_path):
             update_status("Getting unique faces")
             get_unique_faces_from_target_video()
+        else:
+            update_status("Invalid target file. Please select an image or video.")
+            return
 
         if len(modules.globals.souce_target_map) > 0:
             create_source_target_popup(start, root, modules.globals.souce_target_map)
@@ -603,8 +606,9 @@ def update_popup_source(
 
     if "source" in map[button_num]:
         map[button_num].pop("source")
-        source_label_dict[button_num].destroy()
-        del source_label_dict[button_num]
+        if button_num in source_label_dict:
+            source_label_dict[button_num].destroy()
+            del source_label_dict[button_num]
 
     if source_path == "":
         return map
@@ -665,7 +669,7 @@ def create_preview(parent: ctk.CTkToplevel) -> ctk.CTkToplevel:
         preview,
         from_=0,
         to=0,
-        command=lambda frame_value: update_preview(frame_value),
+        command=lambda frame_value: update_preview(int(frame_value)),
         fg_color=("gray75", "gray25"),
         progress_color=("DodgerBlue", "DodgerBlue"),
         button_color=("DodgerBlue", "DodgerBlue"),
