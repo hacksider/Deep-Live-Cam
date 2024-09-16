@@ -12,7 +12,7 @@ Users of this software are expected to use this software responsibly while abidi
 ## New Features
 ### Resizable Preview Window
 
-Dynamically improve the performance by using the --resizable parameter
+Dynamically improve the performance by using the `--live-resizable` parameter
 ![resizable-gif](resizable.gif)
 
 ### Face Mapping
@@ -40,7 +40,7 @@ And see the magic!
 <details>
 Here's the link without the tedious installation script below
 
-[Windows / Nvidia](https://1689241962432.gumroad.com/l/vccdmm) CUDA still required
+[Windows / Nvidia](https://hacksider.gumroad.com/l/vccdmm) CUDA still required
 </details>
 
 ## How do I install it?
