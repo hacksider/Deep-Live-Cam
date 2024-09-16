@@ -424,19 +424,34 @@ def create_root(
     )
     status_label.grid(row=3, column=0, columnspan=3, pady=10, sticky="ew")
 
+    donate_frame = ctk.CTkFrame(main_frame, fg_color="#1a1a1a")
+    donate_frame.grid(row=4, column=0, columnspan=3, pady=5, sticky="ew")
+
     donate_label = ModernLabel(
-        main_frame,
+        donate_frame,
         text="Donate",
         justify="center",
         cursor="hand2",
         fg_color="#1870c4",
         text_color="#1870c4",
     )
-    donate_label.grid(row=4, column=0, columnspan=3, pady=5, sticky="ew")
+    donate_label.pack(side="left", expand=True)
 
     donate_label.bind(
         "<Button>", lambda event: webbrowser.open("https://paypal.me/hacksider")
     )
+
+    remove_donate_button = ModernButton(
+        donate_frame,
+        text="X",
+        cursor="hand2",
+        command=lambda: donate_frame.destroy(),
+        width=30,
+        height=30,
+        fg_color="#f44336",
+        hover_color="#d32f2f",
+    )
+    remove_donate_button.pack(side="right", padx=(10, 0))
 
     main_frame.grid_columnconfigure((0, 2), weight=1)
     main_frame.grid_rowconfigure((0, 1, 2), weight=1)
