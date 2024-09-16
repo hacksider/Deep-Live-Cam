@@ -76,6 +76,7 @@ class DragDropButton(ctk.CTkButton):
         super().__init__(master, **kwargs)
         self.drop_target_register(tkdnd.DND_FILES)
         self.dnd_bind("<<Drop>>", self.drop)
+        self.configure(font=("Arial", 14, "bold"))  # Increased font size and made bold
 
     def drop(self, event):
         file_path = event.data
@@ -130,6 +131,7 @@ class DragDropLabel(ctk.CTkLabel):
         super().__init__(master, **kwargs)
         self.drop_target_register(tkdnd.DND_FILES)
         self.dnd_bind("<<Drop>>", self.drop)
+        self.configure(font=("Arial", 14, "bold"))  # Increased font size and made bold
 
     def drop(self, event):
         file_path = event.data
@@ -197,7 +199,7 @@ def create_root(
         root,
         text="Drag & Drop\nSource Image Here",
         text_color="gray",
-        font=("Arial", 16),
+        font=("Arial", 18, "bold"),
         justify="center",
     )
     source_label.place(relx=0.1, rely=0.1, relwidth=0.3, relheight=0.25)
@@ -206,7 +208,7 @@ def create_root(
         root,
         text="Drag & Drop\nTarget Image/Video Here",
         text_color="gray",
-        font=("Arial", 16),
+        font=("Arial", 18, "bold"),
         justify="center",
     )
     target_label.place(relx=0.6, rely=0.1, relwidth=0.3, relheight=0.25)
@@ -230,6 +232,7 @@ def create_root(
         fg_color=("gray75", "gray25"),
         hover_color=("gray85", "gray35"),
         corner_radius=10,
+        font=("Arial", 14, "bold"),
     )
     swap_faces_button.place(relx=0.45, rely=0.4, relwidth=0.1, relheight=0.1)
 
@@ -255,6 +258,7 @@ def create_root(
         ),
         fg_color=("gray75", "gray25"),  # Modern switch color
         progress_color=("DodgerBlue", "DodgerBlue"),
+        font=("Arial", 14, "bold"),
     )
     keep_fps_checkbox.place(relx=0.1, rely=0.6)
 
@@ -269,6 +273,7 @@ def create_root(
         ),
         fg_color=("gray75", "gray25"),
         progress_color=("DodgerBlue", "DodgerBlue"),
+        font=("Arial", 14, "bold"),
     )
     keep_frames_switch.place(relx=0.1, rely=0.65)
 
@@ -281,6 +286,7 @@ def create_root(
         command=lambda: update_tumbler("face_enhancer", enhancer_value.get()),
         fg_color=("gray75", "gray25"),
         progress_color=("DodgerBlue", "DodgerBlue"),
+        font=("Arial", 14, "bold"),
     )
     enhancer_switch.place(relx=0.1, rely=0.7)
 
@@ -293,6 +299,7 @@ def create_root(
         command=lambda: setattr(modules.globals, "keep_audio", keep_audio_value.get()),
         fg_color=("gray75", "gray25"),
         progress_color=("DodgerBlue", "DodgerBlue"),
+        font=("Arial", 14, "bold"),
     )
     keep_audio_switch.place(relx=0.6, rely=0.6)
 
@@ -305,6 +312,7 @@ def create_root(
         command=lambda: setattr(modules.globals, "many_faces", many_faces_value.get()),
         fg_color=("gray75", "gray25"),
         progress_color=("DodgerBlue", "DodgerBlue"),
+        font=("Arial", 14, "bold"),
     )
     many_faces_switch.place(relx=0.6, rely=0.65)
 
@@ -319,6 +327,7 @@ def create_root(
         ),
         fg_color=("gray75", "gray25"),
         progress_color=("DodgerBlue", "DodgerBlue"),
+        font=("Arial", 14, "bold"),
     )
     color_correction_switch.place(relx=0.6, rely=0.70)
 
@@ -331,6 +340,7 @@ def create_root(
         command=lambda: setattr(modules.globals, "map_faces", map_faces.get()),
         fg_color=("gray75", "gray25"),
         progress_color=("DodgerBlue", "DodgerBlue"),
+        font=("Arial", 14, "bold"),
     )
     map_faces_switch.place(relx=0.1, rely=0.75)
 
@@ -342,6 +352,7 @@ def create_root(
         fg_color=("DodgerBlue", "DodgerBlue"),  # Modern button color
         hover_color=("RoyalBlue", "RoyalBlue"),
         corner_radius=10,
+        font=("Arial", 14, "bold"),
     )
     start_button.place(relx=0.15, rely=0.80, relwidth=0.2, relheight=0.05)
 
@@ -353,6 +364,7 @@ def create_root(
         fg_color=("gray75", "gray25"),
         hover_color=("gray85", "gray35"),
         corner_radius=10,
+        font=("Arial", 14, "bold"),
     )
     stop_button.place(relx=0.4, rely=0.80, relwidth=0.2, relheight=0.05)
 
@@ -364,6 +376,7 @@ def create_root(
         fg_color=("gray75", "gray25"),
         hover_color=("gray85", "gray35"),
         corner_radius=10,
+        font=("Arial", 14, "bold"),
     )
     preview_button.place(relx=0.65, rely=0.80, relwidth=0.2, relheight=0.05)
 
@@ -375,14 +388,21 @@ def create_root(
         fg_color=("gray75", "gray25"),
         hover_color=("gray85", "gray35"),
         corner_radius=10,
+        font=("Arial", 14, "bold"),
     )
     live_button.place(relx=0.40, rely=0.86, relwidth=0.2, relheight=0.05)
 
-    status_label = ctk.CTkLabel(root, text=None, justify="center")
+    status_label = ctk.CTkLabel(
+        root, text=None, justify="center", font=("Arial", 14, "bold")
+    )
     status_label.place(relx=0.1, rely=0.9, relwidth=0.8)
 
     donate_label = ctk.CTkLabel(
-        root, text="Deep Live Cam", justify="center", cursor="hand2"
+        root,
+        text="Deep Live Cam",
+        justify="center",
+        cursor="hand2",
+        font=("Arial", 14, "bold"),
     )
     donate_label.place(relx=0.1, rely=0.95, relwidth=0.8)
 
@@ -466,6 +486,7 @@ def create_source_target_popup(
             text=f"X",
             width=MAPPER_PREVIEW_MAX_WIDTH,
             height=MAPPER_PREVIEW_MAX_HEIGHT,
+            font=("Arial", 14, "bold"),
         )
         x_label.grid(row=id, column=2, padx=10, pady=10)
 
@@ -480,11 +501,14 @@ def create_source_target_popup(
             text=f"T-{id}",
             width=MAPPER_PREVIEW_MAX_WIDTH,
             height=MAPPER_PREVIEW_MAX_HEIGHT,
+            font=("Arial", 14, "bold"),
         )
         target_image.grid(row=id, column=3, padx=10, pady=10)
         target_image.configure(image=tk_image)
 
-    popup_status_label = ctk.CTkLabel(POPUP, text=None, justify="center")
+    popup_status_label = ctk.CTkLabel(
+        POPUP, text=None, justify="center", font=("Arial", 14, "bold")
+    )
     popup_status_label.grid(row=1, column=0, pady=15)
 
     close_button = ctk.CTkButton(
@@ -494,6 +518,7 @@ def create_source_target_popup(
         fg_color=("DodgerBlue", "DodgerBlue"),
         hover_color=("RoyalBlue", "RoyalBlue"),
         corner_radius=10,
+        font=("Arial", 14, "bold"),
     )
     close_button.grid(row=2, column=0, pady=10)
 
@@ -546,6 +571,7 @@ def update_popup_source(
                 text=f"S-{button_num}",
                 width=MAPPER_PREVIEW_MAX_WIDTH,
                 height=MAPPER_PREVIEW_MAX_HEIGHT,
+                font=("Arial", 14, "bold"),
             )
             source_image.grid(row=button_num, column=1, padx=10, pady=10)
             source_image.configure(image=tk_image)
@@ -565,7 +591,7 @@ def create_preview(parent: ctk.CTkToplevel) -> ctk.CTkToplevel:
     preview.protocol("WM_DELETE_WINDOW", lambda: toggle_preview())
     preview.resizable(width=True, height=True)
 
-    preview_label = ctk.CTkLabel(preview, text=None)
+    preview_label = ctk.CTkLabel(preview, text=None, font=("Arial", 14, "bold"))
     preview_label.pack(fill="both", expand=True)
 
     preview_slider = ctk.CTkSlider(
