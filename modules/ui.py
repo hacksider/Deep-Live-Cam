@@ -281,17 +281,14 @@ def create_root(
     options_frame = ctk.CTkFrame(main_frame, fg_color="#2a2d2e", corner_radius=15)
     options_frame.grid(row=1, column=0, columnspan=3, padx=10, pady=10, sticky="nsew")
 
-    # Create two columns for options, centered
-    options_column_left = ctk.CTkFrame(options_frame, fg_color="#2a2d2e")
-    options_column_left.pack(side="left", expand=True)
+    # Create a single column for options, centered
+    options_column = ctk.CTkFrame(options_frame, fg_color="#2a2d2e")
+    options_column.pack(expand=True)
 
-    options_column_right = ctk.CTkFrame(options_frame, fg_color="#2a2d2e")
-    options_column_right.pack(side="right", expand=True)
-
-    # Left column switches
+    # Switches
     keep_fps_value = ctk.BooleanVar(value=modules.globals.keep_fps)
     keep_fps_checkbox = ctk.CTkSwitch(
-        options_column_left,
+        options_column,
         text="Keep fps",
         variable=keep_fps_value,
         cursor="hand2",
@@ -305,7 +302,7 @@ def create_root(
 
     keep_frames_value = ctk.BooleanVar(value=modules.globals.keep_frames)
     keep_frames_switch = ctk.CTkSwitch(
-        options_column_left,
+        options_column,
         text="Keep frames",
         variable=keep_frames_value,
         cursor="hand2",
@@ -319,7 +316,7 @@ def create_root(
 
     enhancer_value = ctk.BooleanVar(value=modules.globals.fp_ui["face_enhancer"])
     enhancer_switch = ctk.CTkSwitch(
-        options_column_left,
+        options_column,
         text="Face Enhancer",
         variable=enhancer_value,
         cursor="hand2",
@@ -331,7 +328,7 @@ def create_root(
 
     keep_audio_value = ctk.BooleanVar(value=modules.globals.keep_audio)
     keep_audio_switch = ctk.CTkSwitch(
-        options_column_left,
+        options_column,
         text="Keep audio",
         variable=keep_audio_value,
         cursor="hand2",
@@ -341,10 +338,9 @@ def create_root(
     )
     keep_audio_switch.pack(pady=5)
 
-    # Right column switches
     many_faces_value = ctk.BooleanVar(value=modules.globals.many_faces)
     many_faces_switch = ctk.CTkSwitch(
-        options_column_right,
+        options_column,
         text="Many faces",
         variable=many_faces_value,
         cursor="hand2",
@@ -356,7 +352,7 @@ def create_root(
 
     color_correction_value = ctk.BooleanVar(value=modules.globals.color_correction)
     color_correction_switch = ctk.CTkSwitch(
-        options_column_right,
+        options_column,
         text="Fix Blueish Cam",
         variable=color_correction_value,
         cursor="hand2",
@@ -370,7 +366,7 @@ def create_root(
 
     map_faces = ctk.BooleanVar(value=modules.globals.map_faces)
     map_faces_switch = ctk.CTkSwitch(
-        options_column_right,
+        options_column,
         text="Map faces",
         variable=map_faces,
         cursor="hand2",
