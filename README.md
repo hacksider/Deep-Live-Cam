@@ -1,5 +1,5 @@
+
 ![demo-gif](demo.gif)
-![demo-gif](avgpcperformancedemo.gif)
 
 
 ## Disclaimer
