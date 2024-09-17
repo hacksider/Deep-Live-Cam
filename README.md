@@ -89,6 +89,8 @@ brew install python-tk@3.10
 
 **Run:** If you don't have a GPU, you can run Deep-Live-Cam using `python run.py`. Note that initial execution will download models (~300MB).
 
+> Note: If you have WSL1 then you need to install an X server on Windows (e.g Xming), while if you have WSL2 you no need to do that. The link [here](https://askubuntu.com/a/1418950) describes the options to configure DISPLAY variable depending on your environment.
+
 
 ### GPU Acceleration (Optional)
 
