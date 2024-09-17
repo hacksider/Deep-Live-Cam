@@ -1051,8 +1051,10 @@ def refresh_data(map: list):
         row_frame = ctk.CTkFrame(scrollable_frame)
         row_frame.pack(fill="x", pady=5)
 
-        source_button = ctk.CTkButton(
+        source_button = SourceMapperButton(  # Use SourceMapperButton here
             row_frame,
+            map,
+            id,
             text="Select source image",
             command=lambda id=id: on_sbutton_click(map, id),
             width=DEFAULT_BUTTON_WIDTH,
@@ -1063,6 +1065,14 @@ def refresh_data(map: list):
         )
         source_button.pack(side="left", padx=(0, 10))
 
+        source_image_label = ctk.CTkLabel(  # Create a label for source image
+            row_frame,
+            text=f"S-{id}",
+            width=MAPPER_PREVIEW_MAX_WIDTH,
+            height=MAPPER_PREVIEW_MAX_HEIGHT,
+        )
+        source_image_label.pack(side="left", padx=(0, 10))
+
         if "source" in item:
             image = Image.fromarray(
                 cv2.cvtColor(item["source"]["cv2"], cv2.COLOR_BGR2RGB)
@@ -1071,16 +1081,38 @@ def refresh_data(map: list):
                 (MAPPER_PREVIEW_MAX_WIDTH, MAPPER_PREVIEW_MAX_HEIGHT), Image.LANCZOS
             )
             tk_image = ctk.CTkImage(image, size=image.size)
+            source_image_label.configure(image=tk_image)
 
-            source_image = ctk.CTkLabel(
-                row_frame,
-                scrollable_frame,
-                text=f"S-{id}",
-                width=MAPPER_PREVIEW_MAX_WIDTH,
-                height=MAPPER_PREVIEW_MAX_HEIGHT,
-            )
-            source_image.grid(row=id, column=1, padx=10, pady=10)
-            source_image.configure(image=tk_image)
+        x_label = ctk.CTkLabel(
+            row_frame,
+            text=f"X",
+            width=30,
+        )
+        x_label.pack(side="left", padx=(0, 10))
+
+        target_button = DragDropButton(  # Use DragDropButton for target
+            row_frame,
+            text="Select target image",
+            command=lambda id=id: on_tbutton_click(map, id),
+            width=DEFAULT_BUTTON_WIDTH,
+            height=DEFAULT_BUTTON_HEIGHT,
+            fg_color=("gray75", "gray25"),
+            hover_color=("gray85", "gray35"),
+            corner_radius=10,
+        )
+
+        target_button.handle_drop = lambda file_path, id=id: update_webcam_target(
+            scrollable_frame, map, id, file_path
+        )  # Add handle_drop for drag and drop
+        target_button.pack(side="left", padx=(0, 10))
+
+        target_image_label = ctk.CTkLabel(  # Create a label for target image
+            row_frame,
+            text=f"T-{id}",
+            width=MAPPER_PREVIEW_MAX_WIDTH,
+            height=MAPPER_PREVIEW_MAX_HEIGHT,
+        )
+        target_image_label.pack(side="left")
 
         if "target" in item:
             image = Image.fromarray(
@@ -1090,15 +1122,7 @@ def refresh_data(map: list):
                 (MAPPER_PREVIEW_MAX_WIDTH, MAPPER_PREVIEW_MAX_HEIGHT), Image.LANCZOS
             )
             tk_image = ctk.CTkImage(image, size=image.size)
-
-            target_image = ctk.CTkLabel(
-                scrollable_frame,
-                text=f"T-{id}",
-                width=MAPPER_PREVIEW_MAX_WIDTH,
-                height=MAPPER_PREVIEW_MAX_HEIGHT,
-            )
-            target_image.grid(row=id, column=4, padx=20, pady=10)
-            target_image.configure(image=tk_image)
+            target_image_label.configure(image=tk_image)
 
 
 def update_webcam_source(
@@ -1140,30 +1164,31 @@ def update_webcam_source(
             )
             tk_image = ctk.CTkImage(image, size=image.size)
 
-            source_image = ctk.CTkLabel(
-                scrollable_frame,
-                text=f"S-{button_num}",
-                width=MAPPER_PREVIEW_MAX_WIDTH,
-                height=MAPPER_PREVIEW_MAX_HEIGHT,
-            )
-            source_image.grid(row=button_num, column=1, padx=10, pady=10)
-            source_image.configure(image=tk_image)
-            source_label_dict_live[button_num] = source_image
+            # Find the source image label in the row frame
+            row_frame = scrollable_frame.winfo_children()[button_num]
+            source_image_label = row_frame.winfo_children()[1]
+
+            source_image_label.configure(image=tk_image)
+            source_label_dict_live[button_num] = source_image_label
         else:
             update_pop_live_status("Face could not be detected in last upload!")
         return map
 
 
 def update_webcam_target(
-    scrollable_frame: ctk.CTkScrollableFrame, map: list, button_num: int
+    scrollable_frame: ctk.CTkScrollableFrame,
+    map: list,
+    button_num: int,
+    target_path: str = None,
 ) -> list:
     global target_label_dict_live
 
-    target_path = ctk.filedialog.askopenfilename(
-        title="select an target image",
-        initialdir=RECENT_DIRECTORY_SOURCE,
-        filetypes=[img_ft],
-    )
+    if target_path is None:
+        target_path = ctk.filedialog.askopenfilename(
+            title="select an target image",
+            initialdir=RECENT_DIRECTORY_SOURCE,
+            filetypes=[img_ft],
+        )
 
     if "target" in map[button_num]:
         map[button_num].pop("target")
@@ -1193,15 +1218,12 @@ def update_webcam_target(
             )
             tk_image = ctk.CTkImage(image, size=image.size)
 
-            target_image = ctk.CTkLabel(
-                scrollable_frame,
-                text=f"T-{button_num}",
-                width=MAPPER_PREVIEW_MAX_WIDTH,
-                height=MAPPER_PREVIEW_MAX_HEIGHT,
-            )
-            target_image.grid(row=button_num, column=4, padx=20, pady=10)
-            target_image.configure(image=tk_image)
-            target_label_dict_live[button_num] = target_image
+            # Find the target image label in the row frame
+            row_frame = scrollable_frame.winfo_children()[button_num]
+            target_image_label = row_frame.winfo_children()[4]
+
+            target_image_label.configure(image=tk_image)
+            target_label_dict_live[button_num] = target_image_label
         else:
             update_pop_live_status("Face could not be detected in last upload!")
         return map
