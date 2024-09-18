@@ -3,7 +3,7 @@ import webbrowser
 import customtkinter as ctk
 from typing import Callable, Tuple
 import cv2
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, ImageTk
 import tkinterdnd2 as tkdnd
 
 import modules.globals
@@ -219,6 +219,10 @@ def create_root(
     root.configure(bg="#1a1a1a")
     root.protocol("WM_DELETE_WINDOW", lambda: destroy())
     root.resizable(True, True)
+
+    # Add icon (replace 'icon.ico' with your actual icon file)
+    icon_path = os.path.join(os.path.dirname(__file__), "icon.ico")
+    root.iconbitmap(icon_path)
 
     main_frame = ctk.CTkFrame(root, fg_color="#1a1a1a")
     main_frame.pack(fill="both", expand=True, padx=20, pady=20)
