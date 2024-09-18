@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <img src="demo.gif" alt="Demo GIF"">
+  <img src="demo.gif" alt="Demo GIF">
   <img src="avgpcperformancedemo.gif" alt="Avg PC Performance Demo GIF"> 
 </p>
 
