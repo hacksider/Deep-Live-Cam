@@ -1,10 +1,16 @@
+<p align="center">
+  <img src="logo.png" alt="Logo" width="300"> 
+</p>
+<h1 align="center">Deep Live Cam</h1>
 
-![demo-gif](demo.gif)
-![demo-gif](avgpcperformancedemo.gif)
+<p align="center">
+  Real-time face swap and video deepfake with a single click and only a single image.
+</p>
 
-## Deep Live Cam
-
-Real-time face swap and video deepfake with a single click and only a single image.
+<p align="center">
+  <img src="demo.gif" alt="Demo GIF"">
+  <img src="avgpcperformancedemo.gif" alt="Avg PC Performance Demo GIF"> 
+</p>
 
 ## Disclaimer
 
