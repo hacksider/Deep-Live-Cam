@@ -70,6 +70,7 @@ def parse_args() -> None:
                          choices=suggest_execution_providers(), nargs='+')
     program.add_argument('--execution-threads', help='Number of execution threads', dest='execution_threads', type=int,
                          default=suggest_execution_threads())
+    program.add_argument('--headless', help='Run in headless mode', dest='headless', default=False, action='store_true')
     program.add_argument('-v', '--version', action='version',
                          version=f'{modules.metadata.name} {modules.metadata.version}')
 
@@ -98,6 +99,7 @@ def parse_args() -> None:
     modules.globals.max_memory = args.max_memory
     modules.globals.execution_providers = decode_execution_providers(args.execution_provider)
     modules.globals.execution_threads = args.execution_threads
+    modules.globals.headless = args.headless
 
     # Handle face enhancer tumbler
     modules.globals.fp_ui['face_enhancer'] = 'face_enhancer' in args.frame_processor
