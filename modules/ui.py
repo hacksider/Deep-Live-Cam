@@ -12,6 +12,7 @@ import pyvirtualcam
 if platform.system() == 'Darwin':  # macOS
     import AVFoundation
 
+# Import Windows specific modules only when on windows platform
 if os.name == 'nt':  # Windows
     from pygrabber.dshow_graph import FilterGraph
 
