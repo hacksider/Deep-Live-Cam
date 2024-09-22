@@ -33,7 +33,10 @@ def get_face_enhancer() -> Any:
     with THREAD_LOCK:
         if FACE_ENHANCER is None:
             model_path = resolve_relative_path('../models/GFPGANv1.4.pth')
-            FACE_ENHANCER = gfpgan.GFPGANer(model_path=model_path, upscale=1)  # type: ignore[attr-defined]
+            FACE_ENHANCER = gfpgan.GFPGANer(
+                model_path=model_path,
+                upscale=modules.globals.enhancer_upscale_factor
+            )  # type: ignore[attr-defined]
     return FACE_ENHANCER
 
 def enhance_face(temp_frame: Frame) -> Frame:
