@@ -13,7 +13,7 @@ if platform.system() == 'Darwin':  # macOS
     import AVFoundation
 
 # Import Windows specific modules only when on windows platform
-if os.name == 'nt':  # Windows
+if platform.system() == 'Windows' or platform.system() == 'Linux':  # Windows or Linux
     from pygrabber.dshow_graph import FilterGraph
 
 
