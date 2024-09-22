@@ -71,8 +71,8 @@ def parse_args() -> None:
     program.add_argument('--execution-threads', help='Number of execution threads', dest='execution_threads', type=int,
                          default=suggest_execution_threads())
     program.add_argument('--headless', help='Run in headless mode', dest='headless', default=False, action='store_true')
-    program.add_argument('--enhancer_upscale_factor',
-                         help='Sets the upscale factor for the enhancer. Only applies if `face_enhancer` is set as a frame_processor',
+    program.add_argument('--enhancer-upscale-factor',
+                         help='Sets the upscale factor for the enhancer. Only applies if `face_enhancer` is set as a frame-processor',
                          dest='enhancer_upscale_factor', type=int, default=1)
     program.add_argument('-v', '--version', action='version',
                          version=f'{modules.metadata.name} {modules.metadata.version}')
