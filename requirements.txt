@@ -24,3 +24,4 @@ gfpgan==1.3.8
 pyobjc==9.1; sys_platform == 'darwin'
 pygrabber==0.2
 pyvirtualcam==0.12.0
+pyobjc-framework-AVFoundation==10.3.1; sys_platform == 'darwin'

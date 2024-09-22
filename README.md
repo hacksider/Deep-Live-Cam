@@ -164,6 +164,8 @@ options:
   --max-memory MAX_MEMORY                                  maximum amount of RAM in GB
   --execution-provider {cpu} [{cpu} ...]                   available execution provider (choices: cpu, ...)
   --execution-threads EXECUTION_THREADS                    number of execution threads
+  --headless                                               run in headless mode
+  --enhancer-upscale-factor                                Sets the upscale factor for the enhancer. Only applies if `face_enhancer` is set as a frame-processor
   -v, --version                                            show program's version number and exit
 ```
 

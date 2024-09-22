@@ -70,6 +70,10 @@ def parse_args() -> None:
                          choices=suggest_execution_providers(), nargs='+')
     program.add_argument('--execution-threads', help='Number of execution threads', dest='execution_threads', type=int,
                          default=suggest_execution_threads())
+    program.add_argument('--headless', help='Run in headless mode', dest='headless', default=False, action='store_true')
+    program.add_argument('--enhancer-upscale-factor',
+                         help='Sets the upscale factor for the enhancer. Only applies if `face_enhancer` is set as a frame-processor',
+                         dest='enhancer_upscale_factor', type=int, default=1)
     program.add_argument('-v', '--version', action='version',
                          version=f'{modules.metadata.name} {modules.metadata.version}')
 
@@ -98,7 +102,8 @@ def parse_args() -> None:
     modules.globals.max_memory = args.max_memory
     modules.globals.execution_providers = decode_execution_providers(args.execution_provider)
     modules.globals.execution_threads = args.execution_threads
-
+    modules.globals.headless = args.headless
+    modules.globals.enhancer_upscale_factor = args.enhancer_upscale_factor
     # Handle face enhancer tumbler
     modules.globals.fp_ui['face_enhancer'] = 'face_enhancer' in args.frame_processor
 

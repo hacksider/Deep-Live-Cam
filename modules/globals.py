@@ -30,3 +30,4 @@ fp_ui: Dict[str, bool] = {}
 nsfw = None
 camera_input_combobox = None
 webcam_preview_running = False
+enhancer_upscale_factor = 1
