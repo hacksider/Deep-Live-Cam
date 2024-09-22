@@ -6,14 +6,15 @@ from typing import Callable, Tuple, List, Any
 from types import ModuleType
 import cv2
 from PIL import Image, ImageOps
-from pygrabber.dshow_graph import FilterGraph
 import pyvirtualcam
 
 # Import OS-specific modules only when necessary
 if platform.system() == 'Darwin':  # macOS
-    import objc
-    from Foundation import NSObject
     import AVFoundation
+
+if os.name == 'nt':  # Windows
+    from pygrabber.dshow_graph import FilterGraph
+
 
 import modules.globals
 import modules.metadata
