@@ -164,6 +164,7 @@ options:
   --max-memory MAX_MEMORY                                  maximum amount of RAM in GB
   --execution-provider {cpu} [{cpu} ...]                   available execution provider (choices: cpu, ...)
   --execution-threads EXECUTION_THREADS                    number of execution threads
+  --headless                                               run in headless mode
   -v, --version                                            show program's version number and exit
 ```
 
