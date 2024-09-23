@@ -175,7 +175,7 @@ options:
 Looking for a CLI mode? Using the -s/--source argument will make the run program in cli mode.
 
 To improve the video quality, you can use the `super_resolution` frame processor after swapping the faces. It will enhance the video quality by 2x, 3x or 4x. You can set the upscale factor using the `-r` or `--super-resolution-scale-factor` argument. 
-Processing time will increase with the upscale factor, it's quite quick though.
+Processing time will increase with the upscale factor, but it's quite quick.
 
 ```
 
