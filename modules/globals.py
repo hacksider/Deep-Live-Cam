@@ -31,3 +31,4 @@ nsfw = None
 camera_input_combobox = None
 webcam_preview_running = False
 enhancer_upscale_factor = 1
+source_image_scaling_factor = 2

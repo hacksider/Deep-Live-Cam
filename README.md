@@ -152,7 +152,7 @@ options:
   -s SOURCE_PATH, --source SOURCE_PATH                     select an source image
   -t TARGET_PATH, --target TARGET_PATH                     select an target image or video
   -o OUTPUT_PATH, --output OUTPUT_PATH                     select output file or directory
-  --frame-processor FRAME_PROCESSOR [FRAME_PROCESSOR ...]  frame processors (choices: face_swapper, face_enhancer, ...)
+  --frame-processor FRAME_PROCESSOR [FRAME_PROCESSOR ...]  frame processors (choices: face_swapper, face_enhancer, super_resolution...)
   --keep-fps                                               keep original fps
   --keep-audio                                             keep original audio
   --keep-frames                                            keep temporary frames
@@ -166,6 +166,7 @@ options:
   --execution-threads EXECUTION_THREADS                    number of execution threads
   --headless                                               run in headless mode
   --enhancer-upscale-factor                                Sets the upscale factor for the enhancer. Only applies if `face_enhancer` is set as a frame-processor
+  --source-image-scaling-factor                            Set the upscale factor for source images. Only applies if `face_swapper` is set as a frame-processor
   -v, --version                                            show program's version number and exit
 ```
 

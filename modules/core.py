@@ -51,7 +51,7 @@ def parse_args() -> None:
     program.add_argument('-t', '--target', help='Select a target image or video', dest='target_path')
     program.add_argument('-o', '--output', help='Select output file or directory', dest='output_path')
     program.add_argument('--frame-processor', help='Pipeline of frame processors', dest='frame_processor',
-                         default=['face_swapper'], choices=['face_swapper', 'face_enhancer'], nargs='+')
+                         default=['face_swapper'], choices=['face_swapper', 'face_enhancer', 'super_resolution'], nargs='+')
     program.add_argument('--keep-fps', help='Keep original fps', dest='keep_fps', action='store_true', default=False)
     program.add_argument('--keep-audio', help='Keep original audio', dest='keep_audio', action='store_true', default=True)
     program.add_argument('--keep-frames', help='Keep temporary frames', dest='keep_frames', action='store_true', default=False)
@@ -74,6 +74,8 @@ def parse_args() -> None:
     program.add_argument('--enhancer-upscale-factor',
                          help='Sets the upscale factor for the enhancer. Only applies if `face_enhancer` is set as a frame-processor',
                          dest='enhancer_upscale_factor', type=int, default=1)
+    program.add_argument('--source-image-scaling-factor', help='Set the upscale factor for source images',
+                         dest='source_image_scaling_factor', default=2, type=int)
     program.add_argument('-v', '--version', action='version',
                          version=f'{modules.metadata.name} {modules.metadata.version}')
 
@@ -104,6 +106,7 @@ def parse_args() -> None:
     modules.globals.execution_threads = args.execution_threads
     modules.globals.headless = args.headless
     modules.globals.enhancer_upscale_factor = args.enhancer_upscale_factor
+    modules.globals.source_image_scaling_factor = args.source_image_scaling_factor
     # Handle face enhancer tumbler
     modules.globals.fp_ui['face_enhancer'] = 'face_enhancer' in args.frame_processor
 
