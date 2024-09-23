@@ -1,7 +1,7 @@
 --extra-index-url https://download.pytorch.org/whl/cu118
 
 numpy==1.23.5
-opencv-python==4.8.1.78
+opencv-contrib-python==4.10.0.84
 onnx==1.16.0
 insightface==0.7.3
 psutil==5.9.8

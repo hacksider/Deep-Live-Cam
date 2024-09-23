@@ -51,14 +51,19 @@ def parse_args() -> None:
     program.add_argument('-t', '--target', help='Select a target image or video', dest='target_path')
     program.add_argument('-o', '--output', help='Select output file or directory', dest='output_path')
     program.add_argument('--frame-processor', help='Pipeline of frame processors', dest='frame_processor',
-                         default=['face_swapper'], choices=['face_swapper', 'face_enhancer'], nargs='+')
+                         default=['face_swapper'], choices=['face_swapper', 'face_enhancer', 'super_resolution'],
+                         nargs='+')
     program.add_argument('--keep-fps', help='Keep original fps', dest='keep_fps', action='store_true', default=False)
-    program.add_argument('--keep-audio', help='Keep original audio', dest='keep_audio', action='store_true', default=True)
-    program.add_argument('--keep-frames', help='Keep temporary frames', dest='keep_frames', action='store_true', default=False)
-    program.add_argument('--many-faces', help='Process every face', dest='many_faces', action='store_true', default=False)
+    program.add_argument('--keep-audio', help='Keep original audio', dest='keep_audio', action='store_true',
+                         default=True)
+    program.add_argument('--keep-frames', help='Keep temporary frames', dest='keep_frames', action='store_true',
+                         default=False)
+    program.add_argument('--many-faces', help='Process every face', dest='many_faces', action='store_true',
+                         default=False)
     program.add_argument('--video-encoder', help='Adjust output video encoder', dest='video_encoder', default='libx264',
                          choices=['libx264', 'libx265', 'libvpx-vp9'])
-    program.add_argument('--video-quality', help='Adjust output video quality', dest='video_quality', type=int, default=18,
+    program.add_argument('--video-quality', help='Adjust output video quality', dest='video_quality', type=int,
+                         default=18,
                          choices=range(52), metavar='[0-51]')
     program.add_argument('--live-mirror', help='The live camera display as you see it in the front-facing camera frame',
                          dest='live_mirror', action='store_true', default=False)
@@ -74,6 +79,10 @@ def parse_args() -> None:
     program.add_argument('--enhancer-upscale-factor',
                          help='Sets the upscale factor for the enhancer. Only applies if `face_enhancer` is set as a frame-processor',
                          dest='enhancer_upscale_factor', type=int, default=1)
+    program.add_argument('--source-image-scaling-factor', help='Set the upscale factor for source images',
+                         dest='source_image_scaling_factor', default=2, type=int)
+    program.add_argument('-r', '--super-resolution-scale-factor', dest='super_resolution_scale_factor',
+                         help='Set the upscale factor for super resolution', default=4, choices=[2, 3, 4], type=int)
     program.add_argument('-v', '--version', action='version',
                          version=f'{modules.metadata.name} {modules.metadata.version}')
 
@@ -104,6 +113,8 @@ def parse_args() -> None:
     modules.globals.execution_threads = args.execution_threads
     modules.globals.headless = args.headless
     modules.globals.enhancer_upscale_factor = args.enhancer_upscale_factor
+    modules.globals.source_image_scaling_factor = args.source_image_scaling_factor
+    modules.globals.sr_scale_factor = args.super_resolution_scale_factor
     # Handle face enhancer tumbler
     modules.globals.fp_ui['face_enhancer'] = 'face_enhancer' in args.frame_processor
 
@@ -188,11 +199,13 @@ def limit_resources() -> None:
             try:
                 soft, hard = resource.getrlimit(resource.RLIMIT_DATA)
                 if memory > hard:
-                    print(f"Warning: Requested memory limit {memory / (1024 ** 3)} GB exceeds system's hard limit. Setting to maximum allowed {hard / (1024 ** 3)} GB.")
+                    print(
+                        f"Warning: Requested memory limit {memory / (1024 ** 3)} GB exceeds system's hard limit. Setting to maximum allowed {hard / (1024 ** 3)} GB.")
                     memory = hard
                 resource.setrlimit(resource.RLIMIT_DATA, (memory, memory))
             except ValueError as e:
                 print(f"Warning: Could not set memory limit: {e}. Continuing with default limits.")
+
 
 def release_resources() -> None:
     if 'cuda' in modules.globals.execution_providers:
@@ -247,7 +260,8 @@ def process_image_to_image() -> None:
 
     for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
         update_status('Processing...', frame_processor.NAME)
-        frame_processor.process_image(modules.globals.source_path, modules.globals.output_path, modules.globals.output_path)
+        frame_processor.process_image(modules.globals.source_path, modules.globals.output_path,
+                                      modules.globals.output_path)
         release_resources()
 
     if is_image(modules.globals.target_path):
