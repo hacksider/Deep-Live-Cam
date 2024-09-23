@@ -20,7 +20,7 @@ class SuperResolutionModel:
     _instance = None
     _lock = threading.Lock()
 
-    def __init__(self, sr_model_path: str = 'ESPCN_x4.pb'):
+    def __init__(self, sr_model_path: str = f'ESPCN_x{modules.globals.sr_scale_factor}.pb'):
         if SuperResolutionModel._instance is not None:
             raise Exception("This class is a singleton!")
         self.sr = cv2.dnn_superres.DnnSuperResImpl_create()
@@ -29,21 +29,20 @@ class SuperResolutionModel:
             raise FileNotFoundError(f"Super-resolution model not found at {self.model_path}")
         try:
             self.sr.readModel(self.model_path)
-            self.sr.setModel("espcn", 4)  # Using ESPCN with 4x upscaling
+            self.sr.setModel("espcn", modules.globals.sr_scale_factor)  # Using ESPCN with 2,3 or 4x upscaling
         except Exception as e:
             print(f"Error during super-resolution model initialization: {e}")
             raise e
 
     @classmethod
-    def get_instance(cls, sr_model_path: str = 'ESPCN_x4.pb'):
+    def get_instance(cls, sr_model_path: str = f'ESPCN_x{modules.globals.sr_scale_factor}.pb'):
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
                     try:
                         cls._instance = cls(sr_model_path)
                     except Exception as e:
-                        print(f"Failed to initialize SuperResolutionModel: {e}")
-                        return None
+                        raise RuntimeError(f"Failed to initialize SuperResolution: {str(e)}")
         return cls._instance
 
 
@@ -54,7 +53,7 @@ def pre_check() -> bool:
     download_directory_path = resolve_relative_path('../models')
     # Download the super-resolution model as well
     conditional_download(download_directory_path, [
-        'https://huggingface.co/spaces/PabloGabrielSch/AI_Resolution_Upscaler_And_Resizer/resolve/bcd13b766a9499196e8becbe453c4a848673b3b6/models/ESPCN_x4.pb'
+        f'https://huggingface.co/spaces/PabloGabrielSch/AI_Resolution_Upscaler_And_Resizer/resolve/bcd13b766a9499196e8becbe453c4a848673b3b6/models/ESPCN_x{modules.globals.sr_scale_factor}.pb'
     ])
     return True
 

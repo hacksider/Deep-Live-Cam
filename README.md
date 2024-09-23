@@ -146,6 +146,7 @@ You can now use the virtual camera output (uses pyvirtualcam) by turning on the 
 
 Additional command line arguments are given below. To learn out what they do, check [this guide](https://github.com/s0md3v/roop/wiki/Advanced-Options).
 
+
 ```
 options:
   -h, --help                                               show this help message and exit
@@ -167,10 +168,16 @@ options:
   --headless                                               run in headless mode
   --enhancer-upscale-factor                                Sets the upscale factor for the enhancer. Only applies if `face_enhancer` is set as a frame-processor
   --source-image-scaling-factor                            Set the upscale factor for source images. Only applies if `face_swapper` is set as a frame-processor
+  -r SCALE, --super-resolution-scale-factor SCALE          Super resolution scale factor, choices are 2, 3, 4
   -v, --version                                            show program's version number and exit
 ```
 
 Looking for a CLI mode? Using the -s/--source argument will make the run program in cli mode.
+
+To improve the video quality, you can use the `super_resolution` frame processor after swapping the faces. It will enhance the video quality by 2x, 3x or 4x. You can set the upscale factor using the `-r` or `--super-resolution-scale-factor` argument. 
+Processing time will increase with the upscale factor, it's quite quick though.
+
+```
 
 ## Credits
 - [henryruhs](https://github.com/henryruhs): for being an irreplaceable contributor to the project
