@@ -45,7 +45,7 @@ Track and change faces on the fly.
 
 ## Quick Start (Windows / Nvidia)
 
-[Download pre-built version with CUDA support](https://hacksider.gumroad.com/l/vccdmm)
+[Download latest pre-built version with CUDA support](https://hacksider.gumroad.com/l/vccdmm) - No Manual Installation/Downloading required.
 
 ## Installation (Manual)
 
