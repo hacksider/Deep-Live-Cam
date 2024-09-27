@@ -48,7 +48,7 @@ Track and change faces on the fly.
 [Download latest pre-built version with CUDA support](https://hacksider.gumroad.com/l/vccdmm) - No Manual Installation/Downloading required.
 
 ## Installation (Manual)
-
+Please be aware that the installation needs technical skills and is NOT for beginners. Please do NOT open platform and installation related issues on GitHub before discussing it on the discord server.
 ### Basic Installation (CPU)
 
 This is more likely to work on your computer but will be slower as it utilizes the CPU.
