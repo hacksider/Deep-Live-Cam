@@ -902,7 +902,7 @@ def init_preview() -> None:
         preview_slider.configure(to=video_frame_total)
         preview_slider.pack(fill="x")
         preview_slider.set(0)
-        # Disable slider if it's an image
+    # Disable slider if it's an image
     if is_image(modules.globals.target_path):
         preview_slider.configure(state="disabled")
     else:
