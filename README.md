@@ -45,10 +45,16 @@ Track and change faces on the fly.
 
 ## Quick Start (Windows / Nvidia)
 
+[![Download](https://github.com/user-attachments/assets/3e3e252a-4bfa-41fb-a88c-84557402a7c7)](https://hacksider.gumroad.com/l/vccdmm) 
+
+
+
+
+
 [Download latest pre-built version with CUDA support](https://hacksider.gumroad.com/l/vccdmm) - No Manual Installation/Downloading required.
 
 ## Installation (Manual)
-Please be aware that the installation needs technical skills and is NOT for beginners. Please do NOT open platform and installation related issues on GitHub before discussing it on the discord server.
+**Please be aware that the installation needs technical skills and is NOT for beginners, consider downloading the prebuilt. Please do NOT open platform and installation related issues on GitHub before discussing it on the discord server.**
 ### Basic Installation (CPU)
 
 This is more likely to work on your computer but will be slower as it utilizes the CPU.
@@ -386,3 +392,5 @@ This is an open-source project developed in our free time. Updates may be delaye
 <a href="https://github.com/hacksider/Deep-Live-Cam/graphs/contributors" target="_blank">
   <img src="https://contrib.rocks/image?repo=hacksider/Deep-Live-Cam" />
 </a>
+
+![Alt](https://repobeats.axiom.co/api/embed/fec8e29c45dfdb9c5916f3a7830e1249308d20e1.svg "Repobeats analytics image")
