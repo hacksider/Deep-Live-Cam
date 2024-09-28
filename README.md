@@ -1,9 +1,13 @@
+<h1 align="center">Deep Live Cam</h1>
 
-![demo-gif](demo.gif)
+<p align="center">
+  Real-time face swap and video deepfake with a single click and only a single image.
+</p>
 
-## Deep Live Cam
-
-Real-time face swap and video deepfake with a single click and only a single image.
+<p align="center">
+  <img src="demo.gif" alt="Demo GIF">
+  <img src="avgpcperformancedemo.gif" alt="Performance Demo GIF">
+</p>
 
 ## Disclaimer
 
@@ -14,40 +18,18 @@ We are aware of the potential for unethical applications and are committed to pr
 Users are expected to use this software responsibly and legally. If using a real person's face, obtain their consent and clearly label any output as a deepfake when sharing online. We are not responsible for end-user actions.
 
 
-## Features
-
-### Resizable Preview Window
-
-Dynamically improve performance using the `--live-resizable` parameter.
-
-![resizable-gif](resizable.gif)
-
-### Face Mapping
-
-Track and change faces on the fly.
-
-![face_mapping_source](face_mapping_source.gif)
-
-**Source Video:**
-
-![face-mapping](face_mapping.png)
-
-**Enable Face Mapping:**
-
-![face-mapping2](face_mapping2.png)
-
-**Map the Faces:**
-
-![face_mapping_result](face_mapping_result.gif)
-
-**See the Magic!**
-
 ## Quick Start (Windows / Nvidia)
 
-[Download pre-built version with CUDA support](https://hacksider.gumroad.com/l/vccdmm)
+[![Download](https://github.com/user-attachments/assets/3e3e252a-4bfa-41fb-a88c-84557402a7c7)](https://hacksider.gumroad.com/l/vccdmm) 
+
+
+
+
+
+[Download latest pre-built version with CUDA support](https://hacksider.gumroad.com/l/vccdmm) - No Manual Installation/Downloading required.
 
 ## Installation (Manual)
-
+**Please be aware that the installation needs technical skills and is NOT for beginners, consider downloading the prebuilt. Please do NOT open platform and installation related issues on GitHub before discussing it on the discord server.**
 ### Basic Installation (CPU)
 
 This is more likely to work on your computer but will be slower as it utilizes the CPU.
@@ -69,7 +51,7 @@ https://github.com/hacksider/Deep-Live-Cam.git
 **3. Download Models**
 
 1. [GFPGANv1.4](https://huggingface.co/hacksider/deep-live-cam/resolve/main/GFPGANv1.4.pth)
-2. [inswapper_128_fp16.onnx](https://huggingface.co/hacksider/deep-live-cam/resolve/main/inswapper_128_fp16.onnx) (Note: Use this [replacement version](https://github.com/facefusion/facefusion-assets/releases/download/models/inswapper_128_fp16.onnx) if you encounter issues)
+2. [inswapper_128_fp16.onnx](https://huggingface.co/hacksider/deep-live-cam/resolve/main/inswapper_128.onnx) (Note: Use this [replacement version](https://github.com/facefusion/facefusion-assets/releases/download/models/inswapper_128.onnx) if you encounter issues)
 
 Place these files in the "**models**" folder.
 
@@ -178,6 +160,35 @@ python run.py --execution-provider openvino
 - To change the face, select a new source image.
 
 ![demo-gif](demo.gif)
+
+## Features
+
+### Resizable Preview Window
+
+Dynamically improve performance using the `--live-resizable` parameter.
+
+![resizable-gif](resizable.gif)
+
+### Face Mapping
+
+Track and change faces on the fly.
+
+![face_mapping_source](face_mapping_source.gif)
+
+**Source Video:**
+
+![face-mapping](face_mapping.png)
+
+**Enable Face Mapping:**
+
+![face-mapping2](face_mapping2.png)
+
+**Map the Faces:**
+
+![face_mapping_result](face_mapping_result.gif)
+
+**See the Magic!**
+
 
 ## Command Line Arguments
 
@@ -385,3 +396,5 @@ This is an open-source project developed in our free time. Updates may be delaye
 <a href="https://github.com/hacksider/Deep-Live-Cam/graphs/contributors" target="_blank">
   <img src="https://contrib.rocks/image?repo=hacksider/Deep-Live-Cam" />
 </a>
+
+![Alt](https://repobeats.axiom.co/api/embed/fec8e29c45dfdb9c5916f3a7830e1249308d20e1.svg "Repobeats analytics image")

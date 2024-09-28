@@ -5,7 +5,7 @@ from typing import Callable, Tuple
 import cv2
 from PIL import Image, ImageOps
 import tkinterdnd2 as tkdnd
-
+import time
 import modules.globals
 import modules.metadata
 from modules.face_analyser import (
@@ -24,6 +24,10 @@ from modules.utilities import (
     resolve_relative_path,
     has_image_extension,
 )
+
+os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
+os.environ["QT_SCREEN_SCALE_FACTORS"] = "1"
+os.environ["QT_SCALE_FACTOR"] = "1"
 
 ROOT = None
 POPUP = None
@@ -219,6 +223,7 @@ def create_root(
     root.configure(bg="#1a1a1a")
     root.protocol("WM_DELETE_WINDOW", lambda: destroy())
     root.resizable(True, True)
+    root.attributes("-alpha", 1.0)  # Set window opacity to fully opaque
 
     main_frame = ctk.CTkFrame(root, fg_color="#1a1a1a")
     main_frame.pack(fill="both", expand=True, padx=20, pady=20)
@@ -677,6 +682,29 @@ def create_preview(parent: ctk.CTkToplevel) -> ctk.CTkToplevel:
     )
     preview_slider.pack(fill="x", padx=20, pady=10)
 
+    last_update_time = 0
+    debounce_delay = 0.1  # Adjust this delay as needed (in seconds)
+
+    def on_key_press(event):
+        nonlocal last_update_time
+
+        current_time = time.time()
+        if current_time - last_update_time > debounce_delay:
+            current_frame = int(preview_slider.get())
+            if event.keysym == "Left":
+                new_frame = max(0, current_frame - 1)
+            elif event.keysym == "Right":
+                new_frame = min(int(preview_slider.cget("to")), current_frame + 1)
+            else:
+                return  # Ignore other key presses
+
+            preview_slider.set(new_frame)
+            update_preview(new_frame)
+            last_update_time = current_time
+
+    preview.bind("<Left>", on_key_press)
+    preview.bind("<Right>", on_key_press)
+
     return preview
 
 
@@ -874,20 +902,53 @@ def init_preview() -> None:
         preview_slider.configure(to=video_frame_total)
         preview_slider.pack(fill="x")
         preview_slider.set(0)
+    # Disable slider if it's an image
+    if is_image(modules.globals.target_path):
+        preview_slider.configure(state="disabled")
+    else:
+        preview_slider.configure(state="normal")
 
 
 def update_preview(frame_number: int = 0) -> None:
     if modules.globals.source_path and modules.globals.target_path:
         update_status("Processing...")
-        temp_frame = get_video_frame(modules.globals.target_path, frame_number)
+
+        # Debug: Print the target path and frame number
+        print(
+            f"Target path: {modules.globals.target_path}, Frame number: {frame_number}"
+        )
+
+        temp_frame = None
+        if is_video(modules.globals.target_path):
+            temp_frame = get_video_frame(modules.globals.target_path, frame_number)
+        elif is_image(modules.globals.target_path):
+            temp_frame = cv2.imread(modules.globals.target_path)
+
+        # Debug: Check if temp_frame is None
+        if temp_frame is None:
+            print("Error: temp_frame is None")
+            update_status("Error: Could not read frame from video or image.")
+            return
+
         if modules.globals.nsfw_filter and check_and_ignore_nsfw(temp_frame):
             return
+
         for frame_processor in get_frame_processors_modules(
             modules.globals.frame_processors
         ):
+            # Debug: Print the type of frame_processor
+            print(f"Processing frame with: {type(frame_processor).__name__}")
+
             temp_frame = frame_processor.process_frame(
                 get_one_face(cv2.imread(modules.globals.source_path)), temp_frame
             )
+
+            # Debug: Check if temp_frame is None after processing
+            if temp_frame is None:
+                print("Error: temp_frame is None after processing")
+                update_status("Error: Frame processing failed.")
+                return
+
         image = Image.fromarray(cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB))
         image = ImageOps.contain(
             image, (PREVIEW_MAX_WIDTH, PREVIEW_MAX_HEIGHT), Image.LANCZOS
