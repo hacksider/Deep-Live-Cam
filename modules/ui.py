@@ -774,12 +774,13 @@ def swap_faces_paths() -> None:
 
 def select_target_path() -> None:
     global RECENT_DIRECTORY_TARGET, img_ft, vid_ft
-
+    combined_types = ('Media',(img_ft[-1] + vid_ft[-1])
+)
     PREVIEW.withdraw()
     target_path = ctk.filedialog.askopenfilename(
         title="select an target image or video",
         initialdir=RECENT_DIRECTORY_TARGET,
-        filetypes=[img_ft, vid_ft],
+        filetypes=[combined_types],
     )
     if is_image(target_path):
         modules.globals.target_path = target_path
