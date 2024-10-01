@@ -51,24 +51,12 @@ camera = None
 def check_camera_permissions():
     """Check and request camera access permission on macOS."""
     if platform.system() == 'Darwin':  # macOS-specific
-        auth_status = AVFoundation.AVCaptureDevice.authorizationStatusForMediaType_(AVFoundation.AVMediaTypeVideo)
-
-        if auth_status == AVFoundation.AVAuthorizationStatusNotDetermined:
-            # Request access to the camera
-            def completion_handler(granted):
-                if granted:
-                    print("Access granted to the camera.")
-                else:
-                    print("Access denied to the camera.")
-            
-            AVFoundation.AVCaptureDevice.requestAccessForMediaType_completionHandler_(AVFoundation.AVMediaTypeVideo, completion_handler)
-        elif auth_status == AVFoundation.AVAuthorizationStatusAuthorized:
-            print("Camera access already authorized.")
-        elif auth_status == AVFoundation.AVAuthorizationStatusDenied:
-            print("Camera access denied. Please enable it in System Preferences.")
-        elif auth_status == AVFoundation.AVAuthorizationStatusRestricted:
-            print("Camera access restricted. The app is not allowed to use the camera.")
-
+        try:
+            result = subprocess.run(['tccutil', 'get', 'Camera', 'com.apple.Terminal'], capture_output=True, text=True)
+            if 'denied' in result.stdout.lower():
+                raise PermissionError("Camera access denied")
+        except subprocess.CalledProcessError:
+            raise RuntimeError("Failed to check camera permissions")
 
 def select_camera(camera_name: str):
     """Select the appropriate camera based on its name (cross-platform)."""
@@ -352,27 +340,31 @@ def webcam_preview_loop(camera: cv2.VideoCapture, source_image: Any, frame_proce
 
     ret, frame = camera.read()
     if not ret:
-        update_status(f"Error: Frame not received from camera.")
+        update_status("Error: Frame not received from camera.")
         return False
 
-    temp_frame = frame.copy()
-
+    # Perform operations only if necessary
     if modules.globals.live_mirror:
-        temp_frame = cv2.flip(temp_frame, 1) # horizontal flipping
+        frame = cv2.flip(frame, 1)  # horizontal flipping
 
     if modules.globals.live_resizable:
-        temp_frame = fit_image_to_size(temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height())
+        frame = fit_image_to_size(frame, PREVIEW.winfo_width(), PREVIEW.winfo_height())
 
+    # Process the frame using the frame processors
     for frame_processor in frame_processors:
-        temp_frame = frame_processor.process_frame(source_image, temp_frame)
+        frame = frame_processor.process_frame(source_image, frame)
 
-    image = Image.fromarray(cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB))
-    image = ImageOps.contain(image, (temp_frame.shape[1], temp_frame.shape[0]), Image.LANCZOS)
-    image = ctk.CTkImage(image, size=image.size)
-    preview_label.configure(image=image)
+    # Convert to RGB only once and resize efficiently
+    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    image = Image.fromarray(rgb_frame)
+    image = ImageOps.contain(image, (PREVIEW_MAX_WIDTH, PREVIEW_MAX_HEIGHT), Image.LANCZOS)
+    tk_image = ctk.CTkImage(image, size=image.size)
+    preview_label.configure(image=tk_image)
+
     if virtual_cam:
-        virtual_cam.send(temp_frame)
+        virtual_cam.send(frame)
         virtual_cam.sleep_until_next_frame()
+
     ROOT.update()
 
     if PREVIEW.state() == 'withdrawn':
@@ -463,32 +455,16 @@ def get_camera_index_by_name(camera_name: str) -> int:
 def get_available_cameras():
     """Get available camera names (cross-platform)."""
     available_cameras = []
-    if platform.system() == 'Darwin':  # macOS-specific
-        devices = AVFoundation.AVCaptureDevice.devicesWithMediaType_(AVFoundation.AVMediaTypeVideo)
-        
-        for device in devices:
-            if device.deviceType() == AVFoundation.AVCaptureDeviceTypeBuiltInWideAngleCamera:
-                print(f"Found Built-In Camera: {device.localizedName()}")
-                available_cameras.append(device.localizedName())
-            elif device.deviceType() == "AVCaptureDeviceTypeExternal":
-                print(f"Found External Camera: {device.localizedName()}")
-                available_cameras.append(device.localizedName())
-            elif device.deviceType() == "AVCaptureDeviceTypeContinuityCamera":
-                print(f"Skipping Continuity Camera: {device.localizedName()}")
-    elif platform.system() == 'Windows' or platform.system() == 'Linux':
-        try:  
-            devices = FilterGraph().get_input_devices()  
-        except Exception as e:  
-            # Use OpenCV to detect camera indexes
-            index = 0
-            devices = [] 
-            while True:
-                cap = cv2.VideoCapture(index)
-                if not cap.isOpened():
-                    break
-                devices.append(f"Camera {index}")
-                cap.release()
-                index += 1
-
-        available_cameras = devices
+    if platform.system() == "Windows":
+        import wmi
+        c = wmi.WMI()
+        for camera in c.Win32_PnPEntity(PNPClass="Image"):
+            available_cameras.append(camera.Name)
+    elif platform.system() == "Darwin":  # macOS
+        import subprocess
+        output = subprocess.check_output(["system_profiler", "SPCameraDataType"]).decode()
+        available_cameras = [line.split(":")[1].strip() for line in output.split("\n") if "Camera Name" in line]
+    else:  # Linux and others
+        import glob
+        available_cameras = [f"/dev/video{i}" for i in range(10) if os.path.exists(f"/dev/video{i}")]
     return available_cameras
