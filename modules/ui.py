@@ -336,6 +336,13 @@ def update_preview(frame_number: int = 0) -> None:
         preview_label.configure(image=image)
 
 def webcam_preview_loop(camera: cv2.VideoCapture, source_image: Any, frame_processors: List[ModuleType], virtual_cam: pyvirtualcam.Camera = None) -> bool:
+    try:
+        return _process_webcam_frames(camera, source_image, frame_processors, virtual_cam)
+    except Exception as e:
+        update_status(f"Error in webcam preview: {str(e)}")
+        return False
+
+def _process_webcam_frames(camera, source_image, frame_processors, virtual_cam):
     global preview_label, PREVIEW
 
     ret, frame = camera.read()
@@ -352,7 +359,10 @@ def webcam_preview_loop(camera: cv2.VideoCapture, source_image: Any, frame_proce
 
     # Process the frame using the frame processors
     for frame_processor in frame_processors:
-        frame = frame_processor.process_frame(source_image, frame)
+        try:
+            frame = frame_processor.process_frame(source_image, frame)
+        except Exception as e:
+            update_status(f"Error processing frame: {str(e)}")
 
     # Convert to RGB only once and resize efficiently
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -371,6 +381,7 @@ def webcam_preview_loop(camera: cv2.VideoCapture, source_image: Any, frame_proce
         return False
     
     return True
+
 
 def fit_image_to_size(image, width: int, height: int):
     if width is None and height is None:
@@ -428,12 +439,17 @@ def webcam_preview(camera_name: str, virtual_cam_output: bool):
     preview_running = True
 
     if virtual_cam_output:
-        with pyvirtualcam.Camera(width=WIDTH, height=HEIGHT, fps=FPS, fmt=pyvirtualcam.PixelFormat.BGR) as virtual_cam:
+        if not PERFORMANCE_MODE:
+            with pyvirtualcam.Camera(width=WIDTH, height=HEIGHT, fps=FPS, fmt=pyvirtualcam.PixelFormat.BGR) as virtual_cam:
+                while preview_running:
+                    preview_running = webcam_preview_loop(camera, source_image, frame_processors, virtual_cam)
+        else:
             while preview_running:
-                preview_running = webcam_preview_loop(camera, source_image, frame_processors, virtual_cam)
+                preview_running = webcam_preview_loop(camera, source_image, frame_processors)
+    else:
+        while preview_running:
+            preview_running = webcam_preview_loop(camera, source_image, frame_processors)
 
-    while preview_running:
-        preview_running = webcam_preview_loop(camera, source_image, frame_processors)
 
     if camera: camera.release()
     PREVIEW.withdraw()
