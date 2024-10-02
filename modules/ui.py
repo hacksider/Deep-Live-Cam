@@ -407,7 +407,7 @@ def create_root(
     # --- Camera Selection ---
     camera_label = ctk.CTkLabel(root, text="Select Camera:")
     camera_label.place(relx=0.4, rely=0.86, relwidth=0.2, relheight=0.05)
-    available_cameras = get_available_cameras(10)
+    available_cameras = get_available_cameras()
     # Convert camera indices to strings for CTkOptionMenu
     available_camera_indices, available_camera_strings = available_cameras
     camera_variable = ctk.StringVar(
