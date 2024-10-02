@@ -2,6 +2,7 @@
 
 numpy>=1.23.5,<2
 opencv-python==4.8.1.78
+cv2_enumerate_cameras==1.1.15
 onnx==1.16.0
 insightface==0.7.3
 psutil==5.9.8

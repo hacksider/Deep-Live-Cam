@@ -3,6 +3,7 @@ import webbrowser
 import customtkinter as ctk
 from typing import Callable, Tuple
 import cv2
+from cv2_enumerate_cameras import enumerate_cameras
 from PIL import Image, ImageOps
 import tkinterdnd2 as tkdnd
 import time
@@ -408,7 +409,7 @@ def create_root(
     camera_label.place(relx=0.4, rely=0.86, relwidth=0.2, relheight=0.05)
     available_cameras = get_available_cameras()
     # Convert camera indices to strings for CTkOptionMenu
-    available_camera_strings = [str(cam) for cam in available_cameras]
+    available_camera_indices, available_camera_strings = available_cameras
     camera_variable = ctk.StringVar(
         value=available_camera_strings[0]
         if available_camera_strings
@@ -424,6 +425,12 @@ def create_root(
         button_frame,
         text="Live",
         cursor="hand2",
+        command=lambda: webcam_preview(
+            root,
+            available_camera_indices[
+                available_camera_strings.index(camera_variable.get())
+            ],
+        ),
     )
     live_button.pack(side="left", padx=10, expand=True)
 
@@ -1011,14 +1018,17 @@ def webcam_preview(root: ctk.CTk, camera_index: int):
 
 
 def get_available_cameras():
-    """Returns a list of available camera indices."""
-    available_cameras = []
-    for index in range(10):  # Check for cameras with index 0 to 9
-        camera = cv2.VideoCapture(index)
-        if camera.isOpened():
-            available_cameras.append(index)
-            camera.release()
-    return available_cameras
+    """Returns a list of available camera names and indices."""
+    camera_indices = []
+    camera_names = []
+
+    for camera in enumerate_cameras():
+        cap = cv2.VideoCapture(camera.index)
+        if cap.isOpened():
+            camera_indices.append(camera.index)
+            camera_names.append(camera.name)
+            cap.release()
+    return (camera_indices, camera_names)
 
 
 # Add this function to update the opacity value
