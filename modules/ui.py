@@ -336,53 +336,49 @@ def update_preview(frame_number: int = 0) -> None:
         image = ctk.CTkImage(image, size=image.size)
         preview_label.configure(image=image)
 
-def webcam_preview_loop(camera: cv2.VideoCapture, source_image: Any, frame_processors: List[ModuleType], virtual_cam: pyvirtualcam.Camera = None) -> bool:
+def webcam_preview_loop(
+    camera: cv2.VideoCapture,
+    source_image: Any,
+    frame_processors: List[ModuleType],
+    virtual_cam: Optional[pyvirtualcam.Camera] = None
+) -> bool:
     try:
         return _process_webcam_frames(camera, source_image, frame_processors, virtual_cam)
     except Exception as e:
-        update_status(f"Error in webcam preview: {str(e)}")
+        logging.error(f"Error in webcam preview: {str(e)}")
         return False
 
-def _process_webcam_frames(camera, source_image, frame_processors, virtual_cam):
-    global preview_label, PREVIEW
+def _process_webcam_frames(
+    camera: cv2.VideoCapture,
+    source_image: Any,
+    frame_processors: List[ModuleType],
+    virtual_cam: Optional[pyvirtualcam.Camera] = None
+) -> bool:
+    while True:
+        ret, frame = camera.read()
+        if not ret:
+            logging.error("Failed to read frame from camera")
+            return False
+        
+        # Apply any frame processors
+        for processor in frame_processors:
+            frame = processor.process(frame, source_image)
+        
+        # Show frame preview
+        cv2.imshow('Webcam Preview', frame)
 
-    ret, frame = camera.read()
-    if not ret:
-        update_status("Error: Frame not received from camera.")
-        return False
+        # Send frame to virtual camera if available
+        if virtual_cam:
+            virtual_cam.send(frame)
+            virtual_cam.sleep_until_next_frame()
 
-    # Perform operations only if necessary
-    if modules.globals.live_mirror:
-        frame = cv2.flip(frame, 1)  # horizontal flipping
+        # Break loop on key press
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
 
-    if modules.globals.live_resizable:
-        frame = fit_image_to_size(frame, PREVIEW.winfo_width(), PREVIEW.winfo_height())
-
-    # Process the frame using the frame processors
-    for frame_processor in frame_processors:
-        try:
-            frame = frame_processor.process_frame(source_image, frame)
-        except Exception as e:
-            update_status(f"Error processing frame: {str(e)}")
-
-    # Convert to RGB only once and resize efficiently
-    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    image = Image.fromarray(rgb_frame)
-    image = ImageOps.contain(image, (PREVIEW_MAX_WIDTH, PREVIEW_MAX_HEIGHT), Image.LANCZOS)
-    tk_image = ctk.CTkImage(image, size=image.size)
-    preview_label.configure(image=tk_image)
-
-    if virtual_cam:
-        virtual_cam.send(frame)
-        virtual_cam.sleep_until_next_frame()
-
-    ROOT.update()
-
-    if PREVIEW.state() == 'withdrawn':
-        return False
-    
+    camera.release()
+    cv2.destroyAllWindows()
     return True
-
 
 def fit_image_to_size(image, width: int, height: int):
     if width is None and height is None:
