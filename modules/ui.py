@@ -411,6 +411,30 @@ def create_root(
     )
     live_button.pack(side="left", padx=10, expand=True)
 
+    # --- Camera Selection ---
+    camera_label = ctk.CTkLabel(root, text="Select Camera:")
+    camera_label.place(relx=0.4, rely=0.86, relwidth=0.2, relheight=0.05)
+    available_cameras = get_available_cameras()
+    # Convert camera indices to strings for CTkOptionMenu
+    available_camera_strings = [str(cam) for cam in available_cameras]
+    camera_variable = ctk.StringVar(
+        value=available_camera_strings[0]
+        if available_camera_strings
+        else "No cameras found"
+    )
+    camera_optionmenu = ctk.CTkOptionMenu(
+        root, variable=camera_variable, values=available_camera_strings
+    )
+    camera_optionmenu.place(relx=0.65, rely=0.86, relwidth=0.2, relheight=0.05)
+    live_button = ctk.CTkButton(
+        root,
+        text="Live",
+        cursor="hand2",
+        command=lambda: webcam_preview(int(camera_variable.get())),
+    )
+    live_button.place(relx=0.15, rely=0.86, relwidth=0.2, relheight=0.05)
+    # --- End Camera Selection ---
+
     stop_button = ModernButton(
         button_frame,
         text="Destroy",
@@ -983,7 +1007,7 @@ def update_preview(frame_number: int = 0) -> None:
         PREVIEW.deiconify()
 
 
-def webcam_preview(root: ctk.CTk):
+def webcam_preview(root: ctk.CTk, camera_index: int):
     if not modules.globals.map_faces:
         if modules.globals.source_path is None:
             # No image selected
@@ -992,6 +1016,17 @@ def webcam_preview(root: ctk.CTk):
     else:
         modules.globals.souce_target_map = []
         create_source_target_popup_for_webcam(root, modules.globals.souce_target_map)
+
+
+def get_available_cameras():
+    """Returns a list of available camera indices."""
+    available_cameras = []
+    for index in range(10):  # Check for cameras with index 0 to 9
+        camera = cv2.VideoCapture(index)
+        if camera.isOpened():
+            available_cameras.append(index)
+            camera.release()
+    return available_cameras
 
 
 # Add this function to update the opacity value
@@ -1003,7 +1038,10 @@ def update_opacity(value):
 def create_webcam_preview():
     global preview_label, PREVIEW
 
-    camera = cv2.VideoCapture(0)
+    camera = cv2.VideoCapture(camera_index)
+    if not camera.isOpened():
+        update_status(f"Error: Could not open camera with index {camera_index}")
+        return
     camera.set(cv2.CAP_PROP_FRAME_WIDTH, PREVIEW_DEFAULT_WIDTH)
     camera.set(cv2.CAP_PROP_FRAME_HEIGHT, PREVIEW_DEFAULT_HEIGHT)
     camera.set(cv2.CAP_PROP_FPS, 60)
