@@ -371,11 +371,11 @@ For the latest experimental builds and features, see the [experimental branch](h
 
 **TODO:**
 
-- [x] Support multiple faces 
 - [ ] Develop a version for web app/service
-- [ ] UI/UX enhancements for desktop app
 - [ ] Speed up model loading
 - [ ] Speed up real-time face swapping
+- [x] Support multiple faces 
+- [x] UI/UX enhancements for desktop app
 
 This is an open-source project developed in our free time. Updates may be delayed.
 
