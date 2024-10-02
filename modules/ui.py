@@ -25,6 +25,7 @@ from modules.utilities import (
     has_image_extension,
 )
 
+modules.globals.face_opacity = 100
 os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
 os.environ["QT_SCREEN_SCALE_FACTORS"] = "1"
 os.environ["QT_SCALE_FACTOR"] = "1"
@@ -453,6 +454,29 @@ def create_root(
         hover_color="#d32f2f",
     )
     remove_donate_button.pack(side="right", padx=(10, 0))
+
+    # Add opacity slider
+    opacity_frame = ctk.CTkFrame(options_column, fg_color="#2a2d2e")
+    opacity_frame.pack(pady=5, anchor="w", fill="x")
+
+    opacity_label = ctk.CTkLabel(
+        opacity_frame, text="Face Opacity:", font=("Roboto", 14, "bold")
+    )
+    opacity_label.pack(side="left", padx=(0, 10))
+
+    opacity_slider = ctk.CTkSlider(
+        opacity_frame,
+        from_=0,
+        to=100,
+        number_of_steps=100,
+        command=update_opacity,
+        fg_color=("gray75", "gray25"),
+        progress_color="#3a7ebf",
+        button_color="#3a7ebf",
+        button_hover_color="#2b5d8b",
+    )
+    opacity_slider.pack(side="left", fill="x", expand=True)
+    opacity_slider.set(modules.globals.face_opacity)
 
     main_frame.grid_columnconfigure((0, 2), weight=1)
     main_frame.grid_rowconfigure((0, 1, 2), weight=1)
@@ -970,64 +994,83 @@ def webcam_preview(root: ctk.CTk):
         create_source_target_popup_for_webcam(root, modules.globals.souce_target_map)
 
 
+# Add this function to update the opacity value
+def update_opacity(value):
+    modules.globals.face_opacity = int(value)
+
+
+# Modify the create_webcam_preview function to include the slider
 def create_webcam_preview():
     global preview_label, PREVIEW
 
-    camera = cv2.VideoCapture(
-        0
-    )  # Use index for the webcam (adjust the index accordingly if necessary)
-    camera.set(
-        cv2.CAP_PROP_FRAME_WIDTH, PREVIEW_DEFAULT_WIDTH
-    )  # Set the width of the resolution
-    camera.set(
-        cv2.CAP_PROP_FRAME_HEIGHT, PREVIEW_DEFAULT_HEIGHT
-    )  # Set the height of the resolution
-    camera.set(cv2.CAP_PROP_FPS, 60)  # Set the frame rate of the webcam
+    camera = cv2.VideoCapture(0)
+    camera.set(cv2.CAP_PROP_FRAME_WIDTH, PREVIEW_DEFAULT_WIDTH)
+    camera.set(cv2.CAP_PROP_FRAME_HEIGHT, PREVIEW_DEFAULT_HEIGHT)
+    camera.set(cv2.CAP_PROP_FPS, 60)
 
-    preview_label.configure(
-        width=PREVIEW_DEFAULT_WIDTH, height=PREVIEW_DEFAULT_HEIGHT
-    )  # Reset the preview image before startup
+    PREVIEW.deiconify()
 
-    PREVIEW.deiconify()  # Open preview window
+    # Remove any existing widgets in PREVIEW window
+    for widget in PREVIEW.winfo_children():
+        widget.destroy()
+
+    # Create a main frame to hold all widgets
+    main_frame = ctk.CTkFrame(PREVIEW)
+    main_frame.pack(fill="both", expand=True)
+
+    # Create a frame for the preview label
+    preview_frame = ctk.CTkFrame(main_frame)
+    preview_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+    preview_label = ctk.CTkLabel(preview_frame, text="")
+    preview_label.pack(fill="both", expand=True)
 
     frame_processors = get_frame_processors_modules(modules.globals.frame_processors)
 
-    source_image = None  # Initialize variable for the selected face image
+    source_image = None
+
+    def update_frame_size(event):
+        nonlocal temp_frame
+        if modules.globals.live_resizable:
+            temp_frame = fit_image_to_size(temp_frame, event.width, event.height)
+
+    preview_frame.bind("<Configure>", update_frame_size)
 
     while camera:
         ret, frame = camera.read()
         if not ret:
             break
 
-        temp_frame = frame.copy()  # Create a copy of the frame
+        temp_frame = frame.copy()
 
         if modules.globals.live_mirror:
-            temp_frame = cv2.flip(temp_frame, 1)  # horizontal flipping
-
-        if modules.globals.live_resizable:
-            temp_frame = fit_image_to_size(
-                temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
-            )
+            temp_frame = cv2.flip(temp_frame, 1)
 
         if not modules.globals.map_faces:
-            # Select and save face image only once
             if source_image is None and modules.globals.source_path:
                 source_image = get_one_face(cv2.imread(modules.globals.source_path))
 
+            original_frame = temp_frame.copy()
             for frame_processor in frame_processors:
                 temp_frame = frame_processor.process_frame(source_image, temp_frame)
+
+            # Apply opacity
+            opacity = modules.globals.face_opacity / 100
+            temp_frame = cv2.addWeighted(
+                temp_frame, opacity, original_frame, 1 - opacity, 0
+            )
         else:
             modules.globals.target_path = None
 
             for frame_processor in frame_processors:
                 temp_frame = frame_processor.process_frame_v2(temp_frame)
 
-        image = cv2.cvtColor(
-            temp_frame, cv2.COLOR_BGR2RGB
-        )  # Convert the image to RGB format to display it with Tkinter
+        image = cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB)
         image = Image.fromarray(image)
         image = ImageOps.contain(
-            image, (temp_frame.shape[1], temp_frame.shape[0]), Image.LANCZOS
+            image,
+            (preview_frame.winfo_width(), preview_frame.winfo_height()),
+            Image.LANCZOS,
         )
         image = ctk.CTkImage(image, size=image.size)
         preview_label.configure(image=image)
@@ -1037,7 +1080,7 @@ def create_webcam_preview():
             break
 
     camera.release()
-    PREVIEW.withdraw()  # Close preview window when loop is finished
+    PREVIEW.withdraw()
 
 
 def create_source_target_popup_for_webcam(root: ctk.CTk, map: list) -> None:
