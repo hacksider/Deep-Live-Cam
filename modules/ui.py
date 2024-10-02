@@ -455,6 +455,29 @@ def create_root(
     )
     remove_donate_button.pack(side="right", padx=(10, 0))
 
+    # Add opacity slider
+    opacity_frame = ctk.CTkFrame(options_column, fg_color="#2a2d2e")
+    opacity_frame.pack(pady=5, anchor="w", fill="x")
+
+    opacity_label = ctk.CTkLabel(
+        opacity_frame, text="Face Opacity:", font=("Roboto", 14, "bold")
+    )
+    opacity_label.pack(side="left", padx=(0, 10))
+
+    opacity_slider = ctk.CTkSlider(
+        opacity_frame,
+        from_=0,
+        to=100,
+        number_of_steps=100,
+        command=update_opacity,
+        fg_color=("gray75", "gray25"),
+        progress_color="#3a7ebf",
+        button_color="#3a7ebf",
+        button_hover_color="#2b5d8b",
+    )
+    opacity_slider.pack(side="left", fill="x", expand=True)
+    opacity_slider.set(modules.globals.face_opacity)
+
     main_frame.grid_columnconfigure((0, 2), weight=1)
     main_frame.grid_rowconfigure((0, 1, 2), weight=1)
 
@@ -1001,27 +1024,6 @@ def create_webcam_preview():
 
     preview_label = ctk.CTkLabel(preview_frame, text="")
     preview_label.pack(fill="both", expand=True)
-
-    # Create a frame for the slider
-    slider_frame = ctk.CTkFrame(main_frame)
-    slider_frame.pack(fill="x", padx=10, pady=(0, 10))
-
-    opacity_label = ctk.CTkLabel(slider_frame, text="Face Opacity:")
-    opacity_label.pack(side="left", padx=(0, 10))
-
-    opacity_slider = ctk.CTkSlider(
-        slider_frame,
-        from_=0,
-        to=100,
-        number_of_steps=10,
-        command=update_opacity,
-        fg_color=("gray75", "gray25"),
-        progress_color=("DodgerBlue", "DodgerBlue"),
-        button_color=("DodgerBlue", "DodgerBlue"),
-        button_hover_color=("RoyalBlue", "RoyalBlue"),
-    )
-    opacity_slider.pack(side="left", fill="x", expand=True)
-    opacity_slider.set(modules.globals.face_opacity)
 
     frame_processors = get_frame_processors_modules(modules.globals.frame_processors)
 
