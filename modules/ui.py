@@ -403,14 +403,6 @@ def create_root(
     )
     preview_button.pack(side="left", padx=10, expand=True)
 
-    live_button = ModernButton(
-        button_frame,
-        text="Live",
-        cursor="hand2",
-        command=lambda: webcam_preview(root),
-    )
-    live_button.pack(side="left", padx=10, expand=True)
-
     # --- Camera Selection ---
     camera_label = ctk.CTkLabel(root, text="Select Camera:")
     camera_label.place(relx=0.4, rely=0.86, relwidth=0.2, relheight=0.05)
@@ -426,14 +418,14 @@ def create_root(
         root, variable=camera_variable, values=available_camera_strings
     )
     camera_optionmenu.place(relx=0.65, rely=0.86, relwidth=0.2, relheight=0.05)
-    live_button = ctk.CTkButton(
-        root,
+    # --- End Camera Selection ---
+
+    live_button = ModernButton(
+        button_frame,
         text="Live",
         cursor="hand2",
-        command=lambda: webcam_preview(int(camera_variable.get())),
     )
-    live_button.place(relx=0.15, rely=0.86, relwidth=0.2, relheight=0.05)
-    # --- End Camera Selection ---
+    live_button.pack(side="left", padx=10, expand=True)
 
     stop_button = ModernButton(
         button_frame,
@@ -1012,7 +1004,7 @@ def webcam_preview(root: ctk.CTk, camera_index: int):
         if modules.globals.source_path is None:
             # No image selected
             return
-        create_webcam_preview()
+        create_webcam_preview(camera_index)
     else:
         modules.globals.souce_target_map = []
         create_source_target_popup_for_webcam(root, modules.globals.souce_target_map)
@@ -1035,7 +1027,7 @@ def update_opacity(value):
 
 
 # Modify the create_webcam_preview function to include the slider
-def create_webcam_preview():
+def create_webcam_preview(camera_index):
     global preview_label, PREVIEW
 
     camera = cv2.VideoCapture(camera_index)
