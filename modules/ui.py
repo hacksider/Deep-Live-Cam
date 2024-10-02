@@ -1,8 +1,9 @@
 import os
 import platform
+import logging
 import webbrowser
 import customtkinter as ctk
-from typing import Callable, Tuple, List, Any
+from typing import Callable, Tuple, List, Any, Optional
 from types import ModuleType
 import cv2
 from PIL import Image, ImageOps
@@ -397,62 +398,70 @@ def fit_image_to_size(image, width: int, height: int):
     new_size = (int(ratio * w), int(ratio * h))
     return cv2.resize(image, dsize=new_size)
 
-def webcam_preview(camera_name: str, virtual_cam_output: bool):
-    if modules.globals.source_path is None:
+class WebcamHandler:
+    def __init__(self, camera_name: str, virtual_cam_output: bool):
+        self.camera_name = camera_name
+        self.virtual_cam_output = virtual_cam_output
+        self.camera = None
+        self.virtual_cam = None
+        self.preview_running = True
+
+    def setup_camera(self):
+        self.camera = cv2.VideoCapture(self.camera_name)
+        if not self.camera.isOpened():
+            logging.error(f"Cannot open camera: {self.camera_name}")
+            raise RuntimeError(f"Cannot open camera: {self.camera_name}")
+
+        if self.virtual_cam_output:
+            self.virtual_cam = pyvirtualcam.Camera(width=640, height=480, fps=30)
+
+    def process_frame(self, source_image: Any, frame_processors: List[ModuleType]):
+        ret, frame = self.camera.read()
+        if not ret:
+            logging.error("Failed to read frame from camera")
+            return None
+
+        # Apply any frame processors
+        for processor in frame_processors:
+            frame = processor.process(frame, source_image)
+
+        return frame
+
+    def handle_output(self, frame: Any):
+        # Show frame preview
+        cv2.imshow('Webcam Preview', frame)
+
+        # Send frame to virtual camera if available
+        if self.virtual_cam:
+            self.virtual_cam.send(frame)
+            self.virtual_cam.sleep_until_next_frame()
+
+        # Break loop on key press
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            self.preview_running = False
+
+    def run(self, source_image: Any, frame_processors: List[ModuleType]):
+        self.setup_camera()
+        while self.preview_running:
+            processed_frame = self.process_frame(source_image, frame_processors)
+            if processed_frame is not None:
+                self.handle_output(processed_frame)
+
+        self.cleanup()
+
+    def cleanup(self):
+        if self.camera:
+            self.camera.release()
+        if self.virtual_cam:
+            self.virtual_cam.close()
+        cv2.destroyAllWindows()
+
+def webcam_preview(camera_name: str, virtual_cam_output: bool, source_image: Any, frame_processors: List[ModuleType]):
+    if source_image is None:  # Assuming source_image is checked for validity here
         return
 
-    global preview_label, PREVIEW
-
-    WIDTH = 960
-    HEIGHT = 540
-    FPS = 60
-
-    # Select the camera by its name
-    selected_camera = select_camera(camera_name)
-    if selected_camera is None:
-        update_status(f"No suitable camera found.")
-        return
-
-    # Use OpenCV's camera index for cross-platform compatibility
-    camera_index = get_camera_index_by_name(camera_name)
-
-    global camera
-    camera = cv2.VideoCapture(camera_index)
-
-    if not camera.isOpened():
-        update_status(f"Error: Could not open camera {camera_name}")
-        return
-
-    camera.set(cv2.CAP_PROP_FRAME_WIDTH, WIDTH)
-    camera.set(cv2.CAP_PROP_FRAME_HEIGHT, HEIGHT)
-    camera.set(cv2.CAP_PROP_FPS, FPS)
-
-    PREVIEW_MAX_WIDTH = WIDTH
-    PREVIEW_MAX_HEIGHT = HEIGHT
-
-    preview_label.configure(width=PREVIEW_DEFAULT_WIDTH, height=PREVIEW_DEFAULT_HEIGHT)
-    PREVIEW.deiconify()
-
-    frame_processors = get_frame_processors_modules(modules.globals.frame_processors)
-    source_image = get_one_face(cv2.imread(modules.globals.source_path))
-
-    preview_running = True
-
-    if virtual_cam_output:
-        if not PERFORMANCE_MODE:
-            with pyvirtualcam.Camera(width=WIDTH, height=HEIGHT, fps=FPS, fmt=pyvirtualcam.PixelFormat.BGR) as virtual_cam:
-                while preview_running:
-                    preview_running = webcam_preview_loop(camera, source_image, frame_processors, virtual_cam)
-        else:
-            while preview_running:
-                preview_running = webcam_preview_loop(camera, source_image, frame_processors)
-    else:
-        while preview_running:
-            preview_running = webcam_preview_loop(camera, source_image, frame_processors)
-
-
-    if camera: camera.release()
-    PREVIEW.withdraw()
+    handler = WebcamHandler(camera_name, virtual_cam_output)
+    handler.run(source_image, frame_processors)
 
 
 def get_camera_index_by_name(camera_name: str) -> int:
