@@ -411,9 +411,11 @@ def create_root(
     # Convert camera indices to strings for CTkOptionMenu
     available_camera_indices, available_camera_strings = available_cameras
     camera_variable = ctk.StringVar(
-        value=available_camera_strings[0]
-        if available_camera_strings
-        else "No cameras found"
+        value=(
+            available_camera_strings[0]
+            if available_camera_strings
+            else "No cameras found"
+        )
     )
     camera_optionmenu = ctk.CTkOptionMenu(
         root, variable=camera_variable, values=available_camera_strings
@@ -1041,11 +1043,19 @@ def create_webcam_preview(camera_index):
             )
 
         if not modules.globals.map_faces:
-            if source_image is None and modules.globals.source_path:
+            # Check if source_path has changed and update source_image if necessary
+            if modules.globals.source_path and (
+                source_image is None
+                or modules.globals.source_path != source_image["location"]
+            ):
                 source_image = get_one_face(cv2.imread(modules.globals.source_path))
+                source_image["location"] = (
+                    modules.globals.source_path
+                )  # Store location for comparison
 
             for frame_processor in frame_processors:
                 temp_frame = frame_processor.process_frame(source_image, temp_frame)
+
         else:
             modules.globals.target_path = None
 
