@@ -478,29 +478,6 @@ def create_root(
     )
     remove_donate_button.pack(side="right", padx=(10, 0))
 
-    # Add opacity slider
-    opacity_frame = ctk.CTkFrame(options_column, fg_color="#2a2d2e")
-    opacity_frame.pack(pady=5, anchor="w", fill="x")
-
-    opacity_label = ctk.CTkLabel(
-        opacity_frame, text="Face Opacity:", font=("Roboto", 14, "bold")
-    )
-    opacity_label.pack(side="left", padx=(0, 10))
-
-    opacity_slider = ctk.CTkSlider(
-        opacity_frame,
-        from_=0,
-        to=100,
-        number_of_steps=100,
-        command=update_opacity,
-        fg_color=("gray75", "gray25"),
-        progress_color="#3a7ebf",
-        button_color="#3a7ebf",
-        button_hover_color="#2b5d8b",
-    )
-    opacity_slider.pack(side="left", fill="x", expand=True)
-    opacity_slider.set(modules.globals.face_opacity)
-
     main_frame.grid_columnconfigure((0, 2), weight=1)
     main_frame.grid_rowconfigure((0, 1, 2), weight=1)
 
@@ -729,29 +706,6 @@ def create_preview(parent: ctk.CTkToplevel) -> ctk.CTkToplevel:
     )
     preview_slider.pack(fill="x", padx=20, pady=10)
 
-    last_update_time = 0
-    debounce_delay = 0.1  # Adjust this delay as needed (in seconds)
-
-    def on_key_press(event):
-        nonlocal last_update_time
-
-        current_time = time.time()
-        if current_time - last_update_time > debounce_delay:
-            current_frame = int(preview_slider.get())
-            if event.keysym == "Left":
-                new_frame = max(0, current_frame - 1)
-            elif event.keysym == "Right":
-                new_frame = min(int(preview_slider.cget("to")), current_frame + 1)
-            else:
-                return  # Ignore other key presses
-
-            preview_slider.set(new_frame)
-            update_preview(new_frame)
-            last_update_time = current_time
-
-    preview.bind("<Left>", on_key_press)
-    preview.bind("<Right>", on_key_press)
-
     return preview
 
 
@@ -949,11 +903,6 @@ def init_preview() -> None:
         preview_slider.configure(to=video_frame_total)
         preview_slider.pack(fill="x")
         preview_slider.set(0)
-    # Disable slider if it's an image
-    if is_image(modules.globals.target_path):
-        preview_slider.configure(state="disabled")
-    else:
-        preview_slider.configure(state="normal")
 
 
 def update_preview(frame_number: int = 0) -> None:
@@ -1081,36 +1030,34 @@ def create_webcam_preview(camera_index):
         if not ret:
             break
 
-        temp_frame = frame.copy()
+        temp_frame = frame.copy()  # Create a copy of the frame
 
         if modules.globals.live_mirror:
-            temp_frame = cv2.flip(temp_frame, 1)
+            temp_frame = cv2.flip(temp_frame, 1)  # horizontal flipping
+
+        if modules.globals.live_resizable:
+            temp_frame = fit_image_to_size(
+                temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
+            )
 
         if not modules.globals.map_faces:
             if source_image is None and modules.globals.source_path:
                 source_image = get_one_face(cv2.imread(modules.globals.source_path))
 
-            original_frame = temp_frame.copy()
             for frame_processor in frame_processors:
                 temp_frame = frame_processor.process_frame(source_image, temp_frame)
-
-            # Apply opacity
-            opacity = modules.globals.face_opacity / 100
-            temp_frame = cv2.addWeighted(
-                temp_frame, opacity, original_frame, 1 - opacity, 0
-            )
         else:
             modules.globals.target_path = None
 
             for frame_processor in frame_processors:
                 temp_frame = frame_processor.process_frame_v2(temp_frame)
 
-        image = cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB)
+        image = cv2.cvtColor(
+            temp_frame, cv2.COLOR_BGR2RGB
+        )  # Convert the image to RGB format to display it with Tkinter
         image = Image.fromarray(image)
         image = ImageOps.contain(
-            image,
-            (preview_frame.winfo_width(), preview_frame.winfo_height()),
-            Image.LANCZOS,
+            image, (temp_frame.shape[1], temp_frame.shape[0]), Image.LANCZOS
         )
         image = ctk.CTkImage(image, size=image.size)
         preview_label.configure(image=image)
@@ -1120,7 +1067,7 @@ def create_webcam_preview(camera_index):
             break
 
     camera.release()
-    PREVIEW.withdraw()
+    PREVIEW.withdraw()  # Close preview window when loop is finished
 
 
 def create_source_target_popup_for_webcam(root: ctk.CTk, map: list) -> None:
