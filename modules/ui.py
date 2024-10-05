@@ -641,17 +641,17 @@ def update_preview(frame_number: int = 0) -> None:
         PREVIEW.deiconify()
 
 
-def webcam_preview(root: ctk.CTk, camera_index: int):  # Added camera_index parameter
+def webcam_preview(root: ctk.CTk, camera_index: int):
     if not modules.globals.map_faces:
         if modules.globals.source_path is None:
             # No image selected
             return
-        create_webcam_preview(
-            camera_index
-        )  # Pass camera_index to create_webcam_preview
+        create_webcam_preview(camera_index)
     else:
         modules.globals.souce_target_map = []
-        create_source_target_popup_for_webcam(root, modules.globals.souce_target_map)
+        create_source_target_popup_for_webcam(
+            root, modules.globals.souce_target_map, camera_index
+        )
 
 
 def get_available_cameras():
@@ -668,10 +668,10 @@ def get_available_cameras():
     return (camera_indices, camera_names)
 
 
-def create_webcam_preview(camera_index: int):  # Added camera_index parameter
+def create_webcam_preview(camera_index: int):
     global preview_label, PREVIEW
 
-    camera = cv2.VideoCapture(camera_index)  # Use the provided camera index
+    camera = cv2.VideoCapture(camera_index)
     camera.set(cv2.CAP_PROP_FRAME_WIDTH, PREVIEW_DEFAULT_WIDTH)
     camera.set(cv2.CAP_PROP_FRAME_HEIGHT, PREVIEW_DEFAULT_HEIGHT)
     camera.set(cv2.CAP_PROP_FPS, 60)
@@ -727,7 +727,9 @@ def create_webcam_preview(camera_index: int):  # Added camera_index parameter
     PREVIEW.withdraw()
 
 
-def create_source_target_popup_for_webcam(root: ctk.CTk, map: list) -> None:
+def create_source_target_popup_for_webcam(
+    root: ctk.CTk, map: list, camera_index: int
+) -> None:
     global POPUP_LIVE, popup_status_label_live
 
     POPUP_LIVE = ctk.CTkToplevel(root)
@@ -739,9 +741,9 @@ def create_source_target_popup_for_webcam(root: ctk.CTk, map: list) -> None:
         if has_valid_map():
             POPUP_LIVE.destroy()
             simplify_maps()
-            create_webcam_preview()
+            create_webcam_preview(camera_index)
         else:
-            update_pop_live_status("Atleast 1 source with target is required!")
+            update_pop_live_status("At least 1 source with target is required!")
 
     def on_add_click():
         add_blank_map()
