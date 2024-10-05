@@ -5,7 +5,7 @@ from typing import Callable, Tuple
 import cv2
 from cv2_enumerate_cameras import enumerate_cameras  # Add this import
 from PIL import Image, ImageOps
-
+import time
 import modules.globals
 import modules.metadata
 from modules.face_analyser import (
@@ -81,7 +81,7 @@ def init(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.CTk:
 
 
 def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.CTk:
-    global source_label, target_label, status_label
+    global source_label, target_label, status_label, show_fps_switch
 
     ctk.deactivate_automatic_dpi_awareness()
     ctk.set_appearance_mode("system")
@@ -200,6 +200,17 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         command=lambda: setattr(modules.globals, "map_faces", map_faces.get()),
     )
     map_faces_switch.place(relx=0.1, rely=0.75)
+
+    # Add Show FPS switch
+    show_fps_value = ctk.BooleanVar(value=False)
+    show_fps_switch = ctk.CTkSwitch(
+        root,
+        text="Show FPS",
+        variable=show_fps_value,
+        cursor="hand2",
+        command=lambda: setattr(modules.globals, "show_fps", show_fps_value.get()),
+    )
+    show_fps_switch.place(relx=0.6, rely=0.75)
 
     start_button = ctk.CTkButton(
         root, text="Start", cursor="hand2", command=lambda: analyze_target(start, root)
@@ -683,6 +694,8 @@ def create_webcam_preview(camera_index: int):
     frame_processors = get_frame_processors_modules(modules.globals.frame_processors)
 
     source_image = None
+    prev_time = time.time()
+    fps = 0
 
     while camera:
         ret, frame = camera.read()
@@ -710,6 +723,22 @@ def create_webcam_preview(camera_index: int):
 
             for frame_processor in frame_processors:
                 temp_frame = frame_processor.process_frame_v2(temp_frame)
+
+        # Calculate and display FPS
+        current_time = time.time()
+        fps = 1 / (current_time - prev_time)
+        prev_time = current_time
+
+        if modules.globals.show_fps:
+            cv2.putText(
+                temp_frame,
+                f"FPS: {fps:.2f}",
+                (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                1,
+                (0, 255, 0),
+                2,
+            )
 
         image = cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB)
         image = Image.fromarray(image)
