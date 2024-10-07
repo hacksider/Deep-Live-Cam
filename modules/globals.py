@@ -36,3 +36,6 @@ fp_ui: Dict[str, bool] = {}
 camera_input_combobox = None
 webcam_preview_running = False
 show_fps = False
+enhancer_upscale_factor = 1
+source_image_scaling_factor = 1
+sr_scale_factor = 4
