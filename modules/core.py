@@ -34,7 +34,7 @@ def parse_args() -> None:
     program.add_argument('-s', '--source', help='select an source image', dest='source_path')
     program.add_argument('-t', '--target', help='select an target image or video', dest='target_path')
     program.add_argument('-o', '--output', help='select output file or directory', dest='output_path')
-    program.add_argument('--frame-processor', help='pipeline of frame processors', dest='frame_processor', default=['face_swapper'], choices=['face_swapper', 'face_enhancer'], nargs='+')
+    program.add_argument('--frame-processor', help='pipeline of frame processors', dest='frame_processor', default=['face_swapper'], choices=['face_swapper', 'face_enhancer', 'super_resolution'], nargs='+')
     program.add_argument('--keep-fps', help='keep original fps', dest='keep_fps', action='store_true', default=False)
     program.add_argument('--keep-audio', help='keep original audio', dest='keep_audio', action='store_true', default=True)
     program.add_argument('--keep-frames', help='keep temporary frames', dest='keep_frames', action='store_true', default=False)
@@ -49,7 +49,15 @@ def parse_args() -> None:
     program.add_argument('--execution-provider', help='execution provider', dest='execution_provider', default=['cpu'], choices=suggest_execution_providers(), nargs='+')
     program.add_argument('--execution-threads', help='number of execution threads', dest='execution_threads', type=int, default=suggest_execution_threads())
     program.add_argument('--headless', help='Run in headless mode', dest='headless', default=False, action='store_true')
-    program.add_argument('-v', '--version', action='version', version=f'{modules.metadata.name} {modules.metadata.version}')
+    program.add_argument('--enhancer-upscale-factor',
+                         help='Sets the upscale factor for the enhancer. Only applies if `face_enhancer` is set as a frame-processor',
+                         dest='enhancer_upscale_factor', type=int, default=1)
+    program.add_argument('--source-image-scaling-factor', help='Set the upscale factor for source images',
+                         dest='source_image_scaling_factor', default=2, type=int)
+    program.add_argument('-r', '--super-resolution-scale-factor', dest='super_resolution_scale_factor',
+                         help='Set the upscale factor for super resolution', default=4, choices=[2, 3, 4], type=int)
+    program.add_argument('-v', '--version', action='version',
+                         version=f'{modules.metadata.name} {modules.metadata.version}')
 
     # register deprecated args
     program.add_argument('-f', '--face', help=argparse.SUPPRESS, dest='source_path_deprecated')
@@ -78,7 +86,9 @@ def parse_args() -> None:
     modules.globals.execution_providers = decode_execution_providers(args.execution_provider)
     modules.globals.execution_threads = args.execution_threads
     modules.globals.headless = args.headless
-
+    modules.globals.enhancer_upscale_factor = args.enhancer_upscale_factor
+    modules.globals.source_image_scaling_factor = args.source_image_scaling_factor
+    modules.globals.sr_scale_factor = args.super_resolution_scale_factor
     #for ENHANCER tumbler:
     if 'face_enhancer' in args.frame_processor:
         modules.globals.fp_ui['face_enhancer'] = True
