@@ -1,173 +1,196 @@
+<h1 align="center">Deep Live Cam</h1>
 
-![demo-gif](demo.gif)
+<p align="center">
+  Real-time face swap and video deepfake with a single click and only a single image.
+</p>
 
+<p align="center">
+  <img src="demo.gif" alt="Demo GIF">
+  <img src="avgpcperformancedemo.gif" alt="Performance Demo GIF">
+</p>
 
 ## Disclaimer
-This software is meant to be a productive contribution to the rapidly growing AI-generated media industry. It will help artists with tasks such as animating a custom character or using the character as a model for clothing etc.
 
-The developers of this software are aware of its possible unethical applications and are committed to take preventative measures against them. It has a built-in check which prevents the program from working on inappropriate media including but not limited to nudity, graphic content, sensitive material such as war footage etc. We will continue to develop this project in the positive direction while adhering to law and ethics. This project may be shut down or include watermarks on the output if requested by law.
+This software is intended as a productive contribution to the AI-generated media industry. It aims to assist artists with tasks like animating custom characters or using them as models for clothing, etc.
 
-Users of this software are expected to use this software responsibly while abiding by local laws. If the face of a real person is being used, users are required to get consent from the concerned person and clearly mention that it is a deepfake when posting content online. Developers of this software will not be responsible for actions of end-users.
+We are aware of the potential for unethical applications and are committed to preventative measures. A built-in check prevents the program from processing inappropriate media (nudity, graphic content, sensitive material like war footage, etc.). We will continue to develop this project responsibly, adhering to law and ethics. We may shut down the project or add watermarks if legally required.
 
-## New Features
-### Resizable Preview Window
-
-Dynamically improve the performance by using the `--live-resizable` parameter
-![resizable-gif](resizable.gif)
-
-### Face Mapping
-
-Track faces and change it on the fly
-
-![face_mapping_source](face_mapping_source.gif)
-
-source video
-
-![face-mapping](face_mapping.png)
-
-Tick this switch
-
-![face-mapping2](face_mapping2.png)
-
-Map the faces
-
-![face_mapping_result](face_mapping_result.gif)
-
-And see the magic!
+Users are expected to use this software responsibly and legally. If using a real person's face, obtain their consent and clearly label any output as a deepfake when sharing online. We are not responsible for end-user actions.
 
 
-## Want to skip the installation and just run it?
-<details>
-Here's the link without the tedious installation script below
+## Quick Start (Windows / Nvidia)
 
-[Windows / Nvidia](https://hacksider.gumroad.com/l/vccdmm) CUDA still required
-</details>
-
-## How do I install it?
+[![Download](https://github.com/user-attachments/assets/3e3e252a-4bfa-41fb-a88c-84557402a7c7)](https://hacksider.gumroad.com/l/vccdmm) 
 
 
-### Basic: It is more likely to work on your computer but it will also be very slow. You can follow instructions for the basic install (This usually runs via **CPU**)
-#### 1.Setup your platform
--   python (3.10 recommended)
--   pip
--   git
--   [ffmpeg](https://www.youtube.com/watch?v=OlNWCpFdVMA) 
--   [visual studio 2022 runtimes (windows)](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
-#### 2. Clone Repository
-    https://github.com/hacksider/Deep-Live-Cam.git
 
-#### 3. Download Models
 
- 1. [GFPGANv1.4](https://huggingface.co/hacksider/deep-live-cam/resolve/main/GFPGANv1.4.pth)
- 2. [inswapper_128.onnx](https://huggingface.co/hacksider/deep-live-cam/resolve/main/inswapper_128.onnx) *(Note: Use this [replacement version](https://github.com/facefusion/facefusion-assets/releases/download/models/inswapper_128.onnx) if an issue occurs on your computer)*
 
-Then put those 2 files on the "**models**" folder
+[Download latest pre-built version with CUDA support](https://hacksider.gumroad.com/l/vccdmm) - No Manual Installation/Downloading required.
 
-#### 4. Install dependency
-We highly recommend to work with a  `venv`  to avoid issues.
+## Installation (Manual)
+**Please be aware that the installation needs technical skills and is NOT for beginners, consider downloading the prebuilt. Please do NOT open platform and installation related issues on GitHub before discussing it on the discord server.**
+### Basic Installation (CPU)
+
+This is more likely to work on your computer but will be slower as it utilizes the CPU.
+
+**1. Setup Your Platform**
+
+- Python (3.10 recommended)
+- pip
+- git
+- [ffmpeg](https://www.youtube.com/watch?v=OlNWCpFdVMA) 
+- [Visual Studio 2022 Runtimes (Windows)](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
+
+**2. Clone Repository**
+
+```bash
+https://github.com/hacksider/Deep-Live-Cam.git
 ```
+
+**3. Download Models**
+
+1. [GFPGANv1.4](https://huggingface.co/hacksider/deep-live-cam/resolve/main/GFPGANv1.4.pth)
+2. [inswapper_128_fp16.onnx](https://huggingface.co/hacksider/deep-live-cam/resolve/main/inswapper_128.onnx) (Note: Use this [replacement version](https://github.com/facefusion/facefusion-assets/releases/download/models/inswapper_128.onnx) if you encounter issues)
+
+Place these files in the "**models**" folder.
+
+**4. Install Dependencies**
+
+We highly recommend using a `venv` to avoid issues.
+
+```bash
 pip install -r requirements.txt
 ```
-For MAC OS, You have to install or upgrade python-tk package:
-```
+
+**For macOS:** Install or upgrade the `python-tk` package:
+
+```bash
 brew install python-tk@3.10
 ```
-##### DONE!!! If you don't have any GPU, You should be able to run Deep-Live-Cam using `python run.py` command. Keep in mind that while running the program for first time, it will download some models which can take time depending on your network connection.
 
-#### 5. Proceed if you want to use GPU acceleration (optional)
+**Run:** If you don't have a GPU, you can run Deep-Live-Cam using `python run.py`. Note that initial execution will download models (~300MB).
+
+
+### GPU Acceleration (Optional)
 
 <details>
 <summary>Click to see the details</summary>
 
-### CUDA Execution Provider (Nvidia)*
+**CUDA Execution Provider (Nvidia)**
 
-1.  Install  [CUDA Toolkit 11.8](https://developer.nvidia.com/cuda-11-8-0-download-archive)
-2.  Install dependencies:
-```
+1. Install [CUDA Toolkit 11.8](https://developer.nvidia.com/cuda-11-8-0-download-archive)
+2. Install dependencies:
+```bash
 pip uninstall onnxruntime onnxruntime-gpu
 pip install onnxruntime-gpu==1.16.3
 ```
-
-3.  Usage in case the provider is available:
-```
+3. Usage:
+```bash
 python run.py --execution-provider cuda
 ```
 
-### [](https://github.com/s0md3v/roop/wiki/2.-Acceleration#coreml-execution-provider-apple-silicon)CoreML Execution Provider (Apple Silicon)
+**CoreML Execution Provider (Apple Silicon)**
 
-1.  Install dependencies:
-
-```
+1. Install dependencies:
+```bash
 pip uninstall onnxruntime onnxruntime-silicon
 pip install onnxruntime-silicon==1.13.1
 ```
-
-2.  Usage in case the provider is available:
-```
+2. Usage:
+```bash
 python run.py --execution-provider coreml
 ```
 
-### [](https://github.com/s0md3v/roop/wiki/2.-Acceleration#coreml-execution-provider-apple-legacy)CoreML Execution Provider (Apple Legacy)
+**CoreML Execution Provider (Apple Legacy)**
 
-1.  Install dependencies:
-```
+1. Install dependencies:
+```bash
 pip uninstall onnxruntime onnxruntime-coreml
 pip install onnxruntime-coreml==1.13.1
 ```
-
-2.  Usage in case the provider is available:
-```
+2. Usage:
+```bash
 python run.py --execution-provider coreml
 ```
 
-### [](https://github.com/s0md3v/roop/wiki/2.-Acceleration#directml-execution-provider-windows)DirectML Execution Provider (Windows)
+**DirectML Execution Provider (Windows)**
 
-1.  Install dependencies:
-```
+1. Install dependencies:
+```bash
 pip uninstall onnxruntime onnxruntime-directml
 pip install onnxruntime-directml==1.15.1
 ```
-
-2.  Usage in case the provider is available:
-```
+2. Usage:
+```bash
 python run.py --execution-provider directml
 ```
 
-### [](https://github.com/s0md3v/roop/wiki/2.-Acceleration#openvino-execution-provider-intel)OpenVINO™ Execution Provider (Intel)
+**OpenVINO™ Execution Provider (Intel)**
 
-1.  Install dependencies:
-```
+1. Install dependencies:
+```bash
 pip uninstall onnxruntime onnxruntime-openvino
 pip install onnxruntime-openvino==1.15.0
 ```
-
-2.  Usage in case the provider is available:
-```
+2. Usage:
+```bash
 python run.py --execution-provider openvino
 ```
+
 </details>
 
-## How do I use it?
-> Note: When you run this program for the first time, it will download some models ~300MB in size.
 
-Executing `python run.py` command will launch this window:
-![gui-demo](instruction.png)
+## Usage
 
-Choose a face (image with desired face) and the target image/video (image/video in which you want to replace the face) and click on `Start`. Open file explorer and navigate to the directory you select your output to be in. You will find a directory named `<video_title>` where you can see the frames being swapped in realtime. Once the processing is done, it will create the output file. That's it.
+**1. Image/Video Mode**
 
-## For the webcam mode
-Just follow the clicks on the screenshot
-1. Select a face
-2. Click live
-3. Wait for a few seconds (it takes a longer time, usually 10 to 30 seconds before the preview shows up)
+- Execute `python run.py`. 
+- Choose a source face image and a target image/video.
+- Click "Start".
+- The output will be saved in a directory named after the target video.
+
+**2. Webcam Mode**
+
+- Execute `python run.py`.
+- Select a source face image.
+- Click "Live".
+- Wait for the preview to appear (10-30 seconds).
+- Use a screen capture tool like OBS to stream.
+- To change the face, select a new source image.
 
 ![demo-gif](demo.gif)
 
-Just use your favorite screencapture to stream like OBS
-> Note: In case you want to change your face, just select another picture, the preview mode will then restart (so just wait a bit).
+## Features
+
+### Resizable Preview Window
+
+Dynamically improve performance using the `--live-resizable` parameter.
+
+![resizable-gif](resizable.gif)
+
+### Face Mapping
+
+Track and change faces on the fly.
+
+![face_mapping_source](face_mapping_source.gif)
+
+**Source Video:**
+
+![face-mapping](face_mapping.png)
+
+**Enable Face Mapping:**
+
+![face-mapping2](face_mapping2.png)
+
+**Map the Faces:**
+
+![face_mapping_result](face_mapping_result.gif)
+
+**See the Magic!**
 
 
-Additional command line arguments are given below. To learn out what they do, check [this guide](https://github.com/s0md3v/roop/wiki/Advanced-Options).
+## Command Line Arguments
 
 ```
 options:
@@ -194,7 +217,8 @@ options:
 
 Looking for a CLI mode? Using the -s/--source argument will make the run program in cli mode.
 
-### Webcam mode on Windows 11 using WSL2 Ubuntu (optional)
+
+## Webcam Mode on WSL2 Ubuntu (Optional)
 
 <details>
 <summary>Click to see the details</summary>
@@ -203,11 +227,11 @@ If you want to use WSL2 on Windows 11 you will notice, that Ubuntu WSL2 doesn't 
 
 This tutorial will guide you through the process of setting up WSL2 Ubuntu with USB webcam support, rebuilding the kernel, and preparing the environment for the Deep-Live-Cam project.  
   
-#### 1. Install WSL2 Ubuntu  
+**1. Install WSL2 Ubuntu**  
   
 Install WSL2 Ubuntu from the Microsoft Store or using PowerShell:  
   
-#### 2. Enable USB Support in WSL2  
+**2. Enable USB Support in WSL2**  
   
 1. Install the USB/IP tool for Windows:  
 [https://learn.microsoft.com/en-us/windows/wsl/connect-usb](https://learn.microsoft.com/en-us/windows/wsl/connect-usb)  
@@ -221,7 +245,7 @@ usbipd attach --wsl --busid x-x # Replace x-x with your webcam's bus ID
 ```  
  You need to redo the above every time you reboot wsl or re-connect your webcam/usb device.
  
-#### 3. Rebuild WSL2 Ubuntu Kernel with USB and Webcam Modules  
+**3. Rebuild WSL2 Ubuntu Kernel with USB and Webcam Modules**  
   
 Follow these steps to rebuild the kernel:  
   
@@ -234,7 +258,7 @@ Additional info: [https://askubuntu.com/questions/1413377/camera-not-working-in-
   
 3. After rebuilding, restart WSL with the new kernel. 
   
-#### 4. Set Up Deep-Live-Cam Project  
+**4. Set Up Deep-Live-Cam Project**  
  Within Ubuntu:
 1. Clone the repository:  
   
@@ -244,7 +268,7 @@ git clone [https://github.com/hacksider/Deep-Live-Cam](https://github.com/hacksi
   
 2. Follow the installation instructions in the repository, including cuda toolkit 11.8, make 100% sure it's not cuda toolkit 12.x.  
    
-#### 5. Verify and Load Kernel Modules  
+**5. Verify and Load Kernel Modules**  
   
 1. Check if USB and webcam modules are built into the kernel:  
   
@@ -271,7 +295,7 @@ dmesg | tail
 sudo ls -al /dev/video*  
 ```  
   
-#### 6. Set Up Permissions  
+**6. Set Up Permissions**  
   
 1. Add user to video group and set permissions:  
   
@@ -303,7 +327,7 @@ sudo udevadm control --reload-rules && sudo udevadm trigger
   
 5. Start Deep-Live-Cam with `python run.py --execution-provider cuda --max-memory 8` where 8 can be changed to the number of GB VRAM of your GPU has, minus 1-2GB. If you have a RTX3080 with 10GB I suggest adding 8GB. Leave some left for Windows.
 
-#### Final Notes  
+**Final Notes**  
   
 - Steps 6 and 7 may be optional if the modules are built into the kernel and permissions are already set correctly.  
 - Always ensure you're using compatible versions of CUDA, ONNX, and other dependencies.  
@@ -311,7 +335,7 @@ sudo udevadm control --reload-rules && sudo udevadm trigger
   
 By following these steps, you should have a WSL2 Ubuntu environment with USB webcam support ready for the Deep-Live-Cam project. If you encounter any issues, refer back to the specific error messages and troubleshooting steps provided.
 
-#### Troubleshooting CUDA Issues  
+**Troubleshooting CUDA Issues** 
 
 If you encounter this error:  
   
@@ -340,26 +364,37 @@ sudo apt-get -y install cuda-toolkit-11-8
 ```
 </details>
 
-## Want the Next Update Now?
-If you want the latest and greatest build, or want to see some new great features, go to our [experimental branch](https://github.com/hacksider/Deep-Live-Cam/tree/experimental) and experience what the contributors have given.
 
-## TODO
-:heavy_check_mark: Support multiple faces feature
+## Future Updates & Roadmap
+
+For the latest experimental builds and features, see the [experimental branch](https://github.com/hacksider/Deep-Live-Cam/tree/experimental).
+
+**TODO:**
+
 - [ ] Develop a version for web app/service
-- [ ] UI/UX enhancements for desktop app
 - [ ] Speed up model loading
 - [ ] Speed up real-time face swapping
+- [x] Support multiple faces 
+- [x] UI/UX enhancements for desktop app
 
-*Note: This is an open-source project, and we’re working on it in our free time. Therefore, features, replies, bug fixes, etc., might be delayed. We hope you understand. Thanks.*
+This is an open-source project developed in our free time. Updates may be delayed.
+
 
 ## Credits
 
 - [ffmpeg](https://ffmpeg.org/): for making video related operations easy
 - [deepinsight](https://github.com/deepinsight): for their [insightface](https://github.com/deepinsight/insightface) project which provided a well-made library and models. Please be reminded that the [use of the model is for non-commercial research purposes only](https://github.com/deepinsight/insightface?tab=readme-ov-file#license).
 - [havok2-htwo](https://github.com/havok2-htwo) : for sharing the code for webcam
-- [GosuDRM](https://github.com/GosuDRM/nsfw-roop) : for uncensoring roop
+- [GosuDRM](https://github.com/GosuDRM) : for open version of roop
 - [pereiraroland26](https://github.com/pereiraroland26) : Multiple faces support
 - [vic4key](https://github.com/vic4key) : For supporting/contributing on this project
 - [KRSHH](https://github.com/KRSHH) : For updating the UI
 - and [all developers](https://github.com/hacksider/Deep-Live-Cam/graphs/contributors) behind libraries used in this project.
 - Foot Note: [This is originally roop-cam, see the full history of the code here.](https://github.com/hacksider/roop-cam) Please be informed that the base author of the code is [s0md3v](https://github.com/s0md3v/roop)
+
+## Thanks to all the contributors
+<a href="https://github.com/hacksider/Deep-Live-Cam/graphs/contributors" target="_blank">
+  <img src="https://contrib.rocks/image?repo=hacksider/Deep-Live-Cam" />
+</a>
+
+![Alt](https://repobeats.axiom.co/api/embed/fec8e29c45dfdb9c5916f3a7830e1249308d20e1.svg "Repobeats analytics image")
