@@ -148,9 +148,9 @@ Additional command line arguments are given below. To learn out what they do, ch
 
 ### video-quality
 **Default Value: 18**
-The video-quality parameter allows you to specify the resolution of the output video. By adjusting this setting, you can control the clarity and sharpness of the video, with higher values producing better quality but potentially larger file sizes.
+The video-quality parameter allows you to control the compression level of the output video. Lower values result in higher quality but larger file sizes, while higher values produce more compression, reducing quality but decreasing file size. This setting affects bitrate and overall visual fidelity, not resolution.
 
-Supported Values: [0 t0 51]
+Supported Values: [0 to 51]
 
 
 ```
