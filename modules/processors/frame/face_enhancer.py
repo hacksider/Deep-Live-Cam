@@ -2,6 +2,7 @@ from typing import Any, List
 import cv2
 import threading
 import gfpgan
+import os
 
 import modules.globals
 import modules.processors.frame.core
@@ -34,8 +35,11 @@ def get_face_enhancer() -> Any:
 
     with THREAD_LOCK:
         if FACE_ENHANCER is None:
-            model_path = resolve_relative_path('..\models\GFPGANv1.4.pth')
-            # todo: set models path https://github.com/TencentARC/GFPGAN/issues/399
+            if os.name == 'nt':
+                model_path = resolve_relative_path('..\models\GFPGANv1.4.pth')
+                # todo: set models path https://github.com/TencentARC/GFPGAN/issues/399
+            else:
+                model_path = resolve_relative_path('../models/GFPGANv1.4.pth')
             FACE_ENHANCER = gfpgan.GFPGANer(model_path=model_path, upscale=1) # type: ignore[attr-defined]
     return FACE_ENHANCER
 

@@ -39,8 +39,12 @@ def parse_args() -> None:
     program.add_argument('--keep-audio', help='keep original audio', dest='keep_audio', action='store_true', default=True)
     program.add_argument('--keep-frames', help='keep temporary frames', dest='keep_frames', action='store_true', default=False)
     program.add_argument('--many-faces', help='process every face', dest='many_faces', action='store_true', default=False)
+    program.add_argument('--nsfw-filter', help='filter the NSFW image or video', dest='nsfw_filter', action='store_true', default=False)
+    program.add_argument('--map-faces', help='map source target faces', dest='map_faces', action='store_true', default=False)
     program.add_argument('--video-encoder', help='adjust output video encoder', dest='video_encoder', default='libx264', choices=['libx264', 'libx265', 'libvpx-vp9'])
     program.add_argument('--video-quality', help='adjust output video quality', dest='video_quality', type=int, default=18, choices=range(52), metavar='[0-51]')
+    program.add_argument('--live-mirror', help='The live camera display as you see it in the front-facing camera frame', dest='live_mirror', action='store_true', default=False)
+    program.add_argument('--live-resizable', help='The live camera frame is resizable', dest='live_resizable', action='store_true', default=False)
     program.add_argument('--max-memory', help='maximum amount of RAM in GB', dest='max_memory', type=int, default=suggest_max_memory())
     program.add_argument('--execution-provider', help='execution provider', dest='execution_provider', default=['cpu'], choices=suggest_execution_providers(), nargs='+')
     program.add_argument('--execution-threads', help='number of execution threads', dest='execution_threads', type=int, default=suggest_execution_threads())
@@ -63,8 +67,12 @@ def parse_args() -> None:
     modules.globals.keep_audio = args.keep_audio
     modules.globals.keep_frames = args.keep_frames
     modules.globals.many_faces = args.many_faces
+    modules.globals.nsfw_filter = args.nsfw_filter
+    modules.globals.map_faces = args.map_faces
     modules.globals.video_encoder = args.video_encoder
     modules.globals.video_quality = args.video_quality
+    modules.globals.live_mirror = args.live_mirror
+    modules.globals.live_resizable = args.live_resizable
     modules.globals.max_memory = args.max_memory
     modules.globals.execution_providers = decode_execution_providers(args.execution_provider)
     modules.globals.execution_threads = args.execution_threads
@@ -74,8 +82,6 @@ def parse_args() -> None:
         modules.globals.fp_ui['face_enhancer'] = True
     else:
         modules.globals.fp_ui['face_enhancer'] = False
-    
-    modules.globals.nsfw = False
 
     # translate deprecated args
     if args.source_path_deprecated:
@@ -165,18 +171,19 @@ def update_status(message: str, scope: str = 'DLC.CORE') -> None:
     if not modules.globals.headless:
         ui.update_status(message)
 
-
 def start() -> None:
     for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
         if not frame_processor.pre_start():
             return
+    update_status('Processing...')
     # process image to image
     if has_image_extension(modules.globals.target_path):
-        if modules.globals.nsfw == False:
-            from modules.predicter import predict_image
-            if predict_image(modules.globals.target_path):
-                destroy()
-        shutil.copy2(modules.globals.target_path, modules.globals.output_path)
+        if modules.globals.nsfw_filter and ui.check_and_ignore_nsfw(modules.globals.target_path, destroy):
+            return
+        try:
+            shutil.copy2(modules.globals.target_path, modules.globals.output_path)
+        except Exception as e:
+            print("Error copying file:", str(e))
         for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
             update_status('Progressing...', frame_processor.NAME)
             frame_processor.process_image(modules.globals.source_path, modules.globals.output_path, modules.globals.output_path)
@@ -187,14 +194,15 @@ def start() -> None:
             update_status('Processing to image failed!')
         return
     # process image to videos
-    if modules.globals.nsfw == False:
-        from modules.predicter import predict_video
-        if predict_video(modules.globals.target_path):
-            destroy()
-    update_status('Creating temp resources...')
-    create_temp(modules.globals.target_path)
-    update_status('Extracting frames...')
-    extract_frames(modules.globals.target_path)
+    if modules.globals.nsfw_filter and ui.check_and_ignore_nsfw(modules.globals.target_path, destroy):
+        return
+
+    if not modules.globals.map_faces:
+        update_status('Creating temp resources...')
+        create_temp(modules.globals.target_path)
+        update_status('Extracting frames...')
+        extract_frames(modules.globals.target_path)
+
     temp_frame_paths = get_temp_frame_paths(modules.globals.target_path)
     for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
         update_status('Progressing...', frame_processor.NAME)
@@ -226,10 +234,10 @@ def start() -> None:
         update_status('Processing to video failed!')
 
 
-def destroy() -> None:
+def destroy(to_quit=True) -> None:
     if modules.globals.target_path:
         clean_temp(modules.globals.target_path)
-    quit()
+    if to_quit: quit()
 
 
 def run() -> None:
