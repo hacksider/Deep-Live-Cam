@@ -229,7 +229,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     color_correction_value = ctk.BooleanVar(value=modules.globals.color_correction)
     color_correction_switch = ctk.CTkSwitch(
         root,
-        text="Fix Blueish Cam\n(force cv2 to use RGB instead of BGR)",
+        text="Fix Blueish Cam",
         variable=color_correction_value,
         cursor="hand2",
         command=lambda: (
@@ -514,6 +514,12 @@ def update_pop_live_status(text: str) -> None:
 def update_tumbler(var: str, value: bool) -> None:
     modules.globals.fp_ui[var] = value
     save_switch_states()
+    # If we're currently in a live preview, update the frame processors
+    if PREVIEW.state() == "normal":
+        global frame_processors
+        frame_processors = get_frame_processors_modules(
+            modules.globals.frame_processors
+        )
 
 
 def select_source_path() -> None:
@@ -753,6 +759,8 @@ def create_webcam_preview(camera_index: int):
 
     source_image = None
     prev_time = time.time()
+    fps_update_interval = 0.5  # Update FPS every 0.5 seconds
+    frame_count = 0
     fps = 0
 
     while camera:
@@ -775,22 +783,33 @@ def create_webcam_preview(camera_index: int):
                 source_image = get_one_face(cv2.imread(modules.globals.source_path))
 
             for frame_processor in frame_processors:
-                temp_frame = frame_processor.process_frame(source_image, temp_frame)
+                if frame_processor.NAME == "DLC.FACE-ENHANCER":
+                    if modules.globals.fp_ui["face_enhancer"]:
+                        temp_frame = frame_processor.process_frame(None, temp_frame)
+                else:
+                    temp_frame = frame_processor.process_frame(source_image, temp_frame)
         else:
             modules.globals.target_path = None
 
             for frame_processor in frame_processors:
-                temp_frame = frame_processor.process_frame_v2(temp_frame)
+                if frame_processor.NAME == "DLC.FACE-ENHANCER":
+                    if modules.globals.fp_ui["face_enhancer"]:
+                        temp_frame = frame_processor.process_frame_v2(temp_frame)
+                else:
+                    temp_frame = frame_processor.process_frame_v2(temp_frame)
 
         # Calculate and display FPS
         current_time = time.time()
-        fps = 1 / (current_time - prev_time)
-        prev_time = current_time
+        frame_count += 1
+        if current_time - prev_time >= fps_update_interval:
+            fps = frame_count / (current_time - prev_time)
+            frame_count = 0
+            prev_time = current_time
 
         if modules.globals.show_fps:
             cv2.putText(
                 temp_frame,
-                f"FPS: {fps:.2f}",
+                f"FPS: {fps:.1f}",
                 (10, 30),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 1,
