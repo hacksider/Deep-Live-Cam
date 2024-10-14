@@ -26,7 +26,6 @@ from modules.utilities import (
     has_image_extension,
 )
 
-modules.globals.face_opacity = 100
 os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
 os.environ["QT_SCREEN_SCALE_FACTORS"] = "1"
 os.environ["QT_SCALE_FACTOR"] = "1"
@@ -213,7 +212,7 @@ def init(start: Callable[[], None], destroy: Callable[[], None]) -> tkdnd.Tkinte
 def create_root(
     start: Callable[[], None], destroy: Callable[[], None]
 ) -> tkdnd.TkinterDnD.Tk:
-    global source_label, target_label, status_label, donate_frame
+    global source_label, target_label, status_label, donate_frame, show_fps_switch
 
     ctk.set_appearance_mode("dark")
     ctk.set_default_color_theme("blue")
@@ -382,6 +381,19 @@ def create_root(
         font=("Roboto", 14, "bold"),
     )
     map_faces_switch.pack(pady=5, anchor="w")
+
+    # Add the Show FPS switch
+    show_fps_value = ctk.BooleanVar(value=modules.globals.show_fps)
+    show_fps_switch = ctk.CTkSwitch(
+        options_column,
+        text="Show FPS",
+        variable=show_fps_value,
+        cursor="hand2",
+        command=lambda: setattr(modules.globals, "show_fps", show_fps_value.get()),
+        progress_color="#3a7ebf",
+        font=("Roboto", 14, "bold"),
+    )
+    show_fps_switch.pack(pady=5, anchor="w")
 
     button_frame = ctk.CTkFrame(main_frame, fg_color="#1a1a1a")
     button_frame.grid(row=2, column=0, columnspan=3, padx=10, pady=10, sticky="nsew")
@@ -1010,25 +1022,25 @@ def update_opacity(value):
     modules.globals.face_opacity = int(value)
 
 
-# Modify the create_webcam_preview function to include the slider
-def create_webcam_preview(camera_index):
+def create_webcam_preview(camera_index: int):
     global preview_label, PREVIEW
 
     camera = cv2.VideoCapture(camera_index)
     if not camera.isOpened():
         update_status(f"Error: Could not open camera with index {camera_index}")
         return
+
     camera.set(cv2.CAP_PROP_FRAME_WIDTH, PREVIEW_DEFAULT_WIDTH)
     camera.set(cv2.CAP_PROP_FRAME_HEIGHT, PREVIEW_DEFAULT_HEIGHT)
     camera.set(cv2.CAP_PROP_FPS, 60)
 
     PREVIEW.deiconify()
 
-    # Remove any existing widgets in PREVIEW window
+    # Clear any existing widgets in the PREVIEW window
     for widget in PREVIEW.winfo_children():
         widget.destroy()
 
-    # Create a main frame to hold all widgets
+    # Create a main frame to contain all widgets
     main_frame = ctk.CTkFrame(PREVIEW)
     main_frame.pack(fill="both", expand=True)
 
@@ -1039,10 +1051,17 @@ def create_webcam_preview(camera_index):
     preview_label = ctk.CTkLabel(preview_frame, text="")
     preview_label.pack(fill="both", expand=True)
 
+    # Initialize frame processors
     frame_processors = get_frame_processors_modules(modules.globals.frame_processors)
 
+    # Variables for source image and FPS calculation
     source_image = None
+    prev_time = time.time()
+    fps_update_interval = 0.5
+    frame_count = 0
+    fps = 0
 
+    # Function to update frame size when the window is resized
     def update_frame_size(event):
         nonlocal temp_frame
         if modules.globals.live_resizable:
@@ -1050,44 +1069,63 @@ def create_webcam_preview(camera_index):
 
     preview_frame.bind("<Configure>", update_frame_size)
 
-    while camera:
+    # Main loop for capturing and processing frames
+    while camera.isOpened() and PREVIEW.state() != "withdrawn":
         ret, frame = camera.read()
         if not ret:
             break
 
-        temp_frame = frame.copy()  # Create a copy of the frame
+        temp_frame = frame.copy()
 
+        # Apply mirroring if enabled
         if modules.globals.live_mirror:
-            temp_frame = cv2.flip(temp_frame, 1)  # horizontal flipping
+            temp_frame = cv2.flip(temp_frame, 1)
 
+        # Resize frame if enabled
         if modules.globals.live_resizable:
             temp_frame = fit_image_to_size(
                 temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
             )
 
+        # Process frame based on face mapping mode
         if not modules.globals.map_faces:
-            # Check if source_path has changed and update source_image if necessary
+            # Update source image if path has changed
             if modules.globals.source_path and (
                 source_image is None
                 or modules.globals.source_path != source_image["location"]
             ):
                 source_image = get_one_face(cv2.imread(modules.globals.source_path))
-                source_image["location"] = (
-                    modules.globals.source_path
-                )  # Store location for comparison
+                source_image["location"] = modules.globals.source_path
 
+            # Apply frame processors (e.g., face swapping, enhancement)
             for frame_processor in frame_processors:
                 temp_frame = frame_processor.process_frame(source_image, temp_frame)
-
         else:
             modules.globals.target_path = None
-
             for frame_processor in frame_processors:
                 temp_frame = frame_processor.process_frame_v2(temp_frame)
 
-        image = cv2.cvtColor(
-            temp_frame, cv2.COLOR_BGR2RGB
-        )  # Convert the image to RGB format to display it with Tkinter
+        # Calculate and display FPS
+        current_time = time.time()
+        frame_count += 1
+        if current_time - prev_time >= fps_update_interval:
+            fps = frame_count / (current_time - prev_time)
+            frame_count = 0
+            prev_time = current_time
+
+        if modules.globals.show_fps:
+            cv2.putText(
+                temp_frame,
+                f"FPS: {fps:.1f}",
+                (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                1,
+                (0, 255, 0),
+                2,
+            )
+
+        # Convert frame to RGB and display in preview label
+        image = cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB)
         image = Image.fromarray(image)
         image = ImageOps.contain(
             image, (temp_frame.shape[1], temp_frame.shape[0]), Image.LANCZOS
@@ -1096,11 +1134,9 @@ def create_webcam_preview(camera_index):
         preview_label.configure(image=image)
         ROOT.update()
 
-        if PREVIEW.state() == "withdrawn":
-            break
-
+    # Release camera and close preview window
     camera.release()
-    PREVIEW.withdraw()  # Close preview window when loop is finished
+    PREVIEW.withdraw()
 
 
 def create_source_target_popup_for_webcam(root: ctk.CTk, map: list) -> None:
