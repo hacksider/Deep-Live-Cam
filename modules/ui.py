@@ -7,6 +7,8 @@ from cv2_enumerate_cameras import enumerate_cameras
 from PIL import Image, ImageOps
 import tkinterdnd2 as tkdnd
 import time
+import json
+
 import modules.globals
 import modules.metadata
 from modules.face_analyser import (
@@ -200,6 +202,46 @@ class TargetLabel(DragDropLabel):
                 target_label.configure(text="")
 
 
+def save_switch_states():
+    switch_states = {
+        "keep_fps": modules.globals.keep_fps,
+        "keep_audio": modules.globals.keep_audio,
+        "keep_frames": modules.globals.keep_frames,
+        "many_faces": modules.globals.many_faces,
+        "map_faces": modules.globals.map_faces,
+        "color_correction": modules.globals.color_correction,
+        "nsfw_filter": modules.globals.nsfw_filter,  # Add this line
+        "live_mirror": modules.globals.live_mirror,
+        "live_resizable": modules.globals.live_resizable,
+        "fp_ui": modules.globals.fp_ui,
+        "show_fps": modules.globals.show_fps,
+    }
+    with open("switch_states.json", "w") as f:
+        json.dump(switch_states, f)
+
+
+def load_switch_states():
+    try:
+        with open("switch_states.json", "r") as f:
+            switch_states = json.load(f)
+        modules.globals.keep_fps = switch_states.get("keep_fps", True)
+        modules.globals.keep_audio = switch_states.get("keep_audio", True)
+        modules.globals.keep_frames = switch_states.get("keep_frames", False)
+        modules.globals.many_faces = switch_states.get("many_faces", False)
+        modules.globals.map_faces = switch_states.get("map_faces", False)
+        modules.globals.color_correction = switch_states.get("color_correction", False)
+        modules.globals.nsfw_filter = switch_states.get(
+            "nsfw_filter", False
+        )  # Add this line
+        modules.globals.live_mirror = switch_states.get("live_mirror", False)
+        modules.globals.live_resizable = switch_states.get("live_resizable", False)
+        modules.globals.fp_ui = switch_states.get("fp_ui", {"face_enhancer": False})
+        modules.globals.show_fps = switch_states.get("show_fps", False)
+    except FileNotFoundError:
+        # If the file doesn't exist, use default values
+        pass
+
+
 def init(start: Callable[[], None], destroy: Callable[[], None]) -> tkdnd.TkinterDnD.Tk:
     global ROOT, PREVIEW, donate_frame
 
@@ -213,6 +255,8 @@ def create_root(
     start: Callable[[], None], destroy: Callable[[], None]
 ) -> tkdnd.TkinterDnD.Tk:
     global source_label, target_label, status_label, donate_frame, show_fps_switch
+
+    load_switch_states()
 
     ctk.set_appearance_mode("dark")
     ctk.set_default_color_theme("blue")
@@ -394,6 +438,61 @@ def create_root(
         font=("Roboto", 14, "bold"),
     )
     show_fps_switch.pack(pady=5, anchor="w")
+
+    keep_fps_checkbox.configure(
+        command=lambda: (
+            setattr(modules.globals, "keep_fps", keep_fps_value.get()),
+            save_switch_states(),
+        )
+    )
+    keep_frames_switch.configure(
+        command=lambda: (
+            setattr(modules.globals, "keep_frames", keep_frames_value.get()),
+            save_switch_states(),
+        )
+    )
+    enhancer_switch.configure(
+        command=lambda: (
+            update_tumbler("face_enhancer", enhancer_value.get()),
+            save_switch_states(),
+        )
+    )
+    keep_audio_switch.configure(
+        command=lambda: (
+            setattr(modules.globals, "keep_audio", keep_audio_value.get()),
+            save_switch_states(),
+        )
+    )
+    many_faces_switch.configure(
+        command=lambda: (
+            setattr(modules.globals, "many_faces", many_faces_value.get()),
+            save_switch_states(),
+        )
+    )
+    color_correction_switch.configure(
+        command=lambda: (
+            setattr(modules.globals, "color_correction", color_correction_value.get()),
+            save_switch_states(),
+        )
+    )
+    # nsfw_switch.configure(  # Uncomment if you're using the NSFW filter
+    #     command=lambda: (
+    #         setattr(modules.globals, "nsfw_filter", nsfw_value.get()),
+    #         save_switch_states(),
+    #     )
+    # )
+    map_faces_switch.configure(
+        command=lambda: (
+            setattr(modules.globals, "map_faces", map_faces.get()),
+            save_switch_states(),
+        )
+    )
+    show_fps_switch.configure(
+        command=lambda: (
+            setattr(modules.globals, "show_fps", show_fps_value.get()),
+            save_switch_states(),
+        )
+    )
 
     button_frame = ctk.CTkFrame(main_frame, fg_color="#1a1a1a")
     button_frame.grid(row=2, column=0, columnspan=3, padx=10, pady=10, sticky="nsew")
