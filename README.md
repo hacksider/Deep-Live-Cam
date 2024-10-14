@@ -33,7 +33,8 @@ Users are expected to use this software responsibly and legally. If using a real
 
 <details>
 <summary>Click to see installation details</summary>
-### Basic Installation (CPU)
+
+  ### Basic Installation (CPU)
 
 This is more likely to work on your computer but will be slower as it utilizes the CPU.
 
