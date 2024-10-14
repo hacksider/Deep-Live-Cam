@@ -202,7 +202,7 @@ class TargetLabel(DragDropLabel):
 
 
 def init(start: Callable[[], None], destroy: Callable[[], None]) -> tkdnd.TkinterDnD.Tk:
-    global ROOT, PREVIEW
+    global ROOT, PREVIEW, donate_frame
 
     ROOT = create_root(start, destroy)
     PREVIEW = create_preview(ROOT)
@@ -213,7 +213,7 @@ def init(start: Callable[[], None], destroy: Callable[[], None]) -> tkdnd.Tkinte
 def create_root(
     start: Callable[[], None], destroy: Callable[[], None]
 ) -> tkdnd.TkinterDnD.Tk:
-    global source_label, target_label, status_label
+    global source_label, target_label, status_label, donate_frame
 
     ctk.set_appearance_mode("dark")
     ctk.set_default_color_theme("blue")
@@ -390,7 +390,14 @@ def create_root(
         button_frame,
         text="Start",
         cursor="hand2",
-        command=lambda: analyze_target(start, root),
+        command=lambda: [
+            (
+                donate_frame.destroy()
+                if "donate_frame" in globals() and donate_frame.winfo_exists()
+                else None
+            ),
+            analyze_target(start, root),
+        ],
         fg_color="#4CAF50",
         hover_color="#45a049",
     )
@@ -405,10 +412,15 @@ def create_root(
     preview_button.pack(side="left", padx=10, expand=True)
 
     # --- Camera Selection ---
-    camera_label = ctk.CTkLabel(root, text="Select Camera:")
-    camera_label.place(relx=0.4, rely=0.86, relwidth=0.2, relheight=0.05)
+    camera_frame = ctk.CTkFrame(main_frame, fg_color="#2a2d2e", corner_radius=15)
+    camera_frame.grid(row=3, column=0, columnspan=3, padx=10, pady=(0, 10), sticky="ew")
+
+    camera_label = ctk.CTkLabel(
+        camera_frame, text="Select Camera:", font=("Roboto", 14)
+    )
+    camera_label.pack(side="left", padx=(20, 10), pady=10)
+
     available_cameras = get_available_cameras()
-    # Convert camera indices to strings for CTkOptionMenu
     available_camera_indices, available_camera_strings = available_cameras
     camera_variable = ctk.StringVar(
         value=(
@@ -418,23 +430,34 @@ def create_root(
         )
     )
     camera_optionmenu = ctk.CTkOptionMenu(
-        root, variable=camera_variable, values=available_camera_strings
+        camera_frame,
+        variable=camera_variable,
+        values=available_camera_strings,
+        width=200,
+        font=("Roboto", 14),
     )
-    camera_optionmenu.place(relx=0.65, rely=0.86, relwidth=0.2, relheight=0.05)
-    # --- End Camera Selection ---
+    camera_optionmenu.pack(side="left", padx=10, pady=10)
 
     live_button = ModernButton(
-        button_frame,
+        camera_frame,
         text="Live",
         cursor="hand2",
-        command=lambda: webcam_preview(
-            root,
-            available_camera_indices[
-                available_camera_strings.index(camera_variable.get())
-            ],
-        ),
+        command=lambda: [
+            (
+                donate_frame.destroy()
+                if "donate_frame" in globals() and donate_frame.winfo_exists()
+                else None
+            ),
+            webcam_preview(
+                root,
+                available_camera_indices[
+                    available_camera_strings.index(camera_variable.get())
+                ],
+            ),
+        ],
     )
-    live_button.pack(side="left", padx=10, expand=True)
+    live_button.pack(side="left", padx=10, pady=10)
+    # --- End Camera Selection ---
 
     stop_button = ModernButton(
         button_frame,
@@ -449,7 +472,7 @@ def create_root(
     status_label = ModernLabel(
         main_frame, text=None, justify="center", fg_color="#1a1a1a"
     )
-    status_label.grid(row=3, column=0, columnspan=3, pady=10, sticky="ew")
+    status_label.grid(row=4, column=0, columnspan=3, pady=10, sticky="ew")
 
     donate_frame = ctk.CTkFrame(main_frame, fg_color="#1a1a1a")
     donate_frame.grid(row=4, column=0, columnspan=3, pady=5, sticky="ew")
