@@ -30,6 +30,9 @@ Users are expected to use this software responsibly and legally. If using a real
 
 ## Installation (Manual)
 **Please be aware that the installation needs technical skills and is NOT for beginners, consider downloading the prebuilt. Please do NOT open platform and installation related issues on GitHub before discussing it on the discord server.**
+
+<details>
+<summary>Click to see installation details</summary>
 ### Basic Installation (CPU)
 
 This is more likely to work on your computer but will be slower as it utilizes the CPU.
@@ -139,7 +142,7 @@ python run.py --execution-provider openvino
 ```
 
 </details>
-
+</details>
 
 ## Usage
 
@@ -379,6 +382,10 @@ For the latest experimental builds and features, see the [experimental branch](h
 
 This is an open-source project developed in our free time. Updates may be delayed.
 
+**Tips and Links:**
+- [How to make the most of Deep-Live-Cam](https://hacksider.gumroad.com/p/how-to-make-the-most-on-deep-live-cam)
+- Face enhancer is good, but still very slow for any live streaming purpose.
+
 
 ## Credits
 
@@ -392,9 +399,14 @@ This is an open-source project developed in our free time. Updates may be delaye
 - and [all developers](https://github.com/hacksider/Deep-Live-Cam/graphs/contributors) behind libraries used in this project.
 - Foot Note: [This is originally roop-cam, see the full history of the code here.](https://github.com/hacksider/roop-cam) Please be informed that the base author of the code is [s0md3v](https://github.com/s0md3v/roop)
 
-## Thanks to all the contributors
-<a href="https://github.com/hacksider/Deep-Live-Cam/graphs/contributors" target="_blank">
-  <img src="https://contrib.rocks/image?repo=hacksider/Deep-Live-Cam" />
-</a>
-
+## Contributions
 ![Alt](https://repobeats.axiom.co/api/embed/fec8e29c45dfdb9c5916f3a7830e1249308d20e1.svg "Repobeats analytics image")
+## Star History
+
+<a href="https://star-history.com/#hacksider/deep-live-cam&Date">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=hacksider/deep-live-cam&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=hacksider/deep-live-cam&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=hacksider/deep-live-cam&type=Date" />
+ </picture>
+</a>
