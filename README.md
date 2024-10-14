@@ -379,6 +379,10 @@ For the latest experimental builds and features, see the [experimental branch](h
 
 This is an open-source project developed in our free time. Updates may be delayed.
 
+**Tips and Links:**
+- [How to make the most of Deep-Live-Cam](https://hacksider.gumroad.com/p/how-to-make-the-most-on-deep-live-cam)
+- Face enhancer is good, but still very slow for any live streaming purpose.
+
 
 ## Credits
 
