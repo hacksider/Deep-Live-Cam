@@ -880,7 +880,7 @@ def select_source_path() -> None:
     else:
         modules.globals.source_path = None
         source_label.configure(image=None)
-        source_label.configure(text="Drag & Drop Source Image Here")
+        source_label.configure(text="Drag & Drop\nSource Image Here")
 
 
 def swap_faces_paths() -> None:
@@ -1250,7 +1250,12 @@ def create_source_target_popup_for_webcam(root: ctk.CTk, map: list) -> None:
         if has_valid_map():
             POPUP_LIVE.destroy()
             simplify_maps()
-            create_webcam_preview()
+            # Get the selected camera index
+            selected_camera = camera_variable.get()
+            camera_index = available_camera_indices[
+                available_camera_strings.index(selected_camera)
+            ]
+            create_webcam_preview(camera_index)
         else:
             update_pop_live_status("At least 1 source with target is required!")
 
@@ -1281,6 +1286,27 @@ def create_source_target_popup_for_webcam(root: ctk.CTk, map: list) -> None:
         corner_radius=10,
     )
     close_button.place(relx=0.6, rely=0.92, relwidth=0.2, relheight=0.05)
+
+    # Add camera selection
+    camera_frame = ctk.CTkFrame(POPUP_LIVE)
+    camera_frame.grid(row=2, column=0, pady=15)
+
+    camera_label = ctk.CTkLabel(camera_frame, text="Select Camera:")
+    camera_label.pack(side="left", padx=(0, 10))
+
+    available_cameras = get_available_cameras()
+    available_camera_indices, available_camera_strings = available_cameras
+    camera_variable = ctk.StringVar(
+        value=(
+            available_camera_strings[0]
+            if available_camera_strings
+            else "No cameras found"
+        )
+    )
+    camera_optionmenu = ctk.CTkOptionMenu(
+        camera_frame, variable=camera_variable, values=available_camera_strings
+    )
+    camera_optionmenu.pack(side="left")
 
     refresh_data(map)  # Initial data refresh
 
