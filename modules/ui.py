@@ -1027,18 +1027,58 @@ def toggle_preview() -> None:
     if PREVIEW.state() == "normal":
         PREVIEW.withdraw()
     elif modules.globals.source_path and modules.globals.target_path:
-        init_preview()
-        update_preview()
+        try:
+            init_preview()
+            update_preview()
+        except Exception as e:
+            print(f"Error initializing preview: {str(e)}")
+            # Optionally, show an error message to the user
+            update_status(f"Error initializing preview: {str(e)}")
 
 
 def init_preview() -> None:
+    global preview_slider
+
     if is_image(modules.globals.target_path):
-        preview_slider.pack_forget()
-    if is_video(modules.globals.target_path):
+        if hasattr(preview_slider, "pack_forget"):
+            preview_slider.pack_forget()
+    elif is_video(modules.globals.target_path):
         video_frame_total = get_video_frame_total(modules.globals.target_path)
-        preview_slider.configure(to=video_frame_total)
-        preview_slider.pack(fill="x")
-        preview_slider.set(0)
+
+        # Check if preview_slider exists and is a valid widget
+        if hasattr(preview_slider, "winfo_exists") and preview_slider.winfo_exists():
+            try:
+                preview_slider.configure(to=video_frame_total)
+                preview_slider.pack(fill="x")
+                preview_slider.set(0)
+            except tk.TclError:
+                print("Error: Preview slider widget not available. Recreating it.")
+                create_preview_slider()
+        else:
+            print("Preview slider not found. Creating a new one.")
+            create_preview_slider()
+
+
+def create_preview_slider():
+    global preview_slider, PREVIEW
+
+    # Ensure PREVIEW window exists
+    if not hasattr(PREVIEW, "winfo_exists") or not PREVIEW.winfo_exists():
+        print("Error: Preview window does not exist.")
+        return
+
+    # Create a new slider
+    preview_slider = ctk.CTkSlider(
+        PREVIEW,
+        from_=0,
+        to=get_video_frame_total(modules.globals.target_path),
+        command=lambda frame_value: update_preview(int(frame_value)),
+        fg_color=("gray75", "gray25"),
+        progress_color=("DodgerBlue", "DodgerBlue"),
+        button_color=("DodgerBlue", "DodgerBlue"),
+        button_hover_color=("RoyalBlue", "RoyalBlue"),
+    )
+    preview_slider.pack(fill="x", padx=20, pady=10)
 
 
 def update_preview(frame_number: int = 0) -> None:
