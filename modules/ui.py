@@ -842,6 +842,10 @@ def create_preview(parent: ctk.CTkToplevel) -> ctk.CTkToplevel:
     )
     preview_slider.pack(fill="x", padx=20, pady=10)
 
+    # Add keyboard bindings for left and right arrow keys
+    preview.bind("<Left>", lambda event: navigate_frames(-1))
+    preview.bind("<Right>", lambda event: navigate_frames(1))
+
     return preview
 
 
@@ -1081,14 +1085,16 @@ def create_preview_slider():
     preview_slider.pack(fill="x", padx=20, pady=10)
 
 
+def navigate_frames(direction: int) -> None:
+    current_frame = int(preview_slider.get())
+    new_frame = max(0, min(current_frame + direction, int(preview_slider.cget("to"))))
+    preview_slider.set(new_frame)
+    update_preview(new_frame)
+
+
 def update_preview(frame_number: int = 0) -> None:
     if modules.globals.source_path and modules.globals.target_path:
         update_status("Processing...")
-
-        # Debug: Print the target path and frame number
-        print(
-            f"Target path: {modules.globals.target_path}, Frame number: {frame_number}"
-        )
 
         temp_frame = None
         if is_video(modules.globals.target_path):
@@ -1096,7 +1102,6 @@ def update_preview(frame_number: int = 0) -> None:
         elif is_image(modules.globals.target_path):
             temp_frame = cv2.imread(modules.globals.target_path)
 
-        # Debug: Check if temp_frame is None
         if temp_frame is None:
             print("Error: temp_frame is None")
             update_status("Error: Could not read frame from video or image.")
@@ -1108,18 +1113,9 @@ def update_preview(frame_number: int = 0) -> None:
         for frame_processor in get_frame_processors_modules(
             modules.globals.frame_processors
         ):
-            # Debug: Print the type of frame_processor
-            print(f"Processing frame with: {type(frame_processor).__name__}")
-
             temp_frame = frame_processor.process_frame(
                 get_one_face(cv2.imread(modules.globals.source_path)), temp_frame
             )
-
-            # Debug: Check if temp_frame is None after processing
-            if temp_frame is None:
-                print("Error: temp_frame is None after processing")
-                update_status("Error: Frame processing failed.")
-                return
 
         image = Image.fromarray(cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB))
         image = ImageOps.contain(
