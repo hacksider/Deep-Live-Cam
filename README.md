@@ -190,6 +190,7 @@ Track and change faces on the fly.
 **See the Magic!**
 
 ![multicapture](https://github.com/user-attachments/assets/3cc0e579-6fac-4ed5-bcaa-0dcac97ca5a6)
+
 **Watch movies in realtime:**
 
 It's as simple as opening a movie on the screen, and selecting OBS as your camera!
