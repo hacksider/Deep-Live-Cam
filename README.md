@@ -1,12 +1,12 @@
-<h1 align="center">Deep Live Cam</h1>
+<h1 align="center">Deep-Live-Cam</h1>
 
 <p align="center">
   Real-time face swap and video deepfake with a single click and only a single image.
 </p>
 
 <p align="center">
-  <img src="demo.gif" alt="Demo GIF">
-  <img src="avgpcperformancedemo.gif" alt="Performance Demo GIF">
+  <img src="media/demo.gif" alt="Demo GIF">
+  <img src="media/avgpcperformancedemo.gif" alt="Performance Demo GIF">
 </p>
 
 ## Disclaimer
@@ -20,21 +20,13 @@ Users are expected to use this software responsibly and legally. If using a real
 
 ## Quick Start (Windows / Nvidia)
 
-[![Download](https://github.com/user-attachments/assets/3e3e252a-4bfa-41fb-a88c-84557402a7c7)](https://hacksider.gumroad.com/l/vccdmm) 
-
-
-
-
+[![Download](media/download.png)](https://hacksider.gumroad.com/l/vccdmm) 
 
 [Download latest pre-built version with CUDA support](https://hacksider.gumroad.com/l/vccdmm) - No Manual Installation/Downloading required.
 
 ## Installation (Manual)
 **Please be aware that the installation needs technical skills and is NOT for beginners, consider downloading the prebuilt. Please do NOT open platform and installation related issues on GitHub before discussing it on the discord server.**
-
-<details>
-<summary>Click to see installation details</summary>
-
-  ### Basic Installation (CPU)
+### Basic Installation (CPU)
 
 This is more likely to work on your computer but will be slower as it utilizes the CPU.
 
@@ -143,7 +135,7 @@ python run.py --execution-provider openvino
 ```
 
 </details>
-</details>
+
 
 ## Usage
 
@@ -163,7 +155,7 @@ python run.py --execution-provider openvino
 - Use a screen capture tool like OBS to stream.
 - To change the face, select a new source image.
 
-![demo-gif](demo.gif)
+![demo-gif](media/demo.gif)
 
 ## Features
 
@@ -171,27 +163,34 @@ python run.py --execution-provider openvino
 
 Dynamically improve performance using the `--live-resizable` parameter.
 
-![resizable-gif](resizable.gif)
+![resizable-gif](media/resizable.gif)
 
 ### Face Mapping
 
 Track and change faces on the fly.
 
-![face_mapping_source](face_mapping_source.gif)
+![face_mapping_source](media/face_mapping_source.gif)
 
 **Source Video:**
 
-![face-mapping](face_mapping.png)
+![face-mapping](media/face_mapping.png)
 
 **Enable Face Mapping:**
 
-![face-mapping2](face_mapping2.png)
+![face-mapping2](media/face_mapping2.png)
 
 **Map the Faces:**
 
-![face_mapping_result](face_mapping_result.gif)
+![face_mapping_result](media/face_mapping_result.gif)
 
 **See the Magic!**
+
+![movie](media/movie.gif)
+
+**Watch movies in realtime:**
+
+It's as simple as opening a movie on the screen, and selecting OBS as your camera!
+![image](media/movie_img.png)
 
 
 ## Command Line Arguments
