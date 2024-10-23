@@ -59,6 +59,8 @@ RECENT_DIRECTORY_SOURCE = None
 RECENT_DIRECTORY_TARGET = None
 RECENT_DIRECTORY_OUTPUT = None
 
+BLUR_SIZE = 1
+
 preview_label = None
 preview_slider = None
 source_label = None
@@ -317,6 +319,47 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     live_button.place(relx=0.65, rely=0.86, relwidth=0.2, relheight=0.05)
     # --- End Camera Selection ---
 
+    show_mouth_mask_var = ctk.BooleanVar(value=modules.globals.show_mouth_mask_box)
+    show_mouth_mask_switch = ctk.CTkSwitch(
+        root,
+        text="Show Mouth Mask Box",
+        variable=show_mouth_mask_var,
+        cursor="hand2",
+        command=lambda: setattr(
+            modules.globals, "show_mouth_mask_box", show_mouth_mask_var.get()
+        ),
+        progress_color="#3a7ebf",
+        font=("Roboto", 14, "bold"),
+    )
+    show_mouth_mask_switch.pack(pady=5, anchor="w")
+
+    # Create frame for mouth mask
+    mouth_mask_frame = ctk.CTkFrame(
+        root, fg_color="#2a2d2e", border_width=1, border_color="grey"
+    )
+    mouth_mask_frame.pack(pady=5, anchor="w", fill="x")
+
+    # Create a shared BooleanVar in modules.globals
+    if not hasattr(modules.globals, "mouth_mask_var"):
+        modules.globals.mouth_mask_var = ctk.BooleanVar(
+            value=modules.globals.mouth_mask
+        )
+
+    # Mouth mask switch
+    mouth_mask_switch = ctk.CTkSwitch(
+        mouth_mask_frame,
+        text="Mouth Mask",
+        variable=modules.globals.mouth_mask_var,
+        cursor="hand2",
+        command=toggle_mouthmask,
+        progress_color="#3a7ebf",
+        font=("Roboto", 14, "bold"),
+    )
+    mouth_mask_switch.pack(pady=5, anchor="w")
+
+    # Store the switch in modules.globals for access from create_preview
+    modules.globals.mouth_mask_switch_root = mouth_mask_switch
+
     status_label = ctk.CTkLabel(root, text=None, justify="center")
     status_label.place(relx=0.1, rely=0.9, relwidth=0.8)
 
@@ -478,6 +521,29 @@ def update_popup_source(
         return map
 
 
+def toggle_mouthmask():
+    """
+    Toggle the mouth mask state and synchronize all UI switches.
+    Updates both the global state and any existing switch controls.
+    """
+    is_mouthmask = modules.globals.mouth_mask_var.get()
+    modules.globals.mouth_mask = is_mouthmask
+
+    # Update root window switch if it exists
+    if hasattr(modules.globals, "mouth_mask_switch_root"):
+        if is_mouthmask:
+            modules.globals.mouth_mask_switch_root.select()
+        else:
+            modules.globals.mouth_mask_switch_root.deselect()
+
+    # Update preview window switch if it exists
+    if hasattr(modules.globals, "mouth_mask_switch_preview"):
+        if is_mouthmask:
+            modules.globals.mouth_mask_switch_preview.select()
+        else:
+            modules.globals.mouth_mask_switch_preview.deselect()
+
+
 def create_preview(parent: ctk.CTkToplevel) -> ctk.CTkToplevel:
     global preview_label, preview_slider
 
@@ -494,6 +560,17 @@ def create_preview(parent: ctk.CTkToplevel) -> ctk.CTkToplevel:
     preview_slider = ctk.CTkSlider(
         preview, from_=0, to=0, command=lambda frame_value: update_preview(frame_value)
     )
+    mouth_mask_switch_preview = ctk.CTkSwitch(
+        preview,
+        text="Mouth Mask",
+        variable=modules.globals.mouth_mask_var,
+        cursor="hand2",
+        command=toggle_mouthmask,
+    )
+    mouth_mask_switch_preview.pack(side="left", padx=5, pady=5)
+
+    # Store the switch in modules.globals for access from create_root
+    modules.globals.mouth_mask_switch_preview = mouth_mask_switch_preview
 
     return preview
 

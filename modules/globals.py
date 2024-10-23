@@ -36,3 +36,6 @@ fp_ui: Dict[str, bool] = {"face_enhancer": False}
 camera_input_combobox = None
 webcam_preview_running = False
 show_fps = False
+mouth_mask = False
+show_mouth_mask_box = False
+mouth_mask_switch_preview = None
