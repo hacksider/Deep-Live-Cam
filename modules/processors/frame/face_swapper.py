@@ -63,40 +63,29 @@ def get_face_swapper() -> Any:
     return FACE_SWAPPER
 
 
-def create_face_mask(face: Face, frame: Frame) -> np.ndarray:
-    """Create a binary mask for the face region."""
-    mask = np.zeros(frame.shape[:2], dtype=np.uint8)
-    landmarks = face.landmark_2d_106
-    if landmarks is not None:
-        hull = cv2.convexHull(landmarks.astype(np.int32))
-        cv2.fillConvexPoly(mask, hull, 255)
-    return mask
-
-
-def create_lower_mouth_mask(
+def create_face_masks(
     face: Face, frame: Frame
 ) -> Tuple[np.ndarray, np.ndarray, Tuple[int, int, int, int], np.ndarray]:
-    """Create a mask for the lower mouth region."""
-    mask = np.zeros(frame.shape[:2], dtype=np.uint8)
+    """Create both face and mouth masks in one pass."""
+    face_mask = np.zeros(frame.shape[:2], dtype=np.uint8)
+    mouth_mask = np.zeros(frame.shape[:2], dtype=np.uint8)
+
     landmarks = face.landmark_2d_106
-
     if landmarks is not None:
-        # Extract mouth landmarks
-        mouth_points = landmarks[84:96]  # Adjust indices based on your landmark format
-        lower_lip = mouth_points[6:12]  # Lower lip points
+        # Create full face mask
+        hull = cv2.convexHull(landmarks.astype(np.int32))
+        cv2.fillConvexPoly(face_mask, hull, 255)
 
-        # Create polygon for lower mouth area
+        # Create mouth mask
+        lower_lip = landmarks[90:96]  # Lower lip points
         lower_lip_polygon = cv2.convexHull(lower_lip.astype(np.int32))
-        cv2.fillConvexPoly(mask, lower_lip_polygon, 255)
+        cv2.fillConvexPoly(mouth_mask, lower_lip_polygon, 255)
 
-        # Get bounding box
+        # Get mouth bounding box
         x, y, w, h = cv2.boundingRect(lower_lip_polygon)
-        mouth_box = (x, y, w, h)
-
-        # Extract the mouth region
         mouth_cutout = frame[y : y + h, x : x + w].copy()
 
-        return mask, mouth_cutout, mouth_box, lower_lip_polygon
+        return face_mask, mouth_cutout, (x, y, w, h), lower_lip_polygon
 
     return None, None, None, None
 
