@@ -97,9 +97,8 @@ def save_switch_states():
         "live_resizable": modules.globals.live_resizable,
         "fp_ui": modules.globals.fp_ui,
         "show_fps": modules.globals.show_fps,
-        "show_mouth": modules.globals.mouth_mask,
+        "mouth_mask": modules.globals.mouth_mask,
         "show_mouth_mask_box": modules.globals.show_mouth_mask_box,
-        "mouth_mask_switch_preview": modules.globals.mouth_mask_switch_preview,
     }
     with open("switch_states.json", "w") as f:
         json.dump(switch_states, f)
@@ -326,36 +325,35 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     live_button.place(relx=0.65, rely=0.86, relwidth=0.2, relheight=0.05)
     # --- End Camera Selection ---
 
-    show_mouth_mask_var = ctk.BooleanVar(value=modules.globals.show_mouth_mask_box)
-    show_mouth_mask_switch = ctk.CTkSwitch(
-        root,
-        text="Show Mouth Mask Box",
-        variable=show_mouth_mask_var,
-        cursor="hand2",
-        command=lambda: setattr(
-            modules.globals, "show_mouth_mask_box", show_mouth_mask_var.get()
-        ),
-    )
-    show_mouth_mask_switch.place(relx=0.1, rely=0.75)
-
-    # Create a shared BooleanVar in modules.globals
-    if not hasattr(modules.globals, "mouth_mask_var"):
-        modules.globals.mouth_mask_var = ctk.BooleanVar(
-            value=modules.globals.mouth_mask
-        )
-
-    # Mouth mask switch
+    mouth_mask_value = ctk.BooleanVar(value=modules.globals.mouth_mask)
     mouth_mask_switch = ctk.CTkSwitch(
         root,
         text="Mouth Mask",
-        variable=modules.globals.mouth_mask_var,
+        variable=mouth_mask_value,
         cursor="hand2",
-        command=toggle_mouthmask,
+        command=lambda: (
+            setattr(modules.globals, "mouth_mask", mouth_mask_value.get()),
+            save_switch_states(),
+        ),
     )
-    mouth_mask_switch.place(relx=0.6, rely=0.75)
+    mouth_mask_switch.place(relx=0.1, rely=0.75)
 
-    # Store the switch in modules.globals for access from create_preview
-    modules.globals.mouth_mask_switch_root = mouth_mask_switch
+    show_mouth_mask_box_value = ctk.BooleanVar(
+        value=modules.globals.show_mouth_mask_box
+    )
+    show_mouth_mask_box_switch = ctk.CTkSwitch(
+        root,
+        text="Show Mouth Mask Box",
+        variable=show_mouth_mask_box_value,
+        cursor="hand2",
+        command=lambda: (
+            setattr(
+                modules.globals, "show_mouth_mask_box", show_mouth_mask_box_value.get()
+            ),
+            save_switch_states(),
+        ),
+    )
+    show_mouth_mask_box_switch.place(relx=0.6, rely=0.75)
 
     status_label = ctk.CTkLabel(root, text=None, justify="center")
     status_label.place(relx=0.1, rely=0.9, relwidth=0.8)
@@ -516,21 +514,6 @@ def update_popup_source(
         else:
             update_pop_status("Face could not be detected in last upload!")
         return map
-
-
-def toggle_mouthmask():
-    """
-    Toggle the mouth mask state.
-    """
-    is_mouthmask = modules.globals.mouth_mask_var.get()
-    modules.globals.mouth_mask = is_mouthmask
-
-    # Update root window switch if it exists
-    if hasattr(modules.globals, "mouth_mask_switch_root"):
-        if is_mouthmask:
-            modules.globals.mouth_mask_switch_root.select()
-        else:
-            modules.globals.mouth_mask_switch_root.deselect()
 
 
 def create_preview(parent: ctk.CTkToplevel) -> ctk.CTkToplevel:
