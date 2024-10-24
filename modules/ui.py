@@ -59,6 +59,8 @@ RECENT_DIRECTORY_SOURCE = None
 RECENT_DIRECTORY_TARGET = None
 RECENT_DIRECTORY_OUTPUT = None
 
+BLUR_SIZE = 1
+
 preview_label = None
 preview_slider = None
 source_label = None
@@ -95,6 +97,8 @@ def save_switch_states():
         "live_resizable": modules.globals.live_resizable,
         "fp_ui": modules.globals.fp_ui,
         "show_fps": modules.globals.show_fps,
+        "mouth_mask": modules.globals.mouth_mask,
+        "show_mouth_mask_box": modules.globals.show_mouth_mask_box,
     }
     with open("switch_states.json", "w") as f:
         json.dump(switch_states, f)
@@ -115,6 +119,10 @@ def load_switch_states():
         modules.globals.live_resizable = switch_states.get("live_resizable", False)
         modules.globals.fp_ui = switch_states.get("fp_ui", {"face_enhancer": False})
         modules.globals.show_fps = switch_states.get("show_fps", False)
+        modules.globals.mouth_mask = switch_states.get("mouth_mask", False)
+        modules.globals.show_mouth_mask_box = switch_states.get(
+            "show_mouth_mask_box", False
+        )
     except FileNotFoundError:
         # If the file doesn't exist, use default values
         pass
@@ -172,7 +180,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             save_switch_states(),
         ),
     )
-    keep_fps_checkbox.place(relx=0.1, rely=0.6)
+    keep_fps_checkbox.place(relx=0.1, rely=0.55)
 
     keep_frames_value = ctk.BooleanVar(value=modules.globals.keep_frames)
     keep_frames_switch = ctk.CTkSwitch(
@@ -185,7 +193,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             save_switch_states(),
         ),
     )
-    keep_frames_switch.place(relx=0.1, rely=0.65)
+    keep_frames_switch.place(relx=0.1, rely=0.60)
 
     enhancer_value = ctk.BooleanVar(value=modules.globals.fp_ui["face_enhancer"])
     enhancer_switch = ctk.CTkSwitch(
@@ -198,7 +206,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             save_switch_states(),
         ),
     )
-    enhancer_switch.place(relx=0.1, rely=0.7)
+    enhancer_switch.place(relx=0.1, rely=0.65)
 
     keep_audio_value = ctk.BooleanVar(value=modules.globals.keep_audio)
     keep_audio_switch = ctk.CTkSwitch(
@@ -211,7 +219,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             save_switch_states(),
         ),
     )
-    keep_audio_switch.place(relx=0.6, rely=0.6)
+    keep_audio_switch.place(relx=0.6, rely=0.55)
 
     many_faces_value = ctk.BooleanVar(value=modules.globals.many_faces)
     many_faces_switch = ctk.CTkSwitch(
@@ -224,7 +232,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             save_switch_states(),
         ),
     )
-    many_faces_switch.place(relx=0.6, rely=0.65)
+    many_faces_switch.place(relx=0.6, rely=0.60)
 
     color_correction_value = ctk.BooleanVar(value=modules.globals.color_correction)
     color_correction_switch = ctk.CTkSwitch(
@@ -237,7 +245,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             save_switch_states(),
         ),
     )
-    color_correction_switch.place(relx=0.6, rely=0.70)
+    color_correction_switch.place(relx=0.6, rely=0.65)
 
     #    nsfw_value = ctk.BooleanVar(value=modules.globals.nsfw_filter)
     #    nsfw_switch = ctk.CTkSwitch(root, text='NSFW filter', variable=nsfw_value, cursor='hand2', command=lambda: setattr(modules.globals, 'nsfw_filter', nsfw_value.get()))
@@ -254,7 +262,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             save_switch_states(),
         ),
     )
-    map_faces_switch.place(relx=0.1, rely=0.75)
+    map_faces_switch.place(relx=0.1, rely=0.70)
 
     show_fps_value = ctk.BooleanVar(value=modules.globals.show_fps)
     show_fps_switch = ctk.CTkSwitch(
@@ -267,7 +275,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             save_switch_states(),
         ),
     )
-    show_fps_switch.place(relx=0.6, rely=0.75)
+    show_fps_switch.place(relx=0.6, rely=0.70)
 
     start_button = ctk.CTkButton(
         root, text="Start", cursor="hand2", command=lambda: analyze_target(start, root)
@@ -316,6 +324,36 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     )
     live_button.place(relx=0.65, rely=0.86, relwidth=0.2, relheight=0.05)
     # --- End Camera Selection ---
+
+    mouth_mask_value = ctk.BooleanVar(value=modules.globals.mouth_mask)
+    mouth_mask_switch = ctk.CTkSwitch(
+        root,
+        text="Mouth Mask",
+        variable=mouth_mask_value,
+        cursor="hand2",
+        command=lambda: (
+            setattr(modules.globals, "mouth_mask", mouth_mask_value.get()),
+            save_switch_states(),
+        ),
+    )
+    mouth_mask_switch.place(relx=0.1, rely=0.75)
+
+    show_mouth_mask_box_value = ctk.BooleanVar(
+        value=modules.globals.show_mouth_mask_box
+    )
+    show_mouth_mask_box_switch = ctk.CTkSwitch(
+        root,
+        text="Show Mouth Mask Box",
+        variable=show_mouth_mask_box_value,
+        cursor="hand2",
+        command=lambda: (
+            setattr(
+                modules.globals, "show_mouth_mask_box", show_mouth_mask_box_value.get()
+            ),
+            save_switch_states(),
+        ),
+    )
+    show_mouth_mask_box_switch.place(relx=0.6, rely=0.75)
 
     status_label = ctk.CTkLabel(root, text=None, justify="center")
     status_label.place(relx=0.1, rely=0.9, relwidth=0.8)
