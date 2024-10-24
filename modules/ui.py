@@ -97,6 +97,9 @@ def save_switch_states():
         "live_resizable": modules.globals.live_resizable,
         "fp_ui": modules.globals.fp_ui,
         "show_fps": modules.globals.show_fps,
+        "show_mouth": modules.globals.mouth_mask,
+        "show_mouth_mask_box": modules.globals.show_mouth_mask_box,
+        "mouth_mask_switch_preview": modules.globals.mouth_mask_switch_preview,
     }
     with open("switch_states.json", "w") as f:
         json.dump(switch_states, f)
@@ -117,6 +120,10 @@ def load_switch_states():
         modules.globals.live_resizable = switch_states.get("live_resizable", False)
         modules.globals.fp_ui = switch_states.get("fp_ui", {"face_enhancer": False})
         modules.globals.show_fps = switch_states.get("show_fps", False)
+        modules.globals.mouth_mask = switch_states.get("mouth_mask", False)
+        modules.globals.show_mouth_mask_box = switch_states.get(
+            "show_mouth_mask_box", False
+        )
     except FileNotFoundError:
         # If the file doesn't exist, use default values
         pass
@@ -513,8 +520,7 @@ def update_popup_source(
 
 def toggle_mouthmask():
     """
-    Toggle the mouth mask state and synchronize all UI switches.
-    Updates both the global state and any existing switch controls.
+    Toggle the mouth mask state.
     """
     is_mouthmask = modules.globals.mouth_mask_var.get()
     modules.globals.mouth_mask = is_mouthmask
@@ -525,13 +531,6 @@ def toggle_mouthmask():
             modules.globals.mouth_mask_switch_root.select()
         else:
             modules.globals.mouth_mask_switch_root.deselect()
-
-    # Update preview window switch if it exists
-    if hasattr(modules.globals, "mouth_mask_switch_preview"):
-        if is_mouthmask:
-            modules.globals.mouth_mask_switch_preview.select()
-        else:
-            modules.globals.mouth_mask_switch_preview.deselect()
 
 
 def create_preview(parent: ctk.CTkToplevel) -> ctk.CTkToplevel:
@@ -550,17 +549,6 @@ def create_preview(parent: ctk.CTkToplevel) -> ctk.CTkToplevel:
     preview_slider = ctk.CTkSlider(
         preview, from_=0, to=0, command=lambda frame_value: update_preview(frame_value)
     )
-    mouth_mask_switch_preview = ctk.CTkSwitch(
-        preview,
-        text="Mouth Mask",
-        variable=modules.globals.mouth_mask_var,
-        cursor="hand2",
-        command=toggle_mouthmask,
-    )
-    mouth_mask_switch_preview.pack(side="left", padx=5, pady=5)
-
-    # Store the switch in modules.globals for access from create_root
-    modules.globals.mouth_mask_switch_preview = mouth_mask_switch_preview
 
     return preview
 

@@ -85,9 +85,9 @@ def create_face_masks(
         x, y, w, h = cv2.boundingRect(lower_lip_polygon)
         mouth_cutout = frame[y : y + h, x : x + w].copy()
 
-        return face_mask, mouth_cutout, (x, y, w, h), lower_lip_polygon
+        return face_mask, mouth_mask, mouth_cutout, (x, y, w, h), lower_lip_polygon
 
-    return None, None, None, None
+    return None, None, None, None, None
 
 
 def apply_mouth_area(
@@ -138,9 +138,8 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
 
     if modules.globals.mouth_mask:
         # Create masks
-        face_mask = create_face_mask(target_face, temp_frame)
-        mouth_mask, mouth_cutout, mouth_box, lower_lip_polygon = (
-            create_lower_mouth_mask(target_face, temp_frame)
+        face_mask, mouth_mask, mouth_cutout, mouth_box, lower_lip_polygon = (
+            create_face_masks(target_face, temp_frame)
         )
 
         if mouth_mask is not None:
