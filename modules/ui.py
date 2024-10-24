@@ -174,7 +174,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             save_switch_states(),
         ),
     )
-    keep_fps_checkbox.place(relx=0.1, rely=0.6)
+    keep_fps_checkbox.place(relx=0.1, rely=0.55)
 
     keep_frames_value = ctk.BooleanVar(value=modules.globals.keep_frames)
     keep_frames_switch = ctk.CTkSwitch(
@@ -187,7 +187,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             save_switch_states(),
         ),
     )
-    keep_frames_switch.place(relx=0.1, rely=0.65)
+    keep_frames_switch.place(relx=0.1, rely=0.60)
 
     enhancer_value = ctk.BooleanVar(value=modules.globals.fp_ui["face_enhancer"])
     enhancer_switch = ctk.CTkSwitch(
@@ -200,7 +200,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             save_switch_states(),
         ),
     )
-    enhancer_switch.place(relx=0.1, rely=0.7)
+    enhancer_switch.place(relx=0.1, rely=0.65)
 
     keep_audio_value = ctk.BooleanVar(value=modules.globals.keep_audio)
     keep_audio_switch = ctk.CTkSwitch(
@@ -213,7 +213,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             save_switch_states(),
         ),
     )
-    keep_audio_switch.place(relx=0.6, rely=0.6)
+    keep_audio_switch.place(relx=0.6, rely=0.55)
 
     many_faces_value = ctk.BooleanVar(value=modules.globals.many_faces)
     many_faces_switch = ctk.CTkSwitch(
@@ -226,7 +226,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             save_switch_states(),
         ),
     )
-    many_faces_switch.place(relx=0.6, rely=0.65)
+    many_faces_switch.place(relx=0.6, rely=0.60)
 
     color_correction_value = ctk.BooleanVar(value=modules.globals.color_correction)
     color_correction_switch = ctk.CTkSwitch(
@@ -239,7 +239,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             save_switch_states(),
         ),
     )
-    color_correction_switch.place(relx=0.6, rely=0.70)
+    color_correction_switch.place(relx=0.6, rely=0.65)
 
     #    nsfw_value = ctk.BooleanVar(value=modules.globals.nsfw_filter)
     #    nsfw_switch = ctk.CTkSwitch(root, text='NSFW filter', variable=nsfw_value, cursor='hand2', command=lambda: setattr(modules.globals, 'nsfw_filter', nsfw_value.get()))
@@ -256,7 +256,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             save_switch_states(),
         ),
     )
-    map_faces_switch.place(relx=0.1, rely=0.75)
+    map_faces_switch.place(relx=0.1, rely=0.70)
 
     show_fps_value = ctk.BooleanVar(value=modules.globals.show_fps)
     show_fps_switch = ctk.CTkSwitch(
@@ -269,7 +269,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             save_switch_states(),
         ),
     )
-    show_fps_switch.place(relx=0.6, rely=0.75)
+    show_fps_switch.place(relx=0.6, rely=0.70)
 
     start_button = ctk.CTkButton(
         root, text="Start", cursor="hand2", command=lambda: analyze_target(start, root)
@@ -328,16 +328,8 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         command=lambda: setattr(
             modules.globals, "show_mouth_mask_box", show_mouth_mask_var.get()
         ),
-        progress_color="#3a7ebf",
-        font=("Roboto", 14, "bold"),
     )
-    show_mouth_mask_switch.pack(pady=5, anchor="w")
-
-    # Create frame for mouth mask
-    mouth_mask_frame = ctk.CTkFrame(
-        root, fg_color="#2a2d2e", border_width=1, border_color="grey"
-    )
-    mouth_mask_frame.pack(pady=5, anchor="w", fill="x")
+    show_mouth_mask_switch.place(relx=0.1, rely=0.75)
 
     # Create a shared BooleanVar in modules.globals
     if not hasattr(modules.globals, "mouth_mask_var"):
@@ -347,15 +339,13 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
 
     # Mouth mask switch
     mouth_mask_switch = ctk.CTkSwitch(
-        mouth_mask_frame,
+        root,
         text="Mouth Mask",
         variable=modules.globals.mouth_mask_var,
         cursor="hand2",
         command=toggle_mouthmask,
-        progress_color="#3a7ebf",
-        font=("Roboto", 14, "bold"),
     )
-    mouth_mask_switch.pack(pady=5, anchor="w")
+    mouth_mask_switch.place(relx=0.6, rely=0.75)
 
     # Store the switch in modules.globals for access from create_preview
     modules.globals.mouth_mask_switch_root = mouth_mask_switch
