@@ -192,6 +192,9 @@ Track and change faces on the fly.
 It's as simple as opening a movie on the screen, and selecting OBS as your camera!
 ![image](media/movie_img.png)
 
+### Mouth Masking
+
+![Mouth_Masking](media/mouth.gif)
 
 ## Command Line Arguments
 
