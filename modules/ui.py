@@ -95,6 +95,8 @@ def save_switch_states():
         "live_resizable": modules.globals.live_resizable,
         "fp_ui": modules.globals.fp_ui,
         "show_fps": modules.globals.show_fps,
+        "mouth_mask": modules.globals.mouth_mask
+        "show_mouth_mask_box": modules.globals.show_mouth_mask_box
     }
     with open("switch_states.json", "w") as f:
         json.dump(switch_states, f)
@@ -115,6 +117,8 @@ def load_switch_states():
         modules.globals.live_resizable = switch_states.get("live_resizable", False)
         modules.globals.fp_ui = switch_states.get("fp_ui", {"face_enhancer": False})
         modules.globals.show_fps = switch_states.get("show_fps", False)
+        modules.globals.mouth_mask = switch_states.get("mouth_mask", False)
+        modules.globals.show_mouth_mask_box = switch_states.get("show_mouth_mask_box", False)
     except FileNotFoundError:
         # If the file doesn't exist, use default values
         pass
