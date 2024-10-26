@@ -192,6 +192,9 @@ Track and change faces on the fly.
 It's as simple as opening a movie on the screen, and selecting OBS as your camera!
 ![image](media/movie_img.png)
 
+### Mouth Masking
+
+![Mouth_Masking](media/mouth.gif)
 
 ## Command Line Arguments
 
@@ -395,7 +398,7 @@ This is an open-source project developed in our free time. Updates may be delaye
 - [GosuDRM](https://github.com/GosuDRM) : for open version of roop
 - [pereiraroland26](https://github.com/pereiraroland26) : Multiple faces support
 - [vic4key](https://github.com/vic4key) : For supporting/contributing on this project
-- [KRSHH](https://github.com/KRSHH) : For updating the UI
+- [KRSHH](https://github.com/KRSHH) : For his contributions
 - and [all developers](https://github.com/hacksider/Deep-Live-Cam/graphs/contributors) behind libraries used in this project.
 - Foot Note: [This is originally roop-cam, see the full history of the code here.](https://github.com/hacksider/roop-cam) Please be informed that the base author of the code is [s0md3v](https://github.com/s0md3v/roop)
 
