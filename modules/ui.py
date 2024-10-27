@@ -95,7 +95,7 @@ def save_switch_states():
         "live_resizable": modules.globals.live_resizable,
         "fp_ui": modules.globals.fp_ui,
         "show_fps": modules.globals.show_fps,
-        "mouth_mask": modules.globals.mouth_mask
+        "mouth_mask": modules.globals.mouth_mask,
         "show_mouth_mask_box": modules.globals.show_mouth_mask_box
     }
     with open("switch_states.json", "w") as f:
