@@ -423,6 +423,21 @@ def create_root(
     )
     color_correction_switch.pack(pady=5, anchor="w")
 
+    map_faces = ctk.BooleanVar(value=modules.globals.map_faces)
+    map_faces_switch = ctk.CTkSwitch(
+        left_column,
+        text="Map faces",
+        variable=map_faces,
+        cursor="hand2",
+        command=lambda: (
+            setattr(modules.globals, "map_faces", map_faces.get()),
+            save_switch_states(),
+        ),
+        progress_color="#3a7ebf",
+        font=("Roboto", 14, "bold"),
+    )
+    map_faces_switch.pack(pady=5, anchor="w")
+
     # Right column - Face Detection & Masking Options
     many_faces_value = ctk.BooleanVar(value=modules.globals.many_faces)
     many_faces_switch = ctk.CTkSwitch(
@@ -453,21 +468,6 @@ def create_root(
         font=("Roboto", 14, "bold"),
     )
     show_fps_switch.pack(pady=5, anchor="w")
-
-    map_faces = ctk.BooleanVar(value=modules.globals.map_faces)
-    map_faces_switch = ctk.CTkSwitch(
-        right_column,
-        text="Map faces",
-        variable=map_faces,
-        cursor="hand2",
-        command=lambda: (
-            setattr(modules.globals, "map_faces", map_faces.get()),
-            save_switch_states(),
-        ),
-        progress_color="#3a7ebf",
-        font=("Roboto", 14, "bold"),
-    )
-    map_faces_switch.pack(pady=5, anchor="w")
 
     # Face Opacity Controls
     opacity_frame = ctk.CTkFrame(right_column, fg_color="#2a2d2e")
