@@ -346,7 +346,7 @@ def create_root(
     right_column = ctk.CTkFrame(options_frame, fg_color="#2a2d2e")
     right_column.pack(side="right", padx=20, expand=True)
 
-    # Left column controls
+    # Left column - Video/Processing Options
     keep_fps_value = ctk.BooleanVar(value=modules.globals.keep_fps)
     keep_fps_checkbox = ctk.CTkSwitch(
         left_column,
@@ -361,36 +361,6 @@ def create_root(
         font=("Roboto", 14, "bold"),
     )
     keep_fps_checkbox.pack(pady=5, anchor="w")
-
-    keep_frames_value = ctk.BooleanVar(value=modules.globals.keep_frames)
-    keep_frames_switch = ctk.CTkSwitch(
-        left_column,
-        text="Keep frames",
-        variable=keep_frames_value,
-        cursor="hand2",
-        command=lambda: (
-            setattr(modules.globals, "keep_frames", keep_frames_value.get()),
-            save_switch_states(),
-        ),
-        progress_color="#3a7ebf",
-        font=("Roboto", 14, "bold"),
-    )
-    keep_frames_switch.pack(pady=5, anchor="w")
-
-    enhancer_value = ctk.BooleanVar(value=modules.globals.fp_ui["face_enhancer"])
-    enhancer_switch = ctk.CTkSwitch(
-        left_column,
-        text="Face Enhancer",
-        variable=enhancer_value,
-        cursor="hand2",
-        command=lambda: (
-            update_tumbler("face_enhancer", enhancer_value.get()),
-            save_switch_states(),
-        ),
-        progress_color="#3a7ebf",
-        font=("Roboto", 14, "bold"),
-    )
-    enhancer_switch.pack(pady=5, anchor="w")
 
     keep_audio_value = ctk.BooleanVar(value=modules.globals.keep_audio)
     keep_audio_switch = ctk.CTkSwitch(
@@ -407,43 +377,40 @@ def create_root(
     )
     keep_audio_switch.pack(pady=5, anchor="w")
 
-    many_faces_value = ctk.BooleanVar(value=modules.globals.many_faces)
-    many_faces_switch = ctk.CTkSwitch(
+    keep_frames_value = ctk.BooleanVar(value=modules.globals.keep_frames)
+    keep_frames_switch = ctk.CTkSwitch(
         left_column,
-        text="Many faces",
-        variable=many_faces_value,
+        text="Keep frames",
+        variable=keep_frames_value,
         cursor="hand2",
         command=lambda: (
-            setattr(modules.globals, "many_faces", many_faces_value.get()),
+            setattr(modules.globals, "keep_frames", keep_frames_value.get()),
             save_switch_states(),
         ),
         progress_color="#3a7ebf",
         font=("Roboto", 14, "bold"),
     )
-    many_faces_switch.pack(pady=5, anchor="w")
+    keep_frames_switch.pack(pady=5, anchor="w")
 
-    mask_down_size_label = ctk.CTkLabel(
-        left_column, text="Mask Size:", font=("Roboto", 12)
-    )
-    mask_down_size_label.pack(pady=(5, 0), anchor="w")
-
-    mask_down_size_slider = ctk.CTkSlider(
+    # Face Processing Options
+    enhancer_value = ctk.BooleanVar(value=modules.globals.fp_ui["face_enhancer"])
+    enhancer_switch = ctk.CTkSwitch(
         left_column,
-        from_=0.1,
-        to=1.0,
-        number_of_steps=9,
-        command=lambda value: [
-            setattr(modules.globals, "mask_down_size", value),
+        text="Face Enhancer",
+        variable=enhancer_value,
+        cursor="hand2",
+        command=lambda: (
+            update_tumbler("face_enhancer", enhancer_value.get()),
             save_switch_states(),
-        ],
+        ),
+        progress_color="#3a7ebf",
+        font=("Roboto", 14, "bold"),
     )
-    mask_down_size_slider.set(modules.globals.mask_down_size)
-    mask_down_size_slider.pack(pady=(0, 5), fill="x")
+    enhancer_switch.pack(pady=5, anchor="w")
 
-    # Right column controls
     color_correction_value = ctk.BooleanVar(value=modules.globals.color_correction)
     color_correction_switch = ctk.CTkSwitch(
-        right_column,
+        left_column,
         text="Fix Blueish Cam",
         variable=color_correction_value,
         cursor="hand2",
@@ -456,20 +423,21 @@ def create_root(
     )
     color_correction_switch.pack(pady=5, anchor="w")
 
-    map_faces = ctk.BooleanVar(value=modules.globals.map_faces)
-    map_faces_switch = ctk.CTkSwitch(
+    # Right column - Face Detection & Masking Options
+    many_faces_value = ctk.BooleanVar(value=modules.globals.many_faces)
+    many_faces_switch = ctk.CTkSwitch(
         right_column,
-        text="Map faces",
-        variable=map_faces,
+        text="Many faces",
+        variable=many_faces_value,
         cursor="hand2",
         command=lambda: (
-            setattr(modules.globals, "map_faces", map_faces.get()),
+            setattr(modules.globals, "many_faces", many_faces_value.get()),
             save_switch_states(),
         ),
         progress_color="#3a7ebf",
         font=("Roboto", 14, "bold"),
     )
-    map_faces_switch.pack(pady=5, anchor="w")
+    many_faces_switch.pack(pady=5, anchor="w")
 
     show_fps_value = ctk.BooleanVar(value=modules.globals.show_fps)
     show_fps_switch = ctk.CTkSwitch(
@@ -486,6 +454,53 @@ def create_root(
     )
     show_fps_switch.pack(pady=5, anchor="w")
 
+    map_faces = ctk.BooleanVar(value=modules.globals.map_faces)
+    map_faces_switch = ctk.CTkSwitch(
+        right_column,
+        text="Map faces",
+        variable=map_faces,
+        cursor="hand2",
+        command=lambda: (
+            setattr(modules.globals, "map_faces", map_faces.get()),
+            save_switch_states(),
+        ),
+        progress_color="#3a7ebf",
+        font=("Roboto", 14, "bold"),
+    )
+    map_faces_switch.pack(pady=5, anchor="w")
+
+    # Face Opacity Controls
+    opacity_frame = ctk.CTkFrame(right_column, fg_color="#2a2d2e")
+    opacity_frame.pack(pady=5, anchor="w", fill="x")
+
+    opacity_switch = ctk.CTkSwitch(
+        opacity_frame,
+        text="Face Opacity",
+        variable=ctk.BooleanVar(value=modules.globals.opacity_switch),
+        cursor="hand2",
+        command=lambda: setattr(
+            modules.globals, "opacity_switch", not modules.globals.opacity_switch
+        ),
+        progress_color="#3a7ebf",
+        font=("Roboto", 14, "bold"),
+    )
+    opacity_switch.pack(side="left", padx=(0, 10))
+
+    opacity_slider = ctk.CTkSlider(
+        opacity_frame,
+        from_=0,
+        to=100,
+        number_of_steps=100,
+        command=update_opacity,
+        fg_color=("gray75", "gray25"),
+        progress_color="#3a7ebf",
+        button_color="#3a7ebf",
+        button_hover_color="#2b5d8b",
+    )
+    opacity_slider.pack(side="left", fill="x", expand=True)
+    opacity_slider.set(modules.globals.face_opacity)
+
+    # Mouth Mask Controls
     mouth_mask_var = ctk.BooleanVar(value=modules.globals.mouth_mask)
     mouth_mask_switch = ctk.CTkSwitch(
         right_column,
@@ -518,6 +533,26 @@ def create_root(
     )
     show_mouth_mask_box_switch.pack(pady=5, anchor="w")
 
+    # Mask Size Controls
+    mask_down_size_label = ctk.CTkLabel(
+        right_column, text="Mask Size:", font=("Roboto", 12)
+    )
+    mask_down_size_label.pack(pady=(5, 0), anchor="w")
+
+    mask_down_size_slider = ctk.CTkSlider(
+        right_column,
+        from_=0.1,
+        to=1.0,
+        number_of_steps=9,
+        command=lambda value: [
+            setattr(modules.globals, "mask_down_size", value),
+            save_switch_states(),
+        ],
+    )
+    mask_down_size_slider.set(modules.globals.mask_down_size)
+    mask_down_size_slider.pack(pady=(0, 5), fill="x")
+
+    # Mask Feather Controls
     mask_feather_label = ctk.CTkLabel(
         right_column, text="Mask Feather:", font=("Roboto", 12)
     )

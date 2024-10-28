@@ -62,11 +62,18 @@ def get_face_swapper() -> Any:
 
 
 def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
-    face_swapper = get_face_swapper()
-    swapped_frame = face_swapper.get(
+    swapped_frame = get_face_swapper().get(
         temp_frame, target_face, source_face, paste_back=True
     )
 
+    # Apply opacity if enabled
+    if modules.globals.opacity_switch:
+        opacity = modules.globals.face_opacity / 100
+        swapped_frame = cv2.addWeighted(
+            swapped_frame, opacity, temp_frame, 1 - opacity, 0
+        )
+
+    # Apply mouth mask if enabled
     if modules.globals.mouth_mask:
         face_mask = create_face_mask(target_face, temp_frame)
         mouth_mask_data = create_lower_mouth_mask(target_face, temp_frame)
