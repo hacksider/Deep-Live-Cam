@@ -277,6 +277,7 @@ def create_root(
     root.protocol("WM_DELETE_WINDOW", lambda: destroy())
     root.resizable(True, True)
     root.attributes("-alpha", 1.0)
+    root.minsize(650, 870)
 
     main_frame = ctk.CTkFrame(root, fg_color="#1a1a1a")
     main_frame.pack(fill="both", expand=True, padx=20, pady=20)

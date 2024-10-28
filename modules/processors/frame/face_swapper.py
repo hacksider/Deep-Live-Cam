@@ -481,7 +481,7 @@ def draw_mouth_mask_visualization(
         # Add labels
         cv2.putText(
             vis_frame,
-            "Lower Mouth Mask",
+            "Mouth Mask",
             (min_x, min_y - 10),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.5,
