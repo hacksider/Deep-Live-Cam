@@ -43,3 +43,4 @@ mask_size = 1.0
 mask_feather_ratio = 8
 opacity_switch = False
 face_opacity = 100
+selected_camera = None

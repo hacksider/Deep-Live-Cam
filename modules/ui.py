@@ -202,6 +202,141 @@ class TargetLabel(DragDropLabel):
                 target_label.configure(text="")
 
 
+class ModernOptionMenu(ctk.CTkFrame):
+    def __init__(self, master, values, command=None, **kwargs):
+        super().__init__(master, fg_color="transparent")
+
+        self.values = values
+        self.command = command
+
+        # Set initial value based on saved camera or first available
+        self.current_value = (
+            modules.globals.selected_camera
+            if modules.globals.selected_camera in values
+            else (values[0] if values else "No cameras found")
+        )
+
+        # Main button
+        self.main_button = ctk.CTkButton(
+            self,
+            text=self.current_value,
+            command=self.show_dropdown,
+            width=300,
+            height=40,
+            corner_radius=8,
+            fg_color="#1f538d",
+            hover_color="#1a4572",
+            text_color="white",
+            font=("Roboto", 13, "bold"),
+            border_width=2,
+            border_color="#3d7ab8",
+        )
+        self.main_button.pack(expand=True, fill="both")
+
+        # Dropdown frame (initially hidden)
+        self.dropdown_frame = None
+        self.is_dropdown_visible = False
+        self.click_binding = None
+
+    def show_dropdown(self):
+        if self.is_dropdown_visible:
+            self.hide_dropdown()
+            return
+
+        # Calculate position and size
+        button_width = self.main_button.winfo_width()
+        dropdown_height = min(len(self.values) * 35, 200)  # Limit max height
+
+        # Create and show dropdown with fixed size
+        self.dropdown_frame = ctk.CTkFrame(
+            self.winfo_toplevel(),
+            width=button_width,
+            height=dropdown_height,
+            fg_color="#1f538d",
+            corner_radius=8,
+            border_width=2,
+            border_color="#3d7ab8",
+        )
+
+        # Get the absolute coordinates of the button relative to the screen
+        button_x = self.winfo_rootx()
+        button_y = self.winfo_rooty()
+
+        # Position the dropdown above the button, using relative coordinates
+        relative_x = button_x - self.winfo_toplevel().winfo_rootx()
+        relative_y = button_y - self.winfo_toplevel().winfo_rooty() - dropdown_height
+
+        self.dropdown_frame.place(in_=self.winfo_toplevel(), x=relative_x, y=relative_y)
+
+        # Prevent frame from resizing
+        self.dropdown_frame.pack_propagate(False)
+
+        # Create scrollable frame if needed
+        if len(self.values) * 35 > 200:
+            scrollable_frame = ctk.CTkScrollableFrame(
+                self.dropdown_frame,
+                width=button_width - 20,
+                height=dropdown_height - 10,
+                fg_color="#1f538d",
+                scrollbar_button_color="#3d7ab8",
+                scrollbar_button_hover_color="#2b5d8b",
+            )
+            scrollable_frame.pack(expand=True, fill="both", padx=5, pady=5)
+
+            container = scrollable_frame
+        else:
+            container = self.dropdown_frame
+
+        # Add options
+        for value in self.values:
+            option_button = ctk.CTkButton(
+                container,
+                text=value,
+                fg_color="transparent",
+                hover_color="#233d54",
+                text_color="white",
+                height=35,
+                corner_radius=4,
+                font=("Roboto", 13),
+                command=lambda v=value: self.select_value(v),
+            )
+            option_button.pack(padx=2, pady=1, fill="x")
+
+        self.is_dropdown_visible = True
+        self.click_binding = self.winfo_toplevel().bind(
+            "<Button-1>", self.on_click_outside, add="+"
+        )
+
+    def on_click_outside(self, event):
+        if self.is_dropdown_visible:
+            widget_under_cursor = event.widget.winfo_containing(
+                event.x_root, event.y_root
+            )
+            if widget_under_cursor not in [self.main_button] + (
+                self.dropdown_frame.winfo_children() if self.dropdown_frame else []
+            ):
+                self.hide_dropdown()
+
+    def hide_dropdown(self):
+        if self.dropdown_frame:
+            if self.click_binding:
+                self.winfo_toplevel().unbind("<Button-1>", self.click_binding)
+                self.click_binding = None
+            self.dropdown_frame.destroy()
+            self.dropdown_frame = None
+            self.is_dropdown_visible = False
+
+    def select_value(self, value):
+        self.current_value = value
+        self.main_button.configure(text=value)
+        self.hide_dropdown()
+        if self.command:
+            self.command(value)
+
+    def get(self):
+        return self.current_value
+
+
 def save_switch_states():
     switch_states = {
         "keep_fps": modules.globals.keep_fps,
@@ -210,7 +345,7 @@ def save_switch_states():
         "many_faces": modules.globals.many_faces,
         "map_faces": modules.globals.map_faces,
         "color_correction": modules.globals.color_correction,
-        "nsfw_filter": modules.globals.nsfw_filter,  # Add this line
+        "nsfw_filter": modules.globals.nsfw_filter,
         "live_mirror": modules.globals.live_mirror,
         "live_resizable": modules.globals.live_resizable,
         "fp_ui": modules.globals.fp_ui,
@@ -219,6 +354,7 @@ def save_switch_states():
         "show_mouth_mask_box": modules.globals.show_mouth_mask_box,
         "mask_down_size": modules.globals.mask_down_size,
         "mask_feather_ratio": modules.globals.mask_feather_ratio,
+        "selected_camera": modules.globals.selected_camera,
     }
     with open("switch_states.json", "w") as f:
         json.dump(switch_states, f)
@@ -245,6 +381,7 @@ def load_switch_states():
         )
         modules.globals.mask_down_size = switch_states.get("mask_down_size", 0.5)
         modules.globals.mask_feather_ratio = switch_states.get("mask_feather_ratio", 8)
+        modules.globals.selected_camera = switch_states.get("selected_camera", None)
     except FileNotFoundError:
         # If the file doesn't exist, use default values
         pass
@@ -625,14 +762,12 @@ def create_root(
             else "No cameras found"
         )
     )
-    camera_optionmenu = ctk.CTkOptionMenu(
+    camera_optionmenu = ModernOptionMenu(
         camera_frame,
-        variable=camera_variable,
         values=available_camera_strings,
-        width=200,
-        font=("Roboto", 14),
+        command=lambda value: print(f"Selected: {value}"),  # Add your command here
     )
-    camera_optionmenu.pack(side="left", padx=10, pady=10)
+    camera_optionmenu.pack(side="left", padx=(10, 20), pady=10, fill="x", expand=True)
 
     live_button = ModernButton(
         camera_frame,
@@ -647,7 +782,7 @@ def create_root(
             webcam_preview(
                 root,
                 available_camera_indices[
-                    available_camera_strings.index(camera_variable.get())
+                    available_camera_strings.index(camera_optionmenu.get())
                 ],
             ),
         ],
@@ -1360,7 +1495,7 @@ def create_source_target_popup_for_webcam(root: ctk.CTk, map: list) -> None:
             POPUP_LIVE.destroy()
             simplify_maps()
             # Get the selected camera index
-            selected_camera = camera_variable.get()
+            selected_camera = camera_optionmenu.get()
             camera_index = available_camera_indices[
                 available_camera_strings.index(selected_camera)
             ]
@@ -1373,7 +1508,10 @@ def create_source_target_popup_for_webcam(root: ctk.CTk, map: list) -> None:
         refresh_data(map)
         update_pop_live_status("Please provide mapping!")
 
-    popup_status_label_live = ctk.CTkLabel(POPUP_LIVE, text=None, justify="center")
+    # Rest of the popup content
+    popup_status_label_live = ctk.CTkLabel(
+        POPUP_LIVE, text=None, justify="center", font=("Roboto", 14)
+    )
     popup_status_label_live.grid(row=1, column=0, pady=15)
 
     add_button = ctk.CTkButton(
@@ -1396,26 +1534,28 @@ def create_source_target_popup_for_webcam(root: ctk.CTk, map: list) -> None:
     )
     close_button.place(relx=0.6, rely=0.92, relwidth=0.2, relheight=0.05)
 
-    # Add camera selection
-    camera_frame = ctk.CTkFrame(POPUP_LIVE)
-    camera_frame.grid(row=2, column=0, pady=15)
+    # Create a better styled camera selection frame
+    camera_frame = ctk.CTkFrame(POPUP_LIVE, fg_color="#2a2d2e", corner_radius=15)
+    camera_frame.grid(row=2, column=0, pady=15, padx=20, sticky="ew")
+    POPUP_LIVE.grid_columnconfigure(0, weight=1)
 
-    camera_label = ctk.CTkLabel(camera_frame, text="Select Camera:")
-    camera_label.pack(side="left", padx=(0, 10))
+    camera_label = ctk.CTkLabel(
+        camera_frame,
+        text="Select Camera:",
+        font=("Roboto", 14, "bold"),
+        text_color="#DCE4EE",
+    )
+    camera_label.pack(side="left", padx=20, pady=10)
 
     available_cameras = get_available_cameras()
     available_camera_indices, available_camera_strings = available_cameras
-    camera_variable = ctk.StringVar(
-        value=(
-            available_camera_strings[0]
-            if available_camera_strings
-            else "No cameras found"
-        )
+
+    camera_optionmenu = ModernOptionMenu(
+        camera_frame,
+        values=available_camera_strings,
+        command=lambda value: print(f"Selected: {value}"),  # Add your command here
     )
-    camera_optionmenu = ctk.CTkOptionMenu(
-        camera_frame, variable=camera_variable, values=available_camera_strings
-    )
-    camera_optionmenu.pack(side="left")
+    camera_optionmenu.pack(side="left", padx=(10, 20), pady=10, fill="x", expand=True)
 
     refresh_data(map)  # Initial data refresh
 
