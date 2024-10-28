@@ -500,6 +500,22 @@ def create_root(
     )
     keep_fps_checkbox.pack(pady=5, anchor="w")
 
+    # Move many faces switch to left column
+    many_faces_value = ctk.BooleanVar(value=modules.globals.many_faces)
+    many_faces_switch = ctk.CTkSwitch(
+        left_column,
+        text="Many faces",
+        variable=many_faces_value,
+        cursor="hand2",
+        command=lambda: (
+            setattr(modules.globals, "many_faces", many_faces_value.get()),
+            save_switch_states(),
+        ),
+        progress_color="#3a7ebf",
+        font=("Roboto", 14, "bold"),
+    )
+    many_faces_switch.pack(pady=5, anchor="w")
+
     keep_audio_value = ctk.BooleanVar(value=modules.globals.keep_audio)
     keep_audio_switch = ctk.CTkSwitch(
         left_column,
@@ -577,21 +593,6 @@ def create_root(
     map_faces_switch.pack(pady=5, anchor="w")
 
     # Right column - Face Detection & Masking Options
-    many_faces_value = ctk.BooleanVar(value=modules.globals.many_faces)
-    many_faces_switch = ctk.CTkSwitch(
-        right_column,
-        text="Many faces",
-        variable=many_faces_value,
-        cursor="hand2",
-        command=lambda: (
-            setattr(modules.globals, "many_faces", many_faces_value.get()),
-            save_switch_states(),
-        ),
-        progress_color="#3a7ebf",
-        font=("Roboto", 14, "bold"),
-    )
-    many_faces_switch.pack(pady=5, anchor="w")
-
     show_fps_value = ctk.BooleanVar(value=modules.globals.show_fps)
     show_fps_switch = ctk.CTkSwitch(
         right_column,
@@ -606,37 +607,6 @@ def create_root(
         font=("Roboto", 14, "bold"),
     )
     show_fps_switch.pack(pady=5, anchor="w")
-
-    # Face Opacity Controls
-    opacity_frame = ctk.CTkFrame(right_column, fg_color="#2a2d2e")
-    opacity_frame.pack(pady=5, anchor="w", fill="x")
-
-    opacity_switch = ctk.CTkSwitch(
-        opacity_frame,
-        text="Face Opacity",
-        variable=ctk.BooleanVar(value=modules.globals.opacity_switch),
-        cursor="hand2",
-        command=lambda: setattr(
-            modules.globals, "opacity_switch", not modules.globals.opacity_switch
-        ),
-        progress_color="#3a7ebf",
-        font=("Roboto", 14, "bold"),
-    )
-    opacity_switch.pack(side="left", padx=(0, 10))
-
-    opacity_slider = ctk.CTkSlider(
-        opacity_frame,
-        from_=0,
-        to=100,
-        number_of_steps=100,
-        command=update_opacity,
-        fg_color=("gray75", "gray25"),
-        progress_color="#3a7ebf",
-        button_color="#3a7ebf",
-        button_hover_color="#2b5d8b",
-    )
-    opacity_slider.pack(side="left", fill="x", expand=True)
-    opacity_slider.set(modules.globals.face_opacity)
 
     # Mouth Mask Controls
     mouth_mask_var = ctk.BooleanVar(value=modules.globals.mouth_mask)
@@ -670,6 +640,37 @@ def create_root(
         font=("Roboto", 14, "bold"),
     )
     show_mouth_mask_box_switch.pack(pady=5, anchor="w")
+
+    # Face Opacity Controls - Moved under Show Mouth Box
+    opacity_frame = ctk.CTkFrame(right_column, fg_color="#2a2d2e")
+    opacity_frame.pack(pady=5, anchor="w", fill="x")
+
+    opacity_switch = ctk.CTkSwitch(
+        opacity_frame,
+        text="Face Opacity",
+        variable=ctk.BooleanVar(value=modules.globals.opacity_switch),
+        cursor="hand2",
+        command=lambda: setattr(
+            modules.globals, "opacity_switch", not modules.globals.opacity_switch
+        ),
+        progress_color="#3a7ebf",
+        font=("Roboto", 14, "bold"),
+    )
+    opacity_switch.pack(side="left", padx=(0, 10))
+
+    opacity_slider = ctk.CTkSlider(
+        opacity_frame,
+        from_=0,
+        to=100,
+        number_of_steps=100,
+        command=update_opacity,
+        fg_color=("gray75", "gray25"),
+        progress_color="#3a7ebf",
+        button_color="#3a7ebf",
+        button_hover_color="#2b5d8b",
+    )
+    opacity_slider.pack(side="left", fill="x", expand=True)
+    opacity_slider.set(modules.globals.face_opacity)
 
     # Mask Size Controls
     mask_down_size_label = ctk.CTkLabel(
