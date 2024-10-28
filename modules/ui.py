@@ -215,6 +215,10 @@ def save_switch_states():
         "live_resizable": modules.globals.live_resizable,
         "fp_ui": modules.globals.fp_ui,
         "show_fps": modules.globals.show_fps,
+        "mouth_mask": modules.globals.mouth_mask,
+        "show_mouth_mask_box": modules.globals.show_mouth_mask_box,
+        "mask_down_size": modules.globals.mask_down_size,
+        "mask_feather_ratio": modules.globals.mask_feather_ratio,
     }
     with open("switch_states.json", "w") as f:
         json.dump(switch_states, f)
@@ -230,13 +234,17 @@ def load_switch_states():
         modules.globals.many_faces = switch_states.get("many_faces", False)
         modules.globals.map_faces = switch_states.get("map_faces", False)
         modules.globals.color_correction = switch_states.get("color_correction", False)
-        modules.globals.nsfw_filter = switch_states.get(
-            "nsfw_filter", False
-        )  # Add this line
+        modules.globals.nsfw_filter = switch_states.get("nsfw_filter", False)
         modules.globals.live_mirror = switch_states.get("live_mirror", False)
         modules.globals.live_resizable = switch_states.get("live_resizable", False)
         modules.globals.fp_ui = switch_states.get("fp_ui", {"face_enhancer": False})
         modules.globals.show_fps = switch_states.get("show_fps", False)
+        modules.globals.mouth_mask = switch_states.get("mouth_mask", False)
+        modules.globals.show_mouth_mask_box = switch_states.get(
+            "show_mouth_mask_box", False
+        )
+        modules.globals.mask_down_size = switch_states.get("mask_down_size", 0.5)
+        modules.globals.mask_feather_ratio = switch_states.get("mask_feather_ratio", 8)
     except FileNotFoundError:
         # If the file doesn't exist, use default values
         pass
@@ -268,7 +276,7 @@ def create_root(
     root.configure(bg="#1a1a1a")
     root.protocol("WM_DELETE_WINDOW", lambda: destroy())
     root.resizable(True, True)
-    root.attributes("-alpha", 1.0)  # Set window opacity to fully opaque
+    root.attributes("-alpha", 1.0)
 
     main_frame = ctk.CTkFrame(root, fg_color="#1a1a1a")
     main_frame.pack(fill="both", expand=True, padx=20, pady=20)
@@ -331,19 +339,23 @@ def create_root(
     options_frame = ctk.CTkFrame(main_frame, fg_color="#2a2d2e", corner_radius=15)
     options_frame.grid(row=1, column=0, columnspan=3, padx=10, pady=10, sticky="nsew")
 
-    # Create a single column for options, centered
-    options_column = ctk.CTkFrame(options_frame, fg_color="#2a2d2e")
-    options_column.pack(expand=True)
+    # Create two columns for options
+    left_column = ctk.CTkFrame(options_frame, fg_color="#2a2d2e")
+    left_column.pack(side="left", padx=20, expand=True)
 
-    # Switches
+    right_column = ctk.CTkFrame(options_frame, fg_color="#2a2d2e")
+    right_column.pack(side="right", padx=20, expand=True)
+
+    # Left column controls
     keep_fps_value = ctk.BooleanVar(value=modules.globals.keep_fps)
     keep_fps_checkbox = ctk.CTkSwitch(
-        options_column,
+        left_column,
         text="Keep fps",
         variable=keep_fps_value,
         cursor="hand2",
-        command=lambda: setattr(
-            modules.globals, "keep_fps", not modules.globals.keep_fps
+        command=lambda: (
+            setattr(modules.globals, "keep_fps", keep_fps_value.get()),
+            save_switch_states(),
         ),
         progress_color="#3a7ebf",
         font=("Roboto", 14, "bold"),
@@ -352,12 +364,13 @@ def create_root(
 
     keep_frames_value = ctk.BooleanVar(value=modules.globals.keep_frames)
     keep_frames_switch = ctk.CTkSwitch(
-        options_column,
+        left_column,
         text="Keep frames",
         variable=keep_frames_value,
         cursor="hand2",
-        command=lambda: setattr(
-            modules.globals, "keep_frames", keep_frames_value.get()
+        command=lambda: (
+            setattr(modules.globals, "keep_frames", keep_frames_value.get()),
+            save_switch_states(),
         ),
         progress_color="#3a7ebf",
         font=("Roboto", 14, "bold"),
@@ -366,11 +379,14 @@ def create_root(
 
     enhancer_value = ctk.BooleanVar(value=modules.globals.fp_ui["face_enhancer"])
     enhancer_switch = ctk.CTkSwitch(
-        options_column,
+        left_column,
         text="Face Enhancer",
         variable=enhancer_value,
         cursor="hand2",
-        command=lambda: update_tumbler("face_enhancer", enhancer_value.get()),
+        command=lambda: (
+            update_tumbler("face_enhancer", enhancer_value.get()),
+            save_switch_states(),
+        ),
         progress_color="#3a7ebf",
         font=("Roboto", 14, "bold"),
     )
@@ -378,11 +394,14 @@ def create_root(
 
     keep_audio_value = ctk.BooleanVar(value=modules.globals.keep_audio)
     keep_audio_switch = ctk.CTkSwitch(
-        options_column,
+        left_column,
         text="Keep audio",
         variable=keep_audio_value,
         cursor="hand2",
-        command=lambda: setattr(modules.globals, "keep_audio", keep_audio_value.get()),
+        command=lambda: (
+            setattr(modules.globals, "keep_audio", keep_audio_value.get()),
+            save_switch_states(),
+        ),
         progress_color="#3a7ebf",
         font=("Roboto", 14, "bold"),
     )
@@ -390,24 +409,47 @@ def create_root(
 
     many_faces_value = ctk.BooleanVar(value=modules.globals.many_faces)
     many_faces_switch = ctk.CTkSwitch(
-        options_column,
+        left_column,
         text="Many faces",
         variable=many_faces_value,
         cursor="hand2",
-        command=lambda: setattr(modules.globals, "many_faces", many_faces_value.get()),
+        command=lambda: (
+            setattr(modules.globals, "many_faces", many_faces_value.get()),
+            save_switch_states(),
+        ),
         progress_color="#3a7ebf",
         font=("Roboto", 14, "bold"),
     )
     many_faces_switch.pack(pady=5, anchor="w")
 
+    mask_down_size_label = ctk.CTkLabel(
+        left_column, text="Mask Size:", font=("Roboto", 12)
+    )
+    mask_down_size_label.pack(pady=(5, 0), anchor="w")
+
+    mask_down_size_slider = ctk.CTkSlider(
+        left_column,
+        from_=0.1,
+        to=1.0,
+        number_of_steps=9,
+        command=lambda value: [
+            setattr(modules.globals, "mask_down_size", value),
+            save_switch_states(),
+        ],
+    )
+    mask_down_size_slider.set(modules.globals.mask_down_size)
+    mask_down_size_slider.pack(pady=(0, 5), fill="x")
+
+    # Right column controls
     color_correction_value = ctk.BooleanVar(value=modules.globals.color_correction)
     color_correction_switch = ctk.CTkSwitch(
-        options_column,
+        right_column,
         text="Fix Blueish Cam",
         variable=color_correction_value,
         cursor="hand2",
-        command=lambda: setattr(
-            modules.globals, "color_correction", color_correction_value.get()
+        command=lambda: (
+            setattr(modules.globals, "color_correction", color_correction_value.get()),
+            save_switch_states(),
         ),
         progress_color="#3a7ebf",
         font=("Roboto", 14, "bold"),
@@ -416,83 +458,83 @@ def create_root(
 
     map_faces = ctk.BooleanVar(value=modules.globals.map_faces)
     map_faces_switch = ctk.CTkSwitch(
-        options_column,
+        right_column,
         text="Map faces",
         variable=map_faces,
         cursor="hand2",
-        command=lambda: setattr(modules.globals, "map_faces", map_faces.get()),
+        command=lambda: (
+            setattr(modules.globals, "map_faces", map_faces.get()),
+            save_switch_states(),
+        ),
         progress_color="#3a7ebf",
         font=("Roboto", 14, "bold"),
     )
     map_faces_switch.pack(pady=5, anchor="w")
 
-    # Add the Show FPS switch
     show_fps_value = ctk.BooleanVar(value=modules.globals.show_fps)
     show_fps_switch = ctk.CTkSwitch(
-        options_column,
+        right_column,
         text="Show FPS",
         variable=show_fps_value,
         cursor="hand2",
-        command=lambda: setattr(modules.globals, "show_fps", show_fps_value.get()),
+        command=lambda: (
+            setattr(modules.globals, "show_fps", show_fps_value.get()),
+            save_switch_states(),
+        ),
         progress_color="#3a7ebf",
         font=("Roboto", 14, "bold"),
     )
     show_fps_switch.pack(pady=5, anchor="w")
 
-    keep_fps_checkbox.configure(
+    mouth_mask_var = ctk.BooleanVar(value=modules.globals.mouth_mask)
+    mouth_mask_switch = ctk.CTkSwitch(
+        right_column,
+        text="Mouth Mask",
+        variable=mouth_mask_var,
+        cursor="hand2",
         command=lambda: (
-            setattr(modules.globals, "keep_fps", keep_fps_value.get()),
+            setattr(modules.globals, "mouth_mask", mouth_mask_var.get()),
             save_switch_states(),
-        )
+        ),
+        progress_color="#3a7ebf",
+        font=("Roboto", 14, "bold"),
     )
-    keep_frames_switch.configure(
+    mouth_mask_switch.pack(pady=5, anchor="w")
+
+    show_mouth_mask_box_var = ctk.BooleanVar(value=modules.globals.show_mouth_mask_box)
+    show_mouth_mask_box_switch = ctk.CTkSwitch(
+        right_column,
+        text="Show Mouth Box",
+        variable=show_mouth_mask_box_var,
+        cursor="hand2",
         command=lambda: (
-            setattr(modules.globals, "keep_frames", keep_frames_value.get()),
+            setattr(
+                modules.globals, "show_mouth_mask_box", show_mouth_mask_box_var.get()
+            ),
             save_switch_states(),
-        )
+        ),
+        progress_color="#3a7ebf",
+        font=("Roboto", 14, "bold"),
     )
-    enhancer_switch.configure(
-        command=lambda: (
-            update_tumbler("face_enhancer", enhancer_value.get()),
+    show_mouth_mask_box_switch.pack(pady=5, anchor="w")
+
+    mask_feather_label = ctk.CTkLabel(
+        right_column, text="Mask Feather:", font=("Roboto", 12)
+    )
+    mask_feather_label.pack(pady=(5, 0), anchor="w")
+
+    mask_feather_slider = ctk.CTkSlider(
+        right_column,
+        from_=4,
+        to=16,
+        number_of_steps=12,
+        command=lambda value: [
+            setattr(modules.globals, "mask_feather_ratio", int(value)),
             save_switch_states(),
-        )
+        ],
     )
-    keep_audio_switch.configure(
-        command=lambda: (
-            setattr(modules.globals, "keep_audio", keep_audio_value.get()),
-            save_switch_states(),
-        )
-    )
-    many_faces_switch.configure(
-        command=lambda: (
-            setattr(modules.globals, "many_faces", many_faces_value.get()),
-            save_switch_states(),
-        )
-    )
-    color_correction_switch.configure(
-        command=lambda: (
-            setattr(modules.globals, "color_correction", color_correction_value.get()),
-            save_switch_states(),
-        )
-    )
-    # nsfw_switch.configure(  # Uncomment if you're using the NSFW filter
-    #     command=lambda: (
-    #         setattr(modules.globals, "nsfw_filter", nsfw_value.get()),
-    #         save_switch_states(),
-    #     )
-    # )
-    map_faces_switch.configure(
-        command=lambda: (
-            setattr(modules.globals, "map_faces", map_faces.get()),
-            save_switch_states(),
-        )
-    )
-    show_fps_switch.configure(
-        command=lambda: (
-            setattr(modules.globals, "show_fps", show_fps_value.get()),
-            save_switch_states(),
-        )
-    )
+    mask_feather_slider.set(modules.globals.mask_feather_ratio)
+    mask_feather_slider.pack(pady=(0, 5), fill="x")
 
     button_frame = ctk.CTkFrame(main_frame, fg_color="#1a1a1a")
     button_frame.grid(row=2, column=0, columnspan=3, padx=10, pady=10, sticky="nsew")
@@ -515,14 +557,21 @@ def create_root(
     start_button.pack(side="left", padx=10, expand=True)
 
     preview_button = ModernButton(
-        button_frame,
-        text="Preview",
-        cursor="hand2",
-        command=lambda: toggle_preview(),
+        button_frame, text="Preview", cursor="hand2", command=lambda: toggle_preview()
     )
     preview_button.pack(side="left", padx=10, expand=True)
 
-    # --- Camera Selection ---
+    stop_button = ModernButton(
+        button_frame,
+        text="Destroy",
+        cursor="hand2",
+        command=lambda: destroy(),
+        fg_color="#f44336",
+        hover_color="#d32f2f",
+    )
+    stop_button.pack(side="left", padx=10, expand=True)
+
+    # Camera Selection
     camera_frame = ctk.CTkFrame(main_frame, fg_color="#2a2d2e", corner_radius=15)
     camera_frame.grid(row=3, column=0, columnspan=3, padx=10, pady=(0, 10), sticky="ew")
 
@@ -568,17 +617,6 @@ def create_root(
         ],
     )
     live_button.pack(side="left", padx=10, pady=10)
-    # --- End Camera Selection ---
-
-    stop_button = ModernButton(
-        button_frame,
-        text="Destroy",
-        cursor="hand2",
-        command=lambda: destroy(),
-        fg_color="#f44336",
-        hover_color="#d32f2f",
-    )
-    stop_button.pack(side="left", padx=10, expand=True)
 
     status_label = ModernLabel(
         main_frame, text=None, justify="center", fg_color="#1a1a1a"
@@ -597,7 +635,6 @@ def create_root(
         text_color="#1870c4",
     )
     donate_label.pack(side="left", expand=True)
-
     donate_label.bind(
         "<Button>", lambda event: webbrowser.open("https://paypal.me/hacksider")
     )
