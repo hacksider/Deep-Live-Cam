@@ -1404,15 +1404,14 @@ def create_webcam_preview(camera_index: int):
 
     # FPS tracking variables
     prev_time = time.time()
-    fps_update_interval = 1.0  # Increased to 1 second for stability
+    fps_update_interval = 1.0
     frame_count = 0
     fps = 0
-    fps_display = "FPS: --"  # Initialize fps display text
+    fps_display = "FPS: --"
 
-    # Cache frequently accessed values
+    # Remove cached show_fps value - we'll check it in real-time instead
     live_mirror = modules.globals.live_mirror
     live_resizable = modules.globals.live_resizable
-    show_fps = modules.globals.show_fps
     map_faces = modules.globals.map_faces
 
     while camera.isOpened() and PREVIEW.state() != "withdrawn":
@@ -1438,20 +1437,20 @@ def create_webcam_preview(camera_index: int):
             for frame_processor in frame_processors:
                 temp_frame = frame_processor.process_frame_v2(temp_frame)
 
-        # FPS calculation and display
+        # FPS calculation (always calculate it)
         frame_count += 1
         current_time = time.time()
         if current_time - prev_time >= fps_update_interval:
             fps = frame_count / (current_time - prev_time)
-            fps_display = f"FPS: {fps:.1f}"  # Update display text
+            fps_display = f"FPS: {fps:.1f}"
             frame_count = 0
             prev_time = current_time
 
-        # Always show the last calculated FPS value
-        if show_fps:
+        # Check show_fps state in real-time
+        if modules.globals.show_fps:
             cv2.putText(
                 temp_frame,
-                fps_display,  # Use stored fps display text
+                fps_display,
                 (10, 30),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 1,
