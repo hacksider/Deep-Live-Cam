@@ -36,3 +36,7 @@ If applicable, add screenshots to help explain your problem.
 
 **Additional context**
 Add any other context about the problem here.
+
+**Confirmation**
+- [ ] I have followed the template
+- [ ] I have checked the issues page, and this is not a duplicate
