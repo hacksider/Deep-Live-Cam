@@ -397,7 +397,7 @@ This is an open-source project developed in our free time. Updates may be delaye
 - [vic4key](https://github.com/vic4key) : For supporting/contributing on this project
 - [KRSHH](https://github.com/KRSHH) : For his contributions
 - and [all developers](https://github.com/hacksider/Deep-Live-Cam/graphs/contributors) behind libraries used in this project.
-- Foot Note: [This is originally roop-cam, see the full history of the code here.](https://github.com/hacksider/roop-cam) Please be informed that the base author of the code is [s0md3v](https://github.com/s0md3v/roop)
+- Foot Note: Please be informed that the base author of the code is [s0md3v](https://github.com/s0md3v/roop)
 
 ## Contributions
 ![Alt](https://repobeats.axiom.co/api/embed/fec8e29c45dfdb9c5916f3a7830e1249308d20e1.svg "Repobeats analytics image")
