@@ -58,6 +58,20 @@ def get_face_swapper() -> Any:
             FACE_SWAPPER = insightface.model_zoo.get_model(
                 model_path, providers=modules.globals.execution_providers
             )
+            # Set optimal inference parameters
+            if hasattr(FACE_SWAPPER, "session"):
+                FACE_SWAPPER.session.set_providers(["CUDAExecutionProvider"])
+                FACE_SWAPPER.session.set_provider_options(
+                    {
+                        "CUDAExecutionProvider": {
+                            "cuda_mem_limit": 2 * 1024 * 1024 * 1024,  # 2GB VRAM limit
+                            "arena_extend_strategy": "kNextPowerOfTwo",
+                            "gpu_mem_limit": 2 * 1024 * 1024 * 1024,
+                            "cudnn_conv_algo_search": "EXHAUSTIVE",
+                            "do_copy_in_default_stream": True,
+                        }
+                    }
+                )
     return FACE_SWAPPER
 
 
@@ -93,6 +107,15 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
 
 
 def process_frame(source_face: Face, temp_frame: Frame) -> Frame:
+    # Add caching for repeated faces
+    cache_key = hash(str(source_face))
+    if hasattr(process_frame, "_cache") and cache_key in process_frame._cache:
+        source_face = process_frame._cache[cache_key]
+    else:
+        if not hasattr(process_frame, "_cache"):
+            process_frame._cache = {}
+        process_frame._cache[cache_key] = source_face
+
     if modules.globals.color_correction:
         temp_frame = cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB)
 
