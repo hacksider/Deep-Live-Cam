@@ -7,7 +7,7 @@ from cv2_enumerate_cameras import enumerate_cameras  # Add this import
 from PIL import Image, ImageOps
 import time
 import json
-
+import pyvirtualcam
 import modules.globals
 import modules.metadata
 from modules.face_analyser import (
@@ -779,140 +779,156 @@ def create_webcam_preview(camera_index: int):
     camera.set(cv2.CAP_PROP_FRAME_WIDTH, PREVIEW_DEFAULT_WIDTH)
     camera.set(cv2.CAP_PROP_FRAME_HEIGHT, PREVIEW_DEFAULT_HEIGHT)
     camera.set(cv2.CAP_PROP_FPS, 60)
-    camera.set(cv2.CAP_PROP_BUFFERSIZE, 2)  # Slightly larger buffer for smoother frames
+    camera.set(cv2.CAP_PROP_BUFFERSIZE, 2)
 
-    preview_label.configure(width=PREVIEW_DEFAULT_WIDTH, height=PREVIEW_DEFAULT_HEIGHT)
-    PREVIEW.deiconify()
+    # Get actual camera dimensions
+    width = int(camera.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(camera.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-    frame_processors = get_frame_processors_modules(modules.globals.frame_processors)
+    # Initialize virtual camera with same dimensions
+    with pyvirtualcam.Camera(width=width, height=height, fps=30) as vcam:
+        print(f"Virtual camera created: {vcam.device}")
 
-    # Pre-load source face
-    source_face = (
-        None
-        if modules.globals.map_faces
-        else get_one_face(cv2.imread(modules.globals.source_path))
-    )
+        preview_label.configure(
+            width=PREVIEW_DEFAULT_WIDTH, height=PREVIEW_DEFAULT_HEIGHT
+        )
+        PREVIEW.deiconify()
 
-    # Performance tracking
-    prev_time = time.time()
-    fps_update_interval = 0.5
-    frame_count = 0
-    fps = 0
+        frame_processors = get_frame_processors_modules(
+            modules.globals.frame_processors
+        )
+        source_face = (
+            None
+            if modules.globals.map_faces
+            else get_one_face(cv2.imread(modules.globals.source_path))
+        )
 
-    # Processing settings - adjusted for better quality
-    process_scale = 0.75  # Increased base scale for better quality
-    min_scale = 0.5  # Minimum allowed scale
-    max_scale = 1.0  # Maximum allowed scale
-    skip_frames = 0  # Counter for frame skipping
-    max_skip = 1  # Reduced max skip for smoother video
-    target_fps = 24.0  # Slightly reduced target FPS for better quality
-    min_process_time = 1.0 / target_fps
-    scale_adjust_rate = 0.02  # More gradual scale adjustments
+        # Performance tracking variables
+        prev_time = time.time()
+        fps_update_interval = 0.5
+        frame_count = 0
+        fps = 0
+        process_scale = 0.75
+        min_scale = 0.5
+        max_scale = 1.0
+        skip_frames = 0
+        max_skip = 1
+        target_fps = 24.0
+        min_process_time = 1.0 / target_fps
+        scale_adjust_rate = 0.02
 
-    while camera.isOpened() and PREVIEW.state() != "withdrawn":
-        ret, frame = camera.read()
-        if not ret:
-            break
+        while camera.isOpened() and PREVIEW.state() != "withdrawn":
+            ret, frame = camera.read()
+            if not ret:
+                break
 
-        frame_count += 1
-        current_time = time.time()
-        elapsed_time = current_time - prev_time
+            frame_count += 1
+            current_time = time.time()
+            elapsed_time = current_time - prev_time
 
-        # Skip frames if processing is too slow
-        if skip_frames > 0:
-            skip_frames -= 1
-            continue
+            if skip_frames > 0:
+                skip_frames -= 1
+                continue
 
-        # Create processing copy
-        if modules.globals.live_mirror:
-            frame = cv2.flip(frame, 1)
+            if modules.globals.live_mirror:
+                frame = cv2.flip(frame, 1)
 
-        # Scale down for processing with better interpolation
-        if process_scale != 1.0:
-            proc_frame = cv2.resize(
-                frame,
-                None,
-                fx=process_scale,
-                fy=process_scale,
-                interpolation=cv2.INTER_AREA,
-            )
-        else:
-            proc_frame = frame.copy()
+            # Process frame
+            try:
+                if process_scale != 1.0:
+                    proc_frame = cv2.resize(
+                        frame,
+                        None,
+                        fx=process_scale,
+                        fy=process_scale,
+                        interpolation=cv2.INTER_AREA,
+                    )
+                else:
+                    proc_frame = frame.copy()
 
-        # Process frame
-        try:
-            if not modules.globals.map_faces:
-                for processor in frame_processors:
-                    if processor.NAME == "DLC.FACE-ENHANCER":
-                        if modules.globals.fp_ui["face_enhancer"]:
-                            proc_frame = processor.process_frame(None, proc_frame)
-                    else:
-                        proc_frame = processor.process_frame(source_face, proc_frame)
-            else:
-                for processor in frame_processors:
-                    if processor.NAME == "DLC.FACE-ENHANCER":
-                        if modules.globals.fp_ui["face_enhancer"]:
+                # Apply face swap processing
+                if not modules.globals.map_faces:
+                    for processor in frame_processors:
+                        if processor.NAME == "DLC.FACE-ENHANCER":
+                            if modules.globals.fp_ui["face_enhancer"]:
+                                proc_frame = processor.process_frame(None, proc_frame)
+                        else:
+                            proc_frame = processor.process_frame(
+                                source_face, proc_frame
+                            )
+                else:
+                    for processor in frame_processors:
+                        if processor.NAME == "DLC.FACE-ENHANCER":
+                            if modules.globals.fp_ui["face_enhancer"]:
+                                proc_frame = processor.process_frame_v2(proc_frame)
+                        else:
                             proc_frame = processor.process_frame_v2(proc_frame)
-                    else:
-                        proc_frame = processor.process_frame_v2(proc_frame)
 
-            # Scale back up if needed, using better interpolation
-            if process_scale != 1.0:
-                proc_frame = cv2.resize(
+                if process_scale != 1.0:
+                    proc_frame = cv2.resize(
+                        proc_frame,
+                        (frame.shape[1], frame.shape[0]),
+                        interpolation=cv2.INTER_LANCZOS4,
+                    )
+
+                # Performance adjustments
+                process_time = time.time() - current_time
+                if process_time > min_process_time * 1.2:
+                    process_scale = max(min_scale, process_scale - scale_adjust_rate)
+                    skip_frames = min(max_skip, skip_frames + 1)
+                elif process_time < min_process_time * 0.8:
+                    process_scale = min(max_scale, process_scale + scale_adjust_rate)
+                    skip_frames = max(0, skip_frames - 1)
+
+            except Exception as e:
+                print(f"Frame processing error: {str(e)}")
+                proc_frame = frame
+
+            # Calculate FPS
+            if elapsed_time >= fps_update_interval:
+                fps = frame_count / elapsed_time
+                frame_count = 0
+                prev_time = current_time
+
+            if modules.globals.show_fps:
+                cv2.putText(
                     proc_frame,
-                    (frame.shape[1], frame.shape[0]),
-                    interpolation=cv2.INTER_LANCZOS4,
+                    f"FPS: {fps:.1f}",
+                    (10, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    1,
+                    (0, 255, 0),
+                    2,
                 )
 
-            # More gradual performance-based scaling adjustments
-            process_time = time.time() - current_time
-            if process_time > min_process_time * 1.2:  # Allow more tolerance
-                process_scale = max(min_scale, process_scale - scale_adjust_rate)
-                skip_frames = min(max_skip, skip_frames + 1)
-            elif process_time < min_process_time * 0.8:
-                process_scale = min(max_scale, process_scale + scale_adjust_rate)
-                skip_frames = max(0, skip_frames - 1)
+            # Convert to RGB for both preview and virtual camera
+            if modules.globals.color_correction:
+                output_frame = cv2.cvtColor(proc_frame, cv2.COLOR_BGR2RGB)
+            else:
+                output_frame = cv2.cvtColor(proc_frame, cv2.COLOR_BGR2RGB)
 
-        except Exception as e:
-            print(f"Frame processing error: {str(e)}")
-            proc_frame = frame
+            # Update preview
+            if modules.globals.live_resizable:
+                preview_frame = fit_image_to_size(
+                    output_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
+                )
+            else:
+                preview_frame = output_frame
 
-        # Calculate and show FPS
-        if elapsed_time >= fps_update_interval:
-            fps = frame_count / elapsed_time
-            frame_count = 0
-            prev_time = current_time
-
-        if modules.globals.show_fps:
-            cv2.putText(
-                proc_frame,
-                f"FPS: {fps:.1f}",
-                (10, 30),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                1,
-                (0, 255, 0),
-                2,
+            image = Image.fromarray(preview_frame)
+            image = ctk.CTkImage(
+                image, size=(preview_frame.shape[1], preview_frame.shape[0])
             )
+            preview_label.configure(image=image)
 
-        # Update preview with better quality settings
-        if modules.globals.live_resizable:
-            proc_frame = fit_image_to_size(
-                proc_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
-            )
+            # Send to virtual camera
+            vcam.send(output_frame)
+            vcam.sleep_until_next_frame()
 
-        # Improve color handling
-        if modules.globals.color_correction:
-            proc_frame = cv2.cvtColor(proc_frame, cv2.COLOR_BGR2RGB)
-        else:
-            proc_frame = cv2.cvtColor(proc_frame, cv2.COLOR_BGR2RGB)
+            ROOT.update()
 
-        image = Image.fromarray(proc_frame)
-        image = ctk.CTkImage(image, size=(proc_frame.shape[1], proc_frame.shape[0]))
-        preview_label.configure(image=image)
-        ROOT.update()
-
-    camera.release()
-    PREVIEW.withdraw()
+        camera.release()
+        PREVIEW.withdraw()
 
 
 def create_source_target_popup_for_webcam(
