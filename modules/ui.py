@@ -1378,43 +1378,42 @@ def create_webcam_preview(camera_index: int):
     camera.set(cv2.CAP_PROP_FRAME_HEIGHT, PREVIEW_DEFAULT_HEIGHT)
     camera.set(cv2.CAP_PROP_FPS, 60)
 
-    # Simplified window setup - reduce widget creation/destruction
     PREVIEW.deiconify()
 
-    # Only clear and recreate widgets if they don't exist
-    if not hasattr(PREVIEW, "main_frame"):
-        for widget in PREVIEW.winfo_children():
-            widget.destroy()
+    # Clear any existing widgets in the PREVIEW window
+    for widget in PREVIEW.winfo_children():
+        widget.destroy()
 
-        PREVIEW.main_frame = ctk.CTkFrame(PREVIEW)
-        PREVIEW.main_frame.pack(fill="both", expand=True)
+    # Create a main frame to contain all widgets
+    main_frame = ctk.CTkFrame(PREVIEW)
+    main_frame.pack(fill="both", expand=True)
 
-        preview_frame = ctk.CTkFrame(PREVIEW.main_frame)
-        preview_frame.pack(fill="both", expand=True, padx=10, pady=10)
+    # Create a frame for the preview label
+    preview_frame = ctk.CTkFrame(main_frame)
+    preview_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
-        preview_label = ctk.CTkLabel(preview_frame, text="")
-        preview_label.pack(fill="both", expand=True)
+    preview_label = ctk.CTkLabel(preview_frame, text="")
+    preview_label.pack(fill="both", expand=True)
 
+    # Initialize frame processors
     frame_processors = get_frame_processors_modules(modules.globals.frame_processors)
-    source_image = (
-        None
-        if not modules.globals.source_path
-        else get_one_face(cv2.imread(modules.globals.source_path))
-    )
 
-    # FPS tracking variables
+    # Variables for source image and FPS calculation
+    source_image = None
     prev_time = time.time()
-    fps_update_interval = 1.0  # Increased to 1 second for stability
+    fps_update_interval = 0.5
     frame_count = 0
     fps = 0
-    fps_display = "FPS: --"  # Initialize fps display text
 
-    # Cache frequently accessed values
-    live_mirror = modules.globals.live_mirror
-    live_resizable = modules.globals.live_resizable
-    show_fps = modules.globals.show_fps
-    map_faces = modules.globals.map_faces
+    # Function to update frame size when the window is resized
+    def update_frame_size(event):
+        nonlocal temp_frame
+        if modules.globals.live_resizable:
+            temp_frame = fit_image_to_size(temp_frame, event.width, event.height)
 
+    preview_frame.bind("<Configure>", update_frame_size)
+
+    # Main loop for capturing and processing frames
     while camera.isOpened() and PREVIEW.state() != "withdrawn":
         ret, frame = camera.read()
         if not ret:
@@ -1422,36 +1421,46 @@ def create_webcam_preview(camera_index: int):
 
         temp_frame = frame.copy()
 
-        if live_mirror:
+        # Apply mirroring if enabled
+        if modules.globals.live_mirror:
             temp_frame = cv2.flip(temp_frame, 1)
 
-        if live_resizable:
+        # Resize frame if enabled
+        if modules.globals.live_resizable:
             temp_frame = fit_image_to_size(
                 temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
             )
 
-        # Process frame
-        if not map_faces:
+        # Process frame based on face mapping mode
+        if not modules.globals.map_faces:
+            # Update source image if path has changed
+            if modules.globals.source_path and (
+                source_image is None
+                or modules.globals.source_path != source_image["location"]
+            ):
+                source_image = get_one_face(cv2.imread(modules.globals.source_path))
+                source_image["location"] = modules.globals.source_path
+
+            # Apply frame processors (e.g., face swapping, enhancement)
             for frame_processor in frame_processors:
                 temp_frame = frame_processor.process_frame(source_image, temp_frame)
         else:
+            modules.globals.target_path = None
             for frame_processor in frame_processors:
                 temp_frame = frame_processor.process_frame_v2(temp_frame)
 
-        # FPS calculation and display
-        frame_count += 1
+        # Calculate and display FPS
         current_time = time.time()
+        frame_count += 1
         if current_time - prev_time >= fps_update_interval:
             fps = frame_count / (current_time - prev_time)
-            fps_display = f"FPS: {fps:.1f}"  # Update display text
             frame_count = 0
             prev_time = current_time
 
-        # Always show the last calculated FPS value
-        if show_fps:
+        if modules.globals.show_fps:
             cv2.putText(
                 temp_frame,
-                fps_display,  # Use stored fps display text
+                f"FPS: {fps:.1f}",
                 (10, 30),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 1,
@@ -1459,8 +1468,9 @@ def create_webcam_preview(camera_index: int):
                 2,
             )
 
-        # Display frame
-        image = Image.fromarray(cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB))
+        # Convert frame to RGB and display in preview label
+        image = cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB)
+        image = Image.fromarray(image)
         image = ImageOps.contain(
             image, (temp_frame.shape[1], temp_frame.shape[0]), Image.LANCZOS
         )
@@ -1468,6 +1478,7 @@ def create_webcam_preview(camera_index: int):
         preview_label.configure(image=image)
         ROOT.update()
 
+    # Release camera and close preview window
     camera.release()
     PREVIEW.withdraw()
 
