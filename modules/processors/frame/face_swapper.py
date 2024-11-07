@@ -58,17 +58,17 @@ def get_face_swapper() -> Any:
             FACE_SWAPPER = insightface.model_zoo.get_model(
                 model_path, providers=modules.globals.execution_providers
             )
-            # Set optimal inference parameters
+            # Set optimal inference parameters for maximum VRAM usage
             if hasattr(FACE_SWAPPER, "session"):
                 FACE_SWAPPER.session.set_providers(["CUDAExecutionProvider"])
                 FACE_SWAPPER.session.set_provider_options(
                     {
                         "CUDAExecutionProvider": {
-                            "cuda_mem_limit": 2 * 1024 * 1024 * 1024,  # 2GB VRAM limit
-                            "arena_extend_strategy": "kNextPowerOfTwo",
-                            "gpu_mem_limit": 2 * 1024 * 1024 * 1024,
-                            "cudnn_conv_algo_search": "EXHAUSTIVE",
+                            "arena_extend_strategy": "kSameAsRequested",  # More aggressive memory allocation
+                            "cudnn_conv_algo_search": "EXHAUSTIVE",  # Try all possible algorithms
                             "do_copy_in_default_stream": True,
+                            "gpu_mem_limit": 0,  
+                            "cuda_mem_limit": 0, 
                         }
                     }
                 )
