@@ -1,17 +1,7 @@
-[Remove this]The issue would most likely be diagnosed if you follow the template and give all the info.
+***[Remove this]The issue would be closed without notice and be considered spam if the template is not followed.***
 
 **Describe the bug**
 A clear and concise description of what the bug is.
-
-**To Reproduce**
-Steps to reproduce the behavior:
-1. Go to '...'
-2. Click on '....'
-3. Scroll down to '....'
-4. See error
-
-**Expected behavior**
-A clear and concise description of what you expected to happen.
 
 **Screenshots**
 If applicable, add screenshots to help explain your problem.
