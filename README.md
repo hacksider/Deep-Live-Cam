@@ -197,6 +197,9 @@ Track and change faces on the fly.
 It's as simple as opening a movie on the screen, and selecting OBS as your camera!
 ![image](media/movie_img.png)
 
+### Benchmarks
+On Deepware scanner - Most popular deepfake detection website, recording of realtime faceswap ran on an RTX 3060 - 
+![bench](media/deepwarebench.gif)
 
 ## Command Line Arguments
 
