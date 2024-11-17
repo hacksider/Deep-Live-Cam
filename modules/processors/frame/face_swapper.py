@@ -10,19 +10,21 @@ from modules.face_analyser import get_one_face, get_many_faces, default_source_f
 from modules.typing import Face, Frame
 from modules.utilities import (
     conditional_download,
-    resolve_relative_path,
     is_image,
     is_video,
 )
 from modules.cluster_analysis import find_closest_centroid
+import os
 
 FACE_SWAPPER = None
 THREAD_LOCK = threading.Lock()
 NAME = "DLC.FACE-SWAPPER"
 
+abs_dir = os.path.dirname(os.path.abspath(__file__))
+models_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(abs_dir))), 'models')
 
 def pre_check() -> bool:
-    download_directory_path = resolve_relative_path("../models")
+    download_directory_path = abs_dir
     conditional_download(
         download_directory_path,
         [
@@ -54,7 +56,7 @@ def get_face_swapper() -> Any:
 
     with THREAD_LOCK:
         if FACE_SWAPPER is None:
-            model_path = resolve_relative_path("../models/inswapper_128_fp16.onnx")
+            model_path = os.path.join(models_dir, 'inswapper_128_fp16.onnx')
             FACE_SWAPPER = insightface.model_zoo.get_model(
                 model_path, providers=modules.globals.execution_providers
             )
