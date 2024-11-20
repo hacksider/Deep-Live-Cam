@@ -1,7 +1,6 @@
-from typing import Any
+from typing import Any, TypeAlias
 
 from insightface.app.common import Face
 import numpy
 
-Face = Face
-Frame = numpy.ndarray[Any, Any]
+Frame: TypeAlias = numpy.ndarray[Any, Any]

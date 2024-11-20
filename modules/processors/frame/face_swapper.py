@@ -5,7 +5,7 @@ import threading
 import numpy as np
 import modules.globals
 import modules.processors.frame.core
-from modules.core import update_status
+from run import app
 from modules.face_analyser import get_one_face, get_many_faces, default_source_face
 from modules.typing import Face, Frame
 from modules.utilities import (
@@ -36,17 +36,17 @@ def pre_check() -> bool:
 
 def pre_start() -> bool:
     if not modules.globals.map_faces and not is_image(modules.globals.source_path):
-        update_status("Select an image for source path.", NAME)
+        app.update_status("Select an image for source path.", NAME)
         return False
     elif not modules.globals.map_faces and not get_one_face(
         cv2.imread(modules.globals.source_path)
     ):
-        update_status("No face in source path detected.", NAME)
+        app.update_status("No face in source path detected.", NAME)
         return False
     if not is_image(modules.globals.target_path) and not is_video(
         modules.globals.target_path
     ):
-        update_status("Select an image or video for target path.", NAME)
+        app.update_status("Select an image or video for target path.", NAME)
         return False
     return True
 
@@ -236,7 +236,7 @@ def process_image(source_path: str, target_path: str, output_path: str) -> None:
         cv2.imwrite(output_path, result)
     else:
         if modules.globals.many_faces:
-            update_status(
+            app.update_status(
                 "Many faces enabled. Using first source image. Progressing...", NAME
             )
         target_frame = cv2.imread(output_path)
@@ -246,7 +246,7 @@ def process_image(source_path: str, target_path: str, output_path: str) -> None:
 
 def process_video(source_path: str, temp_frame_paths: List[str]) -> None:
     if modules.globals.map_faces and modules.globals.many_faces:
-        update_status(
+        app.update_status(
             "Many faces enabled. Using first source image. Progressing...", NAME
         )
     modules.processors.frame.core.process_video(
@@ -256,7 +256,7 @@ def process_video(source_path: str, temp_frame_paths: List[str]) -> None:
 
 def create_lower_mouth_mask(
     face: Face, frame: Frame
-) -> (np.ndarray, np.ndarray, tuple, np.ndarray):
+) -> tuple[np.ndarray, np.ndarray, tuple, np.ndarray]:
     mask = np.zeros(frame.shape[:2], dtype=np.uint8)
     mouth_cutout = None
     landmarks = face.landmark_2d_106

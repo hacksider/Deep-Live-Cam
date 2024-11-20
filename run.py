@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 
-from modules import core
+from modules.core import DeepFakeApp
+
+
+app = DeepFakeApp()
 
 if __name__ == '__main__':
-    core.run()
+    app.run()
