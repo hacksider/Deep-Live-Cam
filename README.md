@@ -27,11 +27,15 @@ Users are expected to use this software responsibly and legally. If using a real
 
 [![Download](media/download.png)](https://hacksider.gumroad.com/l/vccdmm) 
 
-[Download latest pre-built version with CUDA support](https://hacksider.gumroad.com/l/vccdmm) - No Manual Installation/Downloading required.
+[Download latest pre-built version with CUDA support](https://hacksider.gumroad.com/l/vccdmm) - No Manual Installation/Downloading required and Early features testing.
 
 ## Installation (Manual)
-**Please be aware that the installation needs technical skills and is NOT for beginners, consider downloading the prebuilt. Please do NOT open platform and installation related issues on GitHub before discussing it on the discord server.**
-### Basic Installation (CPU)
+**Please be aware that the installation needs technical skills and is not for beginners, consider downloading the prebuilt.**
+
+<details>
+<summary>Click to see the process</summary>
+
+### Installation
 
 This is more likely to work on your computer but will be slower as it utilizes the CPU.
 
@@ -73,10 +77,7 @@ brew install python-tk@3.10
 **Run:** If you don't have a GPU, you can run Deep-Live-Cam using `python run.py`. Note that initial execution will download models (~300MB).
 
 
-### GPU Acceleration (Optional)
-
-<details>
-<summary>Click to see the details</summary>
+### GPU Acceleration 
 
 **CUDA Execution Provider (Nvidia)**
 
@@ -160,8 +161,6 @@ python run.py --execution-provider openvino
 - Use a screen capture tool like OBS to stream.
 - To change the face, select a new source image.
 
-![demo-gif](media/demo.gif)
-
 ## Features
 
 ### Resizable Preview Window
@@ -192,7 +191,7 @@ Track and change faces on the fly.
 
 ![movie](media/movie.gif)
 
-**Watch movies in realtime:**
+**Watch movies in realtime with any face you want:**
 
 It's as simple as opening a movie on the screen, and selecting OBS as your camera!
 ![image](media/movie_img.png)
@@ -201,7 +200,7 @@ It's as simple as opening a movie on the screen, and selecting OBS as your camer
 On Deepware scanner - Most popular deepfake detection website, recording of realtime faceswap ran on an RTX 3060 - 
 ![bench](media/deepwarebench.gif)
 
-## Command Line Arguments
+## Command Line Arguments (Unmaintained)
 
 ```
 options:
