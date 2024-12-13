@@ -21,7 +21,10 @@ THREAD_LOCK = threading.Lock()
 NAME = "DLC.FACE-SWAPPER"
 
 abs_dir = os.path.dirname(os.path.abspath(__file__))
-models_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(abs_dir))), 'models')
+models_dir = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(abs_dir))), "models"
+)
+
 
 def pre_check() -> bool:
     download_directory_path = abs_dir
@@ -56,7 +59,7 @@ def get_face_swapper() -> Any:
 
     with THREAD_LOCK:
         if FACE_SWAPPER is None:
-            model_path = os.path.join(models_dir, 'inswapper_128_fp16.onnx')
+            model_path = os.path.join(models_dir, "inswapper_128_fp16.onnx")
             FACE_SWAPPER = insightface.model_zoo.get_model(
                 model_path, providers=modules.globals.execution_providers
             )
