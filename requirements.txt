@@ -21,3 +21,4 @@ protobuf==4.23.2
 tqdm==4.66.4
 gfpgan==1.3.8
 tkinterdnd2==0.4.2
+pygrabber==0.2
