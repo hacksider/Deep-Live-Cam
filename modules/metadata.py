@@ -1,3 +1,3 @@
 name = 'Deep-Live-Cam'
-version = '1.7.0'
-edition = 'Github Edition'
+version = '1.7.5'
+edition = 'GitHub Edition'

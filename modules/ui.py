@@ -7,7 +7,7 @@ from cv2_enumerate_cameras import enumerate_cameras  # Add this import
 from PIL import Image, ImageOps
 import time
 import json
-
+from pygrabber.dshow_graph import FilterGraph
 import modules.globals
 import modules.metadata
 from modules.face_analyser import (
@@ -26,6 +26,8 @@ from modules.utilities import (
     resolve_relative_path,
     has_image_extension,
 )
+from modules.video_capture import VideoCapturer
+import platform
 
 ROOT = None
 POPUP = None
@@ -96,7 +98,7 @@ def save_switch_states():
         "fp_ui": modules.globals.fp_ui,
         "show_fps": modules.globals.show_fps,
         "mouth_mask": modules.globals.mouth_mask,
-        "show_mouth_mask_box": modules.globals.show_mouth_mask_box
+        "show_mouth_mask_box": modules.globals.show_mouth_mask_box,
     }
     with open("switch_states.json", "w") as f:
         json.dump(switch_states, f)
@@ -118,7 +120,9 @@ def load_switch_states():
         modules.globals.fp_ui = switch_states.get("fp_ui", {"face_enhancer": False})
         modules.globals.show_fps = switch_states.get("show_fps", False)
         modules.globals.mouth_mask = switch_states.get("mouth_mask", False)
-        modules.globals.show_mouth_mask_box = switch_states.get("show_mouth_mask_box", False)
+        modules.globals.show_mouth_mask_box = switch_states.get(
+            "show_mouth_mask_box", False
+        )
     except FileNotFoundError:
         # If the file doesn't exist, use default values
         pass
@@ -315,18 +319,22 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     camera_label.place(relx=0.1, rely=0.86, relwidth=0.2, relheight=0.05)
 
     available_cameras = get_available_cameras()
-    # Convert camera indices to strings for CTkOptionMenu
-    available_camera_indices, available_camera_strings = available_cameras
-    camera_variable = ctk.StringVar(
-        value=(
-            available_camera_strings[0]
-            if available_camera_strings
-            else "No cameras found"
+    camera_indices, camera_names = available_cameras
+
+    if not camera_names or camera_names[0] == "No cameras found":
+        camera_variable = ctk.StringVar(value="No cameras found")
+        camera_optionmenu = ctk.CTkOptionMenu(
+            root,
+            variable=camera_variable,
+            values=["No cameras found"],
+            state="disabled",
         )
-    )
-    camera_optionmenu = ctk.CTkOptionMenu(
-        root, variable=camera_variable, values=available_camera_strings
-    )
+    else:
+        camera_variable = ctk.StringVar(value=camera_names[0])
+        camera_optionmenu = ctk.CTkOptionMenu(
+            root, variable=camera_variable, values=camera_names
+        )
+
     camera_optionmenu.place(relx=0.35, rely=0.86, relwidth=0.25, relheight=0.05)
 
     live_button = ctk.CTkButton(
@@ -335,9 +343,16 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         cursor="hand2",
         command=lambda: webcam_preview(
             root,
-            available_camera_indices[
-                available_camera_strings.index(camera_variable.get())
-            ],
+            (
+                camera_indices[camera_names.index(camera_variable.get())]
+                if camera_names and camera_names[0] != "No cameras found"
+                else None
+            ),
+        ),
+        state=(
+            "normal"
+            if camera_names and camera_names[0] != "No cameras found"
+            else "disabled"
         ),
     )
     live_button.place(relx=0.65, rely=0.86, relwidth=0.2, relheight=0.05)
@@ -745,7 +760,7 @@ def update_preview(frame_number: int = 0) -> None:
 def webcam_preview(root: ctk.CTk, camera_index: int):
     if not modules.globals.map_faces:
         if modules.globals.source_path is None:
-            # No image selected
+            update_status("Please select a source image first")
             return
         create_webcam_preview(camera_index)
     else:
@@ -757,40 +772,78 @@ def webcam_preview(root: ctk.CTk, camera_index: int):
 
 def get_available_cameras():
     """Returns a list of available camera names and indices."""
-    camera_indices = []
-    camera_names = []
+    if platform.system() == "Windows":
+        try:
+            graph = FilterGraph()
+            devices = graph.get_input_devices()
 
-    for camera in enumerate_cameras():
-        cap = cv2.VideoCapture(camera.index)
-        if cap.isOpened():
-            camera_indices.append(camera.index)
-            camera_names.append(camera.name)
-            cap.release()
-    return (camera_indices, camera_names)
+            # Create list of indices and names
+            camera_indices = list(range(len(devices)))
+            camera_names = devices
+
+            # If no cameras found through DirectShow, try OpenCV fallback
+            if not camera_names:
+                # Try to open camera with index -1 and 0
+                test_indices = [-1, 0]
+                working_cameras = []
+
+                for idx in test_indices:
+                    cap = cv2.VideoCapture(idx)
+                    if cap.isOpened():
+                        working_cameras.append(f"Camera {idx}")
+                        cap.release()
+
+                if working_cameras:
+                    return test_indices[: len(working_cameras)], working_cameras
+
+            # If still no cameras found, return empty lists
+            if not camera_names:
+                return [], ["No cameras found"]
+
+            return camera_indices, camera_names
+
+        except Exception as e:
+            print(f"Error detecting cameras: {str(e)}")
+            return [], ["No cameras found"]
+    else:
+        # Unix-like systems (Linux/Mac) camera detection
+        camera_indices = []
+        camera_names = []
+
+        # Test the first 10 indices
+        for i in range(10):
+            cap = cv2.VideoCapture(i)
+            if cap.isOpened():
+                camera_indices.append(i)
+                camera_names.append(f"Camera {i}")
+                cap.release()
+
+        if not camera_names:
+            return [], ["No cameras found"]
+
+        return camera_indices, camera_names
 
 
 def create_webcam_preview(camera_index: int):
     global preview_label, PREVIEW
 
-    camera = cv2.VideoCapture(camera_index)
-    camera.set(cv2.CAP_PROP_FRAME_WIDTH, PREVIEW_DEFAULT_WIDTH)
-    camera.set(cv2.CAP_PROP_FRAME_HEIGHT, PREVIEW_DEFAULT_HEIGHT)
-    camera.set(cv2.CAP_PROP_FPS, 60)
+    cap = VideoCapturer(camera_index)
+    if not cap.start(PREVIEW_DEFAULT_WIDTH, PREVIEW_DEFAULT_HEIGHT, 60):
+        update_status("Failed to start camera")
+        return
 
     preview_label.configure(width=PREVIEW_DEFAULT_WIDTH, height=PREVIEW_DEFAULT_HEIGHT)
-
     PREVIEW.deiconify()
 
     frame_processors = get_frame_processors_modules(modules.globals.frame_processors)
-
     source_image = None
     prev_time = time.time()
-    fps_update_interval = 0.5  # Update FPS every 0.5 seconds
+    fps_update_interval = 0.5
     frame_count = 0
     fps = 0
 
-    while camera:
-        ret, frame = camera.read()
+    while True:
+        ret, frame = cap.read()
         if not ret:
             break
 
@@ -800,6 +853,11 @@ def create_webcam_preview(camera_index: int):
             temp_frame = cv2.flip(temp_frame, 1)
 
         if modules.globals.live_resizable:
+            temp_frame = fit_image_to_size(
+                temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
+            )
+
+        else:
             temp_frame = fit_image_to_size(
                 temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
             )
@@ -816,7 +874,6 @@ def create_webcam_preview(camera_index: int):
                     temp_frame = frame_processor.process_frame(source_image, temp_frame)
         else:
             modules.globals.target_path = None
-
             for frame_processor in frame_processors:
                 if frame_processor.NAME == "DLC.FACE-ENHANCER":
                     if modules.globals.fp_ui["face_enhancer"]:
@@ -855,7 +912,7 @@ def create_webcam_preview(camera_index: int):
         if PREVIEW.state() == "withdrawn":
             break
 
-    camera.release()
+    cap.release()
     PREVIEW.withdraw()
 
 
