@@ -28,6 +28,9 @@ from modules.utilities import (
 from modules.video_capture import VideoCapturer
 import platform
 
+if platform.system() == "Windows":
+    from pygrabber.dshow_graph import FilterGraph
+
 ROOT = None
 POPUP = None
 POPUP_LIVE = None
@@ -772,8 +775,6 @@ def webcam_preview(root: ctk.CTk, camera_index: int):
 def get_available_cameras():
     """Returns a list of available camera names and indices."""
     if platform.system() == "Windows":
-        from pygrabber.dshow_graph import FilterGraph
-
         try:
             graph = FilterGraph()
             devices = graph.get_input_devices()
