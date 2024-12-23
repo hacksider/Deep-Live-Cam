@@ -7,7 +7,6 @@ from cv2_enumerate_cameras import enumerate_cameras  # Add this import
 from PIL import Image, ImageOps
 import time
 import json
-from pygrabber.dshow_graph import FilterGraph
 import modules.globals
 import modules.metadata
 from modules.face_analyser import (
@@ -773,6 +772,8 @@ def webcam_preview(root: ctk.CTk, camera_index: int):
 def get_available_cameras():
     """Returns a list of available camera names and indices."""
     if platform.system() == "Windows":
+        from pygrabber.dshow_graph import FilterGraph
+
         try:
             graph = FilterGraph()
             devices = graph.get_input_devices()
