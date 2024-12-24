@@ -214,6 +214,7 @@ options:
   --keep-frames                                            keep temporary frames
   --many-faces                                             process every face
   --map-faces                                              map source target faces
+  --mouth-mask                                             mask the mouth region
   --nsfw-filter                                            filter the NSFW image or video
   --video-encoder {libx264,libx265,libvpx-vp9}             adjust output video encoder
   --video-quality [0-51]                                   adjust output video quality
