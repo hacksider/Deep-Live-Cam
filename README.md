@@ -242,7 +242,7 @@ Looking for a CLI mode? Using the -s/--source argument will make the run program
 - [KRSHH](https://github.com/KRSHH) : For his contributions
 - and [all developers](https://github.com/hacksider/Deep-Live-Cam/graphs/contributors) behind libraries used in this project.
 - Foot Note: Please be informed that the base author of the code is [s0md3v](https://github.com/s0md3v/roop)
-- All the users who helped in making this project viral by starring the repo ❤️
+- All the wonderful users who helped making this project go viral by starring the repo ❤️
 
 [![Stargazers](https://reporoster.com/stars/hacksider/Deep-Live-Cam)](https://github.com/hacksider/Deep-Live-Cam/stargazers)
 
