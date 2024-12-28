@@ -161,7 +161,7 @@ python run.py --execution-provider openvino
 - Use a screen capture tool like OBS to stream.
 - To change the face, select a new source image.
 
-## Features
+## Features - Everything is realtime
 
 ### Mouth Mask
 
