@@ -163,41 +163,29 @@ python run.py --execution-provider openvino
 
 ## Features
 
-### Resizable Preview Window
+### Mouth Mask
 
-Dynamically improve performance using the `--live-resizable` parameter.
+**Retain your original mouth using Mouth Mask** 
 
-![resizable-gif](media/resizable.gif)
+![resizable-gif](media/ludwig.gif)
 
 ### Face Mapping
 
-Track and change faces on the fly.
+**Use different faces on multiple subjects**
 
-![face_mapping_source](media/face_mapping_source.gif)
+![face_mapping_source](media/streamers.gif)
 
-**Source Video:**
+### Your Movie, Your Face
 
-![face-mapping](media/face_mapping.png)
-
-**Enable Face Mapping:**
-
-![face-mapping2](media/face_mapping2.png)
-
-**Map the Faces:**
-
-![face_mapping_result](media/face_mapping_result.gif)
-
-**See the Magic!**
+**Watch movies with any face in realtime**
 
 ![movie](media/movie.gif)
 
-**Watch movies in realtime with any face you want:**
 
-It's as simple as opening a movie on the screen, and selecting OBS as your camera!
-![image](media/movie_img.png)
+## Benchmarks
 
-### Benchmarks
-On Deepware scanner - Most popular deepfake detection website, recording of realtime faceswap ran on an RTX 3060 - 
+**Nearly 0% detection!**
+
 ![bench](media/deepwarebench.gif)
 
 ## Command Line Arguments (Unmaintained)
@@ -229,171 +217,20 @@ options:
 Looking for a CLI mode? Using the -s/--source argument will make the run program in cli mode.
 
 
-## Webcam Mode on WSL2 Ubuntu (Optional)
+## Press
+ **We are always open to criticism and ready to improve, that's we didn't cherrypick anything.** 
 
-<details>
-<summary>Click to see the details</summary>
-
-If you want to use WSL2 on Windows 11 you will notice, that Ubuntu WSL2 doesn't come with USB-Webcam support in the Kernel. You need to do two things: Compile the Kernel with the right modules integrated and forward your USB Webcam from Windows to Ubuntu with the usbipd app. Here are detailed Steps:
-
-This tutorial will guide you through the process of setting up WSL2 Ubuntu with USB webcam support, rebuilding the kernel, and preparing the environment for the Deep-Live-Cam project.  
-  
-**1. Install WSL2 Ubuntu**  
-  
-Install WSL2 Ubuntu from the Microsoft Store or using PowerShell:  
-  
-**2. Enable USB Support in WSL2**  
-  
-1. Install the USB/IP tool for Windows:  
-[https://learn.microsoft.com/en-us/windows/wsl/connect-usb](https://learn.microsoft.com/en-us/windows/wsl/connect-usb)  
-  
-2. In Windows PowerShell (as Administrator), connect your webcam to WSL:  
-  
-```powershell  
-usbipd list  
-usbipd bind --busid x-x # Replace x-x with your webcam's bus ID  
-usbipd attach --wsl --busid x-x # Replace x-x with your webcam's bus ID  
-```  
- You need to redo the above every time you reboot wsl or re-connect your webcam/usb device.
- 
-**3. Rebuild WSL2 Ubuntu Kernel with USB and Webcam Modules**  
-  
-Follow these steps to rebuild the kernel:  
-  
-1. Start with this guide: [https://github.com/PINTO0309/wsl2_linux_kernel_usbcam_enable_conf](https://github.com/PINTO0309/wsl2_linux_kernel_usbcam_enable_conf)  
-  
-2. When you reach the `sudo wget [github.com](http://github.com/)...PINTO0309` step, which won't work for newer kernel versions, follow this video instead or alternatively follow the video tutorial from the beginning: 
-[https://www.youtube.com/watch?v=t_YnACEPmrM](https://www.youtube.com/watch?v=t_YnACEPmrM)  
-  
-Additional info: [https://askubuntu.com/questions/1413377/camera-not-working-in-cheese-in-wsl2](https://askubuntu.com/questions/1413377/camera-not-working-in-cheese-in-wsl2)  
-  
-3. After rebuilding, restart WSL with the new kernel. 
-  
-**4. Set Up Deep-Live-Cam Project**  
- Within Ubuntu:
-1. Clone the repository:  
-  
-```bash  
-git clone [https://github.com/hacksider/Deep-Live-Cam](https://github.com/hacksider/Deep-Live-Cam)  
-```  
-  
-2. Follow the installation instructions in the repository, including cuda toolkit 11.8, make 100% sure it's not cuda toolkit 12.x.  
-   
-**5. Verify and Load Kernel Modules**  
-  
-1. Check if USB and webcam modules are built into the kernel:  
-  
-```bash  
-zcat /proc/config.gz | grep -i "CONFIG_USB_VIDEO_CLASS"  
-```  
-  
-2. If modules are loadable (m), not built-in (y), check if the file exists:  
-  
-```bash  
-ls /lib/modules/$(uname -r)/kernel/drivers/media/usb/uvc/  
-```  
-  
-3. Load the module and check for errors (optional if built-in):  
-  
-```bash  
-sudo modprobe uvcvideo  
-dmesg | tail  
-```  
-  
-4. Verify video devices:  
-  
-```bash  
-sudo ls -al /dev/video*  
-```  
-  
-**6. Set Up Permissions**  
-  
-1. Add user to video group and set permissions:  
-  
-```bash  
-sudo usermod -a -G video $USER  
-sudo chgrp video /dev/video0 /dev/video1  
-sudo chmod 660 /dev/video0 /dev/video1  
-```  
-  
-2. Create a udev rule for permanent permissions:  
-  
-```bash  
-sudo nano /etc/udev/rules.d/81-webcam.rules  
-```  
-  
-Add this content:  
-  
-```  
-KERNEL=="video[0-9]*", GROUP="video", MODE="0660"  
-```  
-  
-3. Reload udev rules:  
-  
-```bash  
-sudo udevadm control --reload-rules && sudo udevadm trigger  
-```  
-  
-4. Log out and log back into your WSL session.  
-  
-5. Start Deep-Live-Cam with `python run.py --execution-provider cuda --max-memory 8` where 8 can be changed to the number of GB VRAM of your GPU has, minus 1-2GB. If you have a RTX3080 with 10GB I suggest adding 8GB. Leave some left for Windows.
-
-**Final Notes**  
-  
-- Steps 6 and 7 may be optional if the modules are built into the kernel and permissions are already set correctly.  
-- Always ensure you're using compatible versions of CUDA, ONNX, and other dependencies.  
-- If issues persist, consider checking the Deep-Live-Cam project's specific requirements and troubleshooting steps.  
-  
-By following these steps, you should have a WSL2 Ubuntu environment with USB webcam support ready for the Deep-Live-Cam project. If you encounter any issues, refer back to the specific error messages and troubleshooting steps provided.
-
-**Troubleshooting CUDA Issues** 
-
-If you encounter this error:  
-  
-```  
-[ONNXRuntimeError] : 1 : FAIL : Failed to load library [libonnxruntime_providers_cuda.so](http://libonnxruntime_providers_cuda.so/) with error: libcufft.so.10: cannot open shared object file: No such file or directory  
-```  
-  
-Follow these steps:  
-  
-1. Install CUDA Toolkit 11.8 (ONNX 1.16.3 requires CUDA 11.x, not 12.x):  
-[https://developer.nvidia.com/cuda-11-8-0-download-archive](https://developer.nvidia.com/cuda-11-8-0-download-archive)  
-  select: Linux, x86_64, WSL-Ubuntu, 2.0, deb (local)
-2. Check CUDA version:  
-  
-```bash  
-/usr/local/cuda/bin/nvcc --version  
-```  
-  
-3. If the wrong version is installed, remove it completely:  
-[https://askubuntu.com/questions/530043/removing-nvidia-cuda-toolkit-and-installing-new-one](https://askubuntu.com/questions/530043/removing-nvidia-cuda-toolkit-and-installing-new-one)  
-  
-4. Install CUDA Toolkit 11.8 again [https://developer.nvidia.com/cuda-11-8-0-download-archive](https://developer.nvidia.com/cuda-11-8-0-download-archive), select: Linux, x86_64, WSL-Ubuntu, 2.0, deb (local)
-  
-```bash  
-sudo apt-get -y install cuda-toolkit-11-8  
-```
-</details>
-
-
-## Future Updates & Roadmap
-
-For the latest experimental builds and features, see the [experimental branch](https://github.com/hacksider/Deep-Live-Cam/tree/experimental).
-
-**TODO:**
-
-- [ ] Develop a version for web app/service
-- [ ] Speed up model loading
-- [ ] Speed up real-time face swapping
-- [x] Support multiple faces 
-- [x] UI/UX enhancements for desktop app
-
-This is an open-source project developed in our free time. Updates may be delayed.
-
-**Tips and Links:**
-- [How to make the most of Deep-Live-Cam](https://hacksider.gumroad.com/p/how-to-make-the-most-on-deep-live-cam)
-- Face enhancer is good, but still very slow for any live streaming purpose.
-
+ - [*"Deep-Live-Cam goes viral, allowing anyone to become a digital doppelganger"*](https://arstechnica.com/information-technology/2024/08/new-ai-tool-enables-real-time-face-swapping-on-webcams-raising-fraud-concerns/) - Ars Technica
+ - [*"Thanks Deep Live Cam, shapeshifters are among us now"*](https://dataconomy.com/2024/08/15/what-is-deep-live-cam-github-deepfake/) - Dataconomy
+ - [*"This free AI tool lets you become anyone during video-calls"*](https://www.newsbytesapp.com/news/science/deep-live-cam-ai-impersonation-tool-goes-viral/story) - NewsBytes
+ - [*"OK, this viral AI live stream software is truly terrifying"*](https://www.creativebloq.com/ai/ok-this-viral-ai-live-stream-software-is-truly-terrifying) - Creative Bloq
+ - [*"Deepfake AI Tool Lets You Become Anyone in a Video Call With Single Photo"*](https://petapixel.com/2024/08/14/deep-live-cam-deepfake-ai-tool-lets-you-become-anyone-in-a-video-call-with-single-photo-mark-zuckerberg-jd-vance-elon-musk/) - PetaPixel
+ - [*"Deep-Live-Cam Uses AI to Transform Your Face in Real-Time, Celebrities Included"*](https://www.techeblog.com/deep-live-cam-ai-transform-face/) - TechEBlog
+ - [*"An AI tool that "makes you look like anyone" during a video call is going viral online"*](https://telegrafi.com/en/a-tool-that-makes-you-look-like-anyone-during-a-video-call-is-going-viral-on-the-Internet/) - Telegrafi
+ - [*"This Deepfake Tool Turning Images Into Livestreams is Topping the GitHub Charts"*](https://decrypt.co/244565/this-deepfake-tool-turning-images-into-livestreams-is-topping-the-github-charts) - Emerge
+ - [*"New Real-Time Face-Swapping AI Allows Anyone to Mimic Famous Faces"*](https://www.digitalmusicnews.com/2024/08/15/face-swapping-ai-real-time-mimic/) - Digital Music News
+ - [*"This real-time webcam deepfake tool raises alarms about the future of identity theft"*](https://www.diyphotography.net/this-real-time-webcam-deepfake-tool-raises-alarms-about-the-future-of-identity-theft/) - DIYPhotography
+ - [*"That's Crazy, Oh God. That's Fucking Freaky Dude... That's So Wild Dude"*](https://www.youtube.com/watch?time_continue=1074&v=py4Tc-Y8BcY) - SomeOrdinaryGamers
 
 ## Credits
 
@@ -406,10 +243,13 @@ This is an open-source project developed in our free time. Updates may be delaye
 - [KRSHH](https://github.com/KRSHH) : For his contributions
 - and [all developers](https://github.com/hacksider/Deep-Live-Cam/graphs/contributors) behind libraries used in this project.
 - Foot Note: Please be informed that the base author of the code is [s0md3v](https://github.com/s0md3v/roop)
+- All the wonderful users who helped making this project go viral by starring the repo ❤️
+
+[![Stargazers](https://reporoster.com/stars/hacksider/Deep-Live-Cam)](https://github.com/hacksider/Deep-Live-Cam/stargazers)
 
 ## Contributions
 ![Alt](https://repobeats.axiom.co/api/embed/fec8e29c45dfdb9c5916f3a7830e1249308d20e1.svg "Repobeats analytics image")
-## Star History
+## Stars to the Moon 🚀
 
 <a href="https://star-history.com/#hacksider/deep-live-cam&Date">
  <picture>
