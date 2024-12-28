@@ -218,7 +218,7 @@ Looking for a CLI mode? Using the -s/--source argument will make the run program
 
 
 ## Press
- **We are always open to criticism and ready to improve, that's we didn't cherrypick anything.** 
+ **We are always open to criticism and ready to improve, that's why we didn't cherrypick anything.** 
 
  - [*"Deep-Live-Cam goes viral, allowing anyone to become a digital doppelganger"*](https://arstechnica.com/information-technology/2024/08/new-ai-tool-enables-real-time-face-swapping-on-webcams-raising-fraud-concerns/) - Ars Technica
  - [*"Thanks Deep Live Cam, shapeshifters are among us now"*](https://dataconomy.com/2024/08/15/what-is-deep-live-cam-github-deepfake/) - Dataconomy
