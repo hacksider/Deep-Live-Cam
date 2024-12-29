@@ -161,7 +161,7 @@ python run.py --execution-provider openvino
 - Use a screen capture tool like OBS to stream.
 - To change the face, select a new source image.
 
-## Features
+## Features - Everything is realtime
 
 ### Mouth Mask
 
@@ -202,6 +202,7 @@ options:
   --keep-frames                                            keep temporary frames
   --many-faces                                             process every face
   --map-faces                                              map source target faces
+  --mouth-mask                                             mask the mouth region
   --nsfw-filter                                            filter the NSFW image or video
   --video-encoder {libx264,libx265,libvpx-vp9}             adjust output video encoder
   --video-quality [0-51]                                   adjust output video quality
@@ -217,7 +218,7 @@ Looking for a CLI mode? Using the -s/--source argument will make the run program
 
 
 ## Press
- **We are always open to criticism and ready to improve, that's we didn't cherrypick anything.** 
+ **We are always open to criticism and ready to improve, that's why we didn't cherrypick anything.** 
 
  - [*"Deep-Live-Cam goes viral, allowing anyone to become a digital doppelganger"*](https://arstechnica.com/information-technology/2024/08/new-ai-tool-enables-real-time-face-swapping-on-webcams-raising-fraud-concerns/) - Ars Technica
  - [*"Thanks Deep Live Cam, shapeshifters are among us now"*](https://dataconomy.com/2024/08/15/what-is-deep-live-cam-github-deepfake/) - Dataconomy
