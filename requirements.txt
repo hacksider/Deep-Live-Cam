@@ -1,7 +1,7 @@
 --extra-index-url https://download.pytorch.org/whl/cu118
 
 numpy>=1.23.5,<2
-opencv-python==4.10.0.84               :: Update OpenCV-Python from version 4.8.1.78 to version 4.10.0.84 in order to ensure compatibility with Cuda 12.1. 
+opencv-python==4.10.0.84
 cv2_enumerate_cameras==1.1.15
 onnx==1.16.0
 insightface==0.7.3
