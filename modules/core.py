@@ -46,6 +46,7 @@ def parse_args() -> None:
     program.add_argument('--video-quality', help='adjust output video quality', dest='video_quality', type=int, default=18, choices=range(52), metavar='[0-51]')
     program.add_argument('--live-mirror', help='The live camera display as you see it in the front-facing camera frame', dest='live_mirror', action='store_true', default=False)
     program.add_argument('--live-resizable', help='The live camera frame is resizable', dest='live_resizable', action='store_true', default=False)
+    program.add_argument('-l', '--lang', help='UI language', default='en')
     program.add_argument('--max-memory', help='maximum amount of RAM in GB', dest='max_memory', type=int, default=suggest_max_memory())
     program.add_argument('--execution-provider', help='execution provider', dest='execution_provider', default=['cpu'], choices=suggest_execution_providers(), nargs='+')
     program.add_argument('--execution-threads', help='number of execution threads', dest='execution_threads', type=int, default=suggest_execution_threads())
@@ -105,6 +106,7 @@ def parse_args() -> None:
     if args.gpu_threads_deprecated:
         print('\033[33mArgument --gpu-threads is deprecated. Use --execution-threads instead.\033[0m')
         modules.globals.execution_threads = args.gpu_threads_deprecated
+    return args
 
 
 def encode_execution_providers(execution_providers: List[str]) -> List[str]:
@@ -243,7 +245,7 @@ def destroy(to_quit=True) -> None:
 
 
 def run() -> None:
-    parse_args()
+    args = parse_args()
     if not pre_check():
         return
     for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
@@ -253,5 +255,5 @@ def run() -> None:
     if modules.globals.headless:
         start()
     else:
-        window = ui.init(start, destroy)
+        window = ui.init(start, destroy, args.lang)
         window.mainloop()
