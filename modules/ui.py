@@ -7,6 +7,7 @@ from cv2_enumerate_cameras import enumerate_cameras  # Add this import
 from PIL import Image, ImageOps
 import time
 import json
+
 import modules.globals
 import modules.metadata
 from modules.face_analyser import (
@@ -25,11 +26,6 @@ from modules.utilities import (
     resolve_relative_path,
     has_image_extension,
 )
-from modules.video_capture import VideoCapturer
-import platform
-
-if platform.system() == "Windows":
-    from pygrabber.dshow_graph import FilterGraph
 
 ROOT = None
 POPUP = None
@@ -100,7 +96,7 @@ def save_switch_states():
         "fp_ui": modules.globals.fp_ui,
         "show_fps": modules.globals.show_fps,
         "mouth_mask": modules.globals.mouth_mask,
-        "show_mouth_mask_box": modules.globals.show_mouth_mask_box,
+        "show_mouth_mask_box": modules.globals.show_mouth_mask_box
     }
     with open("switch_states.json", "w") as f:
         json.dump(switch_states, f)
@@ -122,9 +118,7 @@ def load_switch_states():
         modules.globals.fp_ui = switch_states.get("fp_ui", {"face_enhancer": False})
         modules.globals.show_fps = switch_states.get("show_fps", False)
         modules.globals.mouth_mask = switch_states.get("mouth_mask", False)
-        modules.globals.show_mouth_mask_box = switch_states.get(
-            "show_mouth_mask_box", False
-        )
+        modules.globals.show_mouth_mask_box = switch_states.get("show_mouth_mask_box", False)
     except FileNotFoundError:
         # If the file doesn't exist, use default values
         pass
@@ -321,22 +315,18 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     camera_label.place(relx=0.1, rely=0.86, relwidth=0.2, relheight=0.05)
 
     available_cameras = get_available_cameras()
-    camera_indices, camera_names = available_cameras
-
-    if not camera_names or camera_names[0] == "No cameras found":
-        camera_variable = ctk.StringVar(value="No cameras found")
-        camera_optionmenu = ctk.CTkOptionMenu(
-            root,
-            variable=camera_variable,
-            values=["No cameras found"],
-            state="disabled",
+    # Convert camera indices to strings for CTkOptionMenu
+    available_camera_indices, available_camera_strings = available_cameras
+    camera_variable = ctk.StringVar(
+        value=(
+            available_camera_strings[0]
+            if available_camera_strings
+            else "No cameras found"
         )
-    else:
-        camera_variable = ctk.StringVar(value=camera_names[0])
-        camera_optionmenu = ctk.CTkOptionMenu(
-            root, variable=camera_variable, values=camera_names
-        )
-
+    )
+    camera_optionmenu = ctk.CTkOptionMenu(
+        root, variable=camera_variable, values=available_camera_strings
+    )
     camera_optionmenu.place(relx=0.35, rely=0.86, relwidth=0.25, relheight=0.05)
 
     live_button = ctk.CTkButton(
@@ -345,16 +335,9 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         cursor="hand2",
         command=lambda: webcam_preview(
             root,
-            (
-                camera_indices[camera_names.index(camera_variable.get())]
-                if camera_names and camera_names[0] != "No cameras found"
-                else None
-            ),
-        ),
-        state=(
-            "normal"
-            if camera_names and camera_names[0] != "No cameras found"
-            else "disabled"
+            available_camera_indices[
+                available_camera_strings.index(camera_variable.get())
+            ],
         ),
     )
     live_button.place(relx=0.65, rely=0.86, relwidth=0.2, relheight=0.05)
@@ -371,7 +354,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         text_color=ctk.ThemeManager.theme.get("URL").get("text_color")
     )
     donate_label.bind(
-        "<Button>", lambda event: webbrowser.open("https://deeplivecam.net")
+        "<Button>", lambda event: webbrowser.open("https://paypal.me/hacksider")
     )
 
     return root
@@ -412,8 +395,8 @@ def create_source_target_popup(
 
     def on_submit_click(start):
         if has_valid_map():
-            POPUP.destroy()
-            select_output_path(start)
+            simplify_maps()
+            update_pop_live_status("Mappings submitted successfully!")
         else:
             update_pop_status("Atleast 1 source with target is required!")
 
@@ -760,9 +743,15 @@ def update_preview(frame_number: int = 0) -> None:
 
 
 def webcam_preview(root: ctk.CTk, camera_index: int):
+    global POPUP_LIVE
+
+    if POPUP_LIVE is not None and POPUP_LIVE.winfo_exists():
+        POPUP_LIVE.focus()
+        return
+
     if not modules.globals.map_faces:
         if modules.globals.source_path is None:
-            update_status("Please select a source image first")
+            # No image selected
             return
         create_webcam_preview(camera_index)
     else:
@@ -774,94 +763,40 @@ def webcam_preview(root: ctk.CTk, camera_index: int):
 
 def get_available_cameras():
     """Returns a list of available camera names and indices."""
-    if platform.system() == "Windows":
-        try:
-            graph = FilterGraph()
-            devices = graph.get_input_devices()
+    camera_indices = []
+    camera_names = []
 
-            # Create list of indices and names
-            camera_indices = list(range(len(devices)))
-            camera_names = devices
-
-            # If no cameras found through DirectShow, try OpenCV fallback
-            if not camera_names:
-                # Try to open camera with index -1 and 0
-                test_indices = [-1, 0]
-                working_cameras = []
-
-                for idx in test_indices:
-                    cap = cv2.VideoCapture(idx)
-                    if cap.isOpened():
-                        working_cameras.append(f"Camera {idx}")
-                        cap.release()
-
-                if working_cameras:
-                    return test_indices[: len(working_cameras)], working_cameras
-
-            # If still no cameras found, return empty lists
-            if not camera_names:
-                return [], ["No cameras found"]
-
-            return camera_indices, camera_names
-
-        except Exception as e:
-            print(f"Error detecting cameras: {str(e)}")
-            return [], ["No cameras found"]
-    else:
-        # Unix-like systems (Linux/Mac) camera detection
-        camera_indices = []
-        camera_names = []
-
-        if platform.system() == "Darwin":  # macOS specific handling
-            # Try to open the default FaceTime camera first
-            cap = cv2.VideoCapture(0)
-            if cap.isOpened():
-                camera_indices.append(0)
-                camera_names.append("FaceTime Camera")
-                cap.release()
-                
-            # On macOS, additional cameras typically use indices 1 and 2
-            for i in [1, 2]:
-                cap = cv2.VideoCapture(i)
-                if cap.isOpened():
-                    camera_indices.append(i)
-                    camera_names.append(f"Camera {i}")
-                    cap.release()
-        else:
-            # Linux camera detection - test first 10 indices
-            for i in range(10):
-                cap = cv2.VideoCapture(i)
-                if cap.isOpened():
-                    camera_indices.append(i)
-                    camera_names.append(f"Camera {i}")
-                    cap.release()
-
-        if not camera_names:
-            return [], ["No cameras found"]
-
-        return camera_indices, camera_names
+    for camera in enumerate_cameras():
+        cap = cv2.VideoCapture(camera.index)
+        if cap.isOpened():
+            camera_indices.append(camera.index)
+            camera_names.append(camera.name)
+            cap.release()
+    return (camera_indices, camera_names)
 
 
 def create_webcam_preview(camera_index: int):
     global preview_label, PREVIEW
 
-    cap = VideoCapturer(camera_index)
-    if not cap.start(PREVIEW_DEFAULT_WIDTH, PREVIEW_DEFAULT_HEIGHT, 60):
-        update_status("Failed to start camera")
-        return
+    camera = cv2.VideoCapture(camera_index)
+    camera.set(cv2.CAP_PROP_FRAME_WIDTH, PREVIEW_DEFAULT_WIDTH)
+    camera.set(cv2.CAP_PROP_FRAME_HEIGHT, PREVIEW_DEFAULT_HEIGHT)
+    camera.set(cv2.CAP_PROP_FPS, 60)
 
     preview_label.configure(width=PREVIEW_DEFAULT_WIDTH, height=PREVIEW_DEFAULT_HEIGHT)
+
     PREVIEW.deiconify()
 
     frame_processors = get_frame_processors_modules(modules.globals.frame_processors)
+
     source_image = None
     prev_time = time.time()
-    fps_update_interval = 0.5
+    fps_update_interval = 0.5  # Update FPS every 0.5 seconds
     frame_count = 0
     fps = 0
 
-    while True:
-        ret, frame = cap.read()
+    while camera:
+        ret, frame = camera.read()
         if not ret:
             break
 
@@ -871,11 +806,6 @@ def create_webcam_preview(camera_index: int):
             temp_frame = cv2.flip(temp_frame, 1)
 
         if modules.globals.live_resizable:
-            temp_frame = fit_image_to_size(
-                temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
-            )
-
-        else:
             temp_frame = fit_image_to_size(
                 temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
             )
@@ -892,6 +822,7 @@ def create_webcam_preview(camera_index: int):
                     temp_frame = frame_processor.process_frame(source_image, temp_frame)
         else:
             modules.globals.target_path = None
+
             for frame_processor in frame_processors:
                 if frame_processor.NAME == "DLC.FACE-ENHANCER":
                     if modules.globals.fp_ui["face_enhancer"]:
@@ -930,7 +861,7 @@ def create_webcam_preview(camera_index: int):
         if PREVIEW.state() == "withdrawn":
             break
 
-    cap.release()
+    camera.release()
     PREVIEW.withdraw()
 
 
@@ -946,7 +877,6 @@ def create_source_target_popup_for_webcam(
 
     def on_submit_click():
         if has_valid_map():
-            POPUP_LIVE.destroy()
             simplify_maps()
             create_webcam_preview(camera_index)
         else:
@@ -957,16 +887,35 @@ def create_source_target_popup_for_webcam(
         refresh_data(map)
         update_pop_live_status("Please provide mapping!")
 
+    def on_clear_click():
+        for item in map:
+            if "source" in item:
+                item.pop("source")
+            if "target" in item:
+                item.pop("target")
+        refresh_data(map)
+        update_pop_live_status("Source and target images cleared.")
+
     popup_status_label_live = ctk.CTkLabel(POPUP_LIVE, text=None, justify="center")
     popup_status_label_live.grid(row=1, column=0, pady=15)
 
     add_button = ctk.CTkButton(POPUP_LIVE, text="Add", command=lambda: on_add_click())
-    add_button.place(relx=0.2, rely=0.92, relwidth=0.2, relheight=0.05)
+    add_button.place(relx=0.1, rely=0.92, relwidth=0.2, relheight=0.05)
+
+    clear_button = ctk.CTkButton(
+        POPUP_LIVE,
+        text="Clear",
+        command=lambda: on_clear_click(),
+        state="normal",
+    )
+    clear_button.place(relx=0.4, rely=0.92, relwidth=0.15, relheight=0.05)
 
     close_button = ctk.CTkButton(
         POPUP_LIVE, text="Submit", command=lambda: on_submit_click()
     )
-    close_button.place(relx=0.6, rely=0.92, relwidth=0.2, relheight=0.05)
+    close_button.place(relx=0.7, rely=0.92, relwidth=0.2, relheight=0.05)
+
+    refresh_data(map)
 
 
 def refresh_data(map: list):
@@ -1013,40 +962,36 @@ def refresh_data(map: list):
         button.grid(row=id, column=3, padx=20, pady=10)
 
         if "source" in item:
-            image = Image.fromarray(
-                cv2.cvtColor(item["source"]["cv2"], cv2.COLOR_BGR2RGB)
-            )
-            image = image.resize(
-                (MAPPER_PREVIEW_MAX_WIDTH, MAPPER_PREVIEW_MAX_HEIGHT), Image.LANCZOS
-            )
-            tk_image = ctk.CTkImage(image, size=image.size)
-
-            source_image = ctk.CTkLabel(
+            source_label = ctk.CTkLabel(
                 scrollable_frame,
-                text=f"S-{id}",
+                text="",
                 width=MAPPER_PREVIEW_MAX_WIDTH,
                 height=MAPPER_PREVIEW_MAX_HEIGHT,
             )
-            source_image.grid(row=id, column=1, padx=10, pady=10)
-            source_image.configure(image=tk_image)
+            source_label.grid(row=id, column=1, padx=10, pady=10)
+        else:
+            ctk.CTkLabel(
+                scrollable_frame,
+                text="No Source",
+                width=MAPPER_PREVIEW_MAX_WIDTH,
+                height=MAPPER_PREVIEW_MAX_HEIGHT,
+            ).grid(row=id, column=1, padx=10, pady=10)
 
         if "target" in item:
-            image = Image.fromarray(
-                cv2.cvtColor(item["target"]["cv2"], cv2.COLOR_BGR2RGB)
-            )
-            image = image.resize(
-                (MAPPER_PREVIEW_MAX_WIDTH, MAPPER_PREVIEW_MAX_HEIGHT), Image.LANCZOS
-            )
-            tk_image = ctk.CTkImage(image, size=image.size)
-
-            target_image = ctk.CTkLabel(
+            target_label = ctk.CTkLabel(
                 scrollable_frame,
-                text=f"T-{id}",
+                text="",
                 width=MAPPER_PREVIEW_MAX_WIDTH,
                 height=MAPPER_PREVIEW_MAX_HEIGHT,
             )
-            target_image.grid(row=id, column=4, padx=20, pady=10)
-            target_image.configure(image=tk_image)
+            target_label.grid(row=id, column=4, padx=20, pady=10)
+        else:
+            ctk.CTkLabel(
+                scrollable_frame,
+                text="No Target",
+                width=MAPPER_PREVIEW_MAX_WIDTH,
+                height=MAPPER_PREVIEW_MAX_HEIGHT,
+            ).grid(row=id, column=4, padx=20, pady=10)
 
 
 def update_webcam_source(
@@ -1069,6 +1014,11 @@ def update_webcam_source(
         return map
     else:
         cv2_img = cv2.imread(source_path)
+
+        if cv2_img is None:
+            update_pop_live_status("Failed to load the selected image. Please try again.")
+            return map
+
         face = get_one_face(cv2_img)
 
         if face:
