@@ -23,11 +23,20 @@ We are aware of the potential for unethical applications and are committed to pr
 Users are expected to use this software responsibly and legally. If using a real person's face, obtain their consent and clearly label any output as a deepfake when sharing online. We are not responsible for end-user actions.
 
 
-## Quick Start (Windows / Nvidia)
+## Quick Start - Download Prebuilt
+<div style="margin: 28px 0;">
+  <div style="margin-bottom: 20px;">
+    <a href="https://hacksider.gumroad.com/l/vccdmm" target="_blank">
+      <img src="https://github.com/user-attachments/assets/c702bb7d-d9c0-466a-9ad2-02849294e540" alt="Download Button 1" style="width: 280px; display: block;">
+    </a>
+  </div>
+  <div>
+    <a href="https://krshh.gumroad.com/l/Deep-Live-Cam-Mac" target="_blank">
+      <img src="https://github.com/user-attachments/assets/9a302750-2d54-457d-bdc8-6ed7c6af0e1a" alt="Download Button 2" style="width: 280px; display: block;">
+    </a>
+  </div>
+</div>
 
-[![Download](media/download.png)](https://hacksider.gumroad.com/l/vccdmm) 
-
-[Download latest pre-built version with CUDA support](https://hacksider.gumroad.com/l/vccdmm) - No Manual Installation/Downloading required and Early features testing.
 
 ## Installation (Manual)
 **Please be aware that the installation needs technical skills and is not for beginners, consider downloading the prebuilt.**
