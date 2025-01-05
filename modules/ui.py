@@ -256,6 +256,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         command=lambda: (
             setattr(modules.globals, "map_faces", map_faces.get()),
             save_switch_states(),
+            close_popup_if_switch_off()
         ),
     )
     map_faces_switch.place(relx=0.1, rely=0.75)
@@ -382,6 +383,15 @@ def analyze_target(start: Callable[[], None], root: ctk.CTk):
     else:
         select_output_path(start)
 
+def close_popup_if_switch_off():
+    global POPUP, POPUP_LIVE
+    if not modules.globals.map_faces:
+        if POPUP and POPUP.winfo_exists():
+            POPUP.destroy()
+            POPUP = None
+        if POPUP_LIVE and POPUP_LIVE.winfo_exists():
+            POPUP_LIVE.destroy()
+            POPUP_LIVE = None
 
 def create_source_target_popup(
     start: Callable[[], None], root: ctk.CTk, map: list
