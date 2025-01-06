@@ -262,6 +262,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         command=lambda: (
             setattr(modules.globals, "map_faces", map_faces.get()),
             save_switch_states(),
+            close_mapper_window() if not map_faces.get() else None
         ),
     )
     map_faces_switch.place(relx=0.1, rely=0.75)
@@ -371,10 +372,19 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         text_color=ctk.ThemeManager.theme.get("URL").get("text_color")
     )
     donate_label.bind(
-        "<Button>", lambda event: webbrowser.open("https://paypal.me/hacksider")
+        "<Button>", lambda event: webbrowser.open("https://deeplivecam.net")
     )
 
     return root
+
+def close_mapper_window():
+    global POPUP, POPUP_LIVE
+    if POPUP and POPUP.winfo_exists():
+        POPUP.destroy()
+        POPUP = None
+    if POPUP_LIVE and POPUP_LIVE.winfo_exists():
+        POPUP_LIVE.destroy()
+        POPUP_LIVE = None
 
 
 def analyze_target(start: Callable[[], None], root: ctk.CTk):
@@ -401,7 +411,7 @@ def analyze_target(start: Callable[[], None], root: ctk.CTk):
 
 
 def create_source_target_popup(
-    start: Callable[[], None], root: ctk.CTk, map: list
+        start: Callable[[], None], root: ctk.CTk, map: list
 ) -> None:
     global POPUP, popup_status_label
 
@@ -470,7 +480,7 @@ def create_source_target_popup(
 
 
 def update_popup_source(
-    scrollable_frame: ctk.CTkScrollableFrame, map: list, button_num: int
+        scrollable_frame: ctk.CTkScrollableFrame, map: list, button_num: int
 ) -> list:
     global source_label_dict
 
@@ -495,7 +505,7 @@ def update_popup_source(
             x_min, y_min, x_max, y_max = face["bbox"]
 
             map[button_num]["source"] = {
-                "cv2": cv2_img[int(y_min) : int(y_max), int(x_min) : int(x_max)],
+                "cv2": cv2_img[int(y_min): int(y_max), int(x_min): int(x_max)],
                 "face": face,
             }
 
@@ -704,7 +714,7 @@ def render_image_preview(image_path: str, size: Tuple[int, int]) -> ctk.CTkImage
 
 
 def render_video_preview(
-    video_path: str, size: Tuple[int, int], frame_number: int = 0
+        video_path: str, size: Tuple[int, int], frame_number: int = 0
 ) -> ctk.CTkImage:
     capture = cv2.VideoCapture(video_path)
     if frame_number:
@@ -744,7 +754,7 @@ def update_preview(frame_number: int = 0) -> None:
         if modules.globals.nsfw_filter and check_and_ignore_nsfw(temp_frame):
             return
         for frame_processor in get_frame_processors_modules(
-            modules.globals.frame_processors
+                modules.globals.frame_processors
         ):
             temp_frame = frame_processor.process_frame(
                 get_one_face(cv2.imread(modules.globals.source_path)), temp_frame
@@ -760,6 +770,13 @@ def update_preview(frame_number: int = 0) -> None:
 
 
 def webcam_preview(root: ctk.CTk, camera_index: int):
+    global POPUP_LIVE
+
+    if POPUP_LIVE and POPUP_LIVE.winfo_exists():
+        update_status("Source x Target Mapper is already open.")
+        POPUP_LIVE.focus()
+        return
+
     if not modules.globals.map_faces:
         if modules.globals.source_path is None:
             update_status("Please select a source image first")
@@ -770,6 +787,7 @@ def webcam_preview(root: ctk.CTk, camera_index: int):
         create_source_target_popup_for_webcam(
             root, modules.globals.souce_target_map, camera_index
         )
+
 
 
 def get_available_cameras():
@@ -819,7 +837,7 @@ def get_available_cameras():
                 camera_indices.append(0)
                 camera_names.append("FaceTime Camera")
                 cap.release()
-                
+
             # On macOS, additional cameras typically use indices 1 and 2
             for i in [1, 2]:
                 cap = cv2.VideoCapture(i)
@@ -935,7 +953,7 @@ def create_webcam_preview(camera_index: int):
 
 
 def create_source_target_popup_for_webcam(
-    root: ctk.CTk, map: list, camera_index: int
+        root: ctk.CTk, map: list, camera_index: int
 ) -> None:
     global POPUP_LIVE, popup_status_label_live
 
@@ -946,9 +964,9 @@ def create_source_target_popup_for_webcam(
 
     def on_submit_click():
         if has_valid_map():
-            POPUP_LIVE.destroy()
             simplify_maps()
-            create_webcam_preview(camera_index)
+            update_pop_live_status("Mappings successfully submitted!")
+            create_webcam_preview(camera_index)  # Open the preview window
         else:
             update_pop_live_status("At least 1 source with target is required!")
 
@@ -957,16 +975,43 @@ def create_source_target_popup_for_webcam(
         refresh_data(map)
         update_pop_live_status("Please provide mapping!")
 
+    def on_clear_click():
+        clear_source_target_images(map)
+        refresh_data(map)
+        update_pop_live_status("All mappings cleared!")
+
     popup_status_label_live = ctk.CTkLabel(POPUP_LIVE, text=None, justify="center")
     popup_status_label_live.grid(row=1, column=0, pady=15)
 
     add_button = ctk.CTkButton(POPUP_LIVE, text="Add", command=lambda: on_add_click())
-    add_button.place(relx=0.2, rely=0.92, relwidth=0.2, relheight=0.05)
+    add_button.place(relx=0.1, rely=0.92, relwidth=0.2, relheight=0.05)
+
+    clear_button = ctk.CTkButton(POPUP_LIVE, text="Clear", command=lambda: on_clear_click())
+    clear_button.place(relx=0.4, rely=0.92, relwidth=0.2, relheight=0.05)
 
     close_button = ctk.CTkButton(
         POPUP_LIVE, text="Submit", command=lambda: on_submit_click()
     )
-    close_button.place(relx=0.6, rely=0.92, relwidth=0.2, relheight=0.05)
+    close_button.place(relx=0.7, rely=0.92, relwidth=0.2, relheight=0.05)
+
+
+
+def clear_source_target_images(map: list):
+    global source_label_dict_live, target_label_dict_live
+
+    for item in map:
+        if "source" in item:
+            del item["source"]
+        if "target" in item:
+            del item["target"]
+
+    for button_num in list(source_label_dict_live.keys()):
+        source_label_dict_live[button_num].destroy()
+        del source_label_dict_live[button_num]
+
+    for button_num in list(target_label_dict_live.keys()):
+        target_label_dict_live[button_num].destroy()
+        del target_label_dict_live[button_num]
 
 
 def refresh_data(map: list):
@@ -1050,7 +1095,7 @@ def refresh_data(map: list):
 
 
 def update_webcam_source(
-    scrollable_frame: ctk.CTkScrollableFrame, map: list, button_num: int
+        scrollable_frame: ctk.CTkScrollableFrame, map: list, button_num: int
 ) -> list:
     global source_label_dict_live
 
@@ -1075,7 +1120,7 @@ def update_webcam_source(
             x_min, y_min, x_max, y_max = face["bbox"]
 
             map[button_num]["source"] = {
-                "cv2": cv2_img[int(y_min) : int(y_max), int(x_min) : int(x_max)],
+                "cv2": cv2_img[int(y_min): int(y_max), int(x_min): int(x_max)],
                 "face": face,
             }
 
@@ -1102,7 +1147,7 @@ def update_webcam_source(
 
 
 def update_webcam_target(
-    scrollable_frame: ctk.CTkScrollableFrame, map: list, button_num: int
+        scrollable_frame: ctk.CTkScrollableFrame, map: list, button_num: int
 ) -> list:
     global target_label_dict_live
 
@@ -1127,7 +1172,7 @@ def update_webcam_target(
             x_min, y_min, x_max, y_max = face["bbox"]
 
             map[button_num]["target"] = {
-                "cv2": cv2_img[int(y_min) : int(y_max), int(x_min) : int(x_max)],
+                "cv2": cv2_img[int(y_min): int(y_max), int(x_min): int(x_max)],
                 "face": face,
             }
 
