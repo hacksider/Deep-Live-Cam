@@ -22,8 +22,12 @@
 
 ## Quick Start - Download Prebuilt
 <div align="center">
-  <img src="https://github.com/user-attachments/assets/aa766792-85ec-41b4-98a7-057e5b425e78" width="285" height="77" />
-  <img src="https://github.com/user-attachments/assets/6e04fb3b-6e9a-48e1-a255-9439a8b2c3de" width="285" height="77" />
+  <a href="https://hacksider.gumroad.com/l/vccdmm">
+    <img src="https://github.com/user-attachments/assets/aa766792-85ec-41b4-98a7-057e5b425e78" width="285" height="77" />
+  </a>
+  <a href="https://krshh.gumroad.com/l/Deep-Live-Cam-Mac">
+    <img src="https://github.com/user-attachments/assets/6e04fb3b-6e9a-48e1-a255-9439a8b2c3de" width="285" height="77" />
+  </a>
 </div>
 
 ## Features - Everything is real-time
