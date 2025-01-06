@@ -21,18 +21,9 @@
 ###### Users are expected to use this software responsibly and legally. If using a real person's face, obtain their consent and clearly label any output as a deepfake when sharing online. We are not responsible for end-user actions.
 
 ## Quick Start - Download Prebuilt
-
-<div style="margin: 28px 0;">
-  <div style="margin-bottom: 20px;">
-    <a href="https://hacksider.gumroad.com/l/vccdmm" target="_blank">
-      <img src="https://github.com/user-attachments/assets/c702bb7d-d9c0-466a-9ad2-02849294e540" alt="Download Button 1" style="width: 280px; display: block;">
-    </a>
-  </div>
-  <div>
-    <a href="https://krshh.gumroad.com/l/Deep-Live-Cam-Mac" target="_blank">
-      <img src="https://github.com/user-attachments/assets/9a302750-2d54-457d-bdc8-6ed7c6af0e1a" alt="Download Button 2" style="width: 280px; display: block;">
-    </a>
-  </div>
+<div align="center">
+  <img src="https://github.com/user-attachments/assets/aa766792-85ec-41b4-98a7-057e5b425e78" width="285" height="77" />
+  <img src="https://github.com/user-attachments/assets/6e04fb3b-6e9a-48e1-a255-9439a8b2c3de" width="285" height="77" />
 </div>
 
 ## Features - Everything is real-time
