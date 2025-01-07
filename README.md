@@ -27,13 +27,11 @@
 ###### Users are expected to use this software responsibly and legally. If using a real person's face, obtain their consent and clearly label any output as a deepfake when sharing online. We are not responsible for end-user actions.
 
 ## Quick Start - Pre-built
-  <a href="https://hacksider.gumroad.com/l/vccdmm">
-    <img src="https://github.com/user-attachments/assets/7d993b32-e3e8-4cd3-bbfb-a549152ebdd5" width="285" height="77" />
-###### Pick this if you're a Windows User
+  <a href="https://hacksider.gumroad.com/l/vccdmm"> <img src="https://github.com/user-attachments/assets/7d993b32-e3e8-4cd3-bbfb-a549152ebdd5" width="285" height="77" />
+
     
-  <a href="https://krshh.gumroad.com/l/Deep-Live-Cam-Mac">
-    <img src="https://github.com/user-attachments/assets/d5d913b5-a7de-4609-96b9-979a5749a703" width="285" height="77" />
-  </a>
+  <a href="https://krshh.gumroad.com/l/Deep-Live-Cam-Mac"> <img src="https://github.com/user-attachments/assets/d5d913b5-a7de-4609-96b9-979a5749a703" width="285" height="77" />
+  
 ###### Pick this if you're a Mac User
 
 ######This quickstart is perfect for non-technical users or those who don’t have time to manually install all the requirements. Just a heads-up: this is still an open-source project, so you can also install it manually if you prefer.
