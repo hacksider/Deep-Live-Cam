@@ -36,6 +36,8 @@
   </a>
 </div>
 
+This quickstart is perfect for non-technical users or those who don’t have time to manually install all the requirements. Just a heads-up: this is still an open-source project, so you can also install it manually if you prefer.
+
 ## Features - Everything is real-time
 
 ### Mouth Mask
