@@ -10,7 +10,6 @@
 
 <p align="center">
   <img src="media/demo.gif" alt="Demo GIF">
-  <img src="media/avgpcperformancedemo.gif" alt="Performance Demo GIF">
 </p>
 
 ## TLDR; Deepfake in 3 Steps!
