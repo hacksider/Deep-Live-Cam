@@ -26,6 +26,7 @@ from modules.utilities import (
     has_image_extension,
 )
 from modules.video_capture import VideoCapturer
+from modules.gettext import LanguageManager
 import platform
 
 if platform.system() == "Windows":
@@ -63,6 +64,7 @@ RECENT_DIRECTORY_SOURCE = None
 RECENT_DIRECTORY_TARGET = None
 RECENT_DIRECTORY_OUTPUT = None
 
+_ = None
 preview_label = None
 preview_slider = None
 source_label = None
@@ -77,9 +79,11 @@ target_label_dict_live = {}
 img_ft, vid_ft = modules.globals.file_types
 
 
-def init(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.CTk:
-    global ROOT, PREVIEW
+def init(start: Callable[[], None], destroy: Callable[[], None], lang: str) -> ctk.CTk:
+    global ROOT, PREVIEW, _
 
+    lang_manager = LanguageManager(lang)
+    _ = lang_manager._
     ROOT = create_root(start, destroy)
     PREVIEW = create_preview(ROOT)
 
@@ -154,7 +158,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     target_label.place(relx=0.6, rely=0.1, relwidth=0.3, relheight=0.25)
 
     select_face_button = ctk.CTkButton(
-        root, text="Select a face", cursor="hand2", command=lambda: select_source_path()
+        root, text=_("Select a face"), cursor="hand2", command=lambda: select_source_path()
     )
     select_face_button.place(relx=0.1, rely=0.4, relwidth=0.3, relheight=0.1)
 
@@ -165,7 +169,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
 
     select_target_button = ctk.CTkButton(
         root,
-        text="Select a target",
+        text=_("Select a target"),
         cursor="hand2",
         command=lambda: select_target_path(),
     )
@@ -174,7 +178,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     keep_fps_value = ctk.BooleanVar(value=modules.globals.keep_fps)
     keep_fps_checkbox = ctk.CTkSwitch(
         root,
-        text="Keep fps",
+        text=_("Keep fps"),
         variable=keep_fps_value,
         cursor="hand2",
         command=lambda: (
@@ -187,7 +191,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     keep_frames_value = ctk.BooleanVar(value=modules.globals.keep_frames)
     keep_frames_switch = ctk.CTkSwitch(
         root,
-        text="Keep frames",
+        text=_("Keep frames"),
         variable=keep_frames_value,
         cursor="hand2",
         command=lambda: (
@@ -200,7 +204,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     enhancer_value = ctk.BooleanVar(value=modules.globals.fp_ui["face_enhancer"])
     enhancer_switch = ctk.CTkSwitch(
         root,
-        text="Face Enhancer",
+        text=_("Face Enhancer"),
         variable=enhancer_value,
         cursor="hand2",
         command=lambda: (
@@ -213,7 +217,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     keep_audio_value = ctk.BooleanVar(value=modules.globals.keep_audio)
     keep_audio_switch = ctk.CTkSwitch(
         root,
-        text="Keep audio",
+        text=_("Keep audio"),
         variable=keep_audio_value,
         cursor="hand2",
         command=lambda: (
@@ -226,7 +230,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     many_faces_value = ctk.BooleanVar(value=modules.globals.many_faces)
     many_faces_switch = ctk.CTkSwitch(
         root,
-        text="Many faces",
+        text=_("Many faces"),
         variable=many_faces_value,
         cursor="hand2",
         command=lambda: (
@@ -239,7 +243,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     color_correction_value = ctk.BooleanVar(value=modules.globals.color_correction)
     color_correction_switch = ctk.CTkSwitch(
         root,
-        text="Fix Blueish Cam",
+        text=_("Fix Blueish Cam"),
         variable=color_correction_value,
         cursor="hand2",
         command=lambda: (
@@ -256,12 +260,13 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     map_faces = ctk.BooleanVar(value=modules.globals.map_faces)
     map_faces_switch = ctk.CTkSwitch(
         root,
-        text="Map faces",
+        text=_("Map faces"),
         variable=map_faces,
         cursor="hand2",
         command=lambda: (
             setattr(modules.globals, "map_faces", map_faces.get()),
             save_switch_states(),
+            close_mapper_window() if not map_faces.get() else None
         ),
     )
     map_faces_switch.place(relx=0.1, rely=0.75)
@@ -269,7 +274,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     show_fps_value = ctk.BooleanVar(value=modules.globals.show_fps)
     show_fps_switch = ctk.CTkSwitch(
         root,
-        text="Show FPS",
+        text=_("Show FPS"),
         variable=show_fps_value,
         cursor="hand2",
         command=lambda: (
@@ -282,7 +287,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     mouth_mask_var = ctk.BooleanVar(value=modules.globals.mouth_mask)
     mouth_mask_switch = ctk.CTkSwitch(
         root,
-        text="Mouth Mask",
+        text=_("Mouth Mask"),
         variable=mouth_mask_var,
         cursor="hand2",
         command=lambda: setattr(modules.globals, "mouth_mask", mouth_mask_var.get()),
@@ -292,7 +297,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     show_mouth_mask_box_var = ctk.BooleanVar(value=modules.globals.show_mouth_mask_box)
     show_mouth_mask_box_switch = ctk.CTkSwitch(
         root,
-        text="Show Mouth Mask Box",
+        text=_("Show Mouth Mask Box"),
         variable=show_mouth_mask_box_var,
         cursor="hand2",
         command=lambda: setattr(
@@ -302,22 +307,22 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     show_mouth_mask_box_switch.place(relx=0.6, rely=0.55)
 
     start_button = ctk.CTkButton(
-        root, text="Start", cursor="hand2", command=lambda: analyze_target(start, root)
+        root, text=_("Start"), cursor="hand2", command=lambda: analyze_target(start, root)
     )
     start_button.place(relx=0.15, rely=0.80, relwidth=0.2, relheight=0.05)
 
     stop_button = ctk.CTkButton(
-        root, text="Destroy", cursor="hand2", command=lambda: destroy()
+        root, text=_("Destroy"), cursor="hand2", command=lambda: destroy()
     )
     stop_button.place(relx=0.4, rely=0.80, relwidth=0.2, relheight=0.05)
 
     preview_button = ctk.CTkButton(
-        root, text="Preview", cursor="hand2", command=lambda: toggle_preview()
+        root, text=_("Preview"), cursor="hand2", command=lambda: toggle_preview()
     )
     preview_button.place(relx=0.65, rely=0.80, relwidth=0.2, relheight=0.05)
 
     # --- Camera Selection ---
-    camera_label = ctk.CTkLabel(root, text="Select Camera:")
+    camera_label = ctk.CTkLabel(root, text=_("Select Camera:"))
     camera_label.place(relx=0.1, rely=0.86, relwidth=0.2, relheight=0.05)
 
     available_cameras = get_available_cameras()
@@ -341,7 +346,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
 
     live_button = ctk.CTkButton(
         root,
-        text="Live",
+        text=_("Live"),
         cursor="hand2",
         command=lambda: webcam_preview(
             root,
@@ -371,10 +376,19 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         text_color=ctk.ThemeManager.theme.get("URL").get("text_color")
     )
     donate_label.bind(
-        "<Button>", lambda event: webbrowser.open("https://paypal.me/hacksider")
+        "<Button>", lambda event: webbrowser.open("https://deeplivecam.net")
     )
 
     return root
+
+def close_mapper_window():
+    global POPUP, POPUP_LIVE
+    if POPUP and POPUP.winfo_exists():
+        POPUP.destroy()
+        POPUP = None
+    if POPUP_LIVE and POPUP_LIVE.winfo_exists():
+        POPUP_LIVE.destroy()
+        POPUP_LIVE = None
 
 
 def analyze_target(start: Callable[[], None], root: ctk.CTk):
@@ -401,12 +415,12 @@ def analyze_target(start: Callable[[], None], root: ctk.CTk):
 
 
 def create_source_target_popup(
-    start: Callable[[], None], root: ctk.CTk, map: list
+        start: Callable[[], None], root: ctk.CTk, map: list
 ) -> None:
     global POPUP, popup_status_label
 
     POPUP = ctk.CTkToplevel(root)
-    POPUP.title("Source x Target Mapper")
+    POPUP.title(_("Source x Target Mapper"))
     POPUP.geometry(f"{POPUP_WIDTH}x{POPUP_HEIGHT}")
     POPUP.focus()
 
@@ -430,7 +444,7 @@ def create_source_target_popup(
 
         button = ctk.CTkButton(
             scrollable_frame,
-            text="Select source image",
+            text=_("Select source image"),
             command=lambda id=id: on_button_click(map, id),
             width=DEFAULT_BUTTON_WIDTH,
             height=DEFAULT_BUTTON_HEIGHT,
@@ -464,18 +478,18 @@ def create_source_target_popup(
     popup_status_label.grid(row=1, column=0, pady=15)
 
     close_button = ctk.CTkButton(
-        POPUP, text="Submit", command=lambda: on_submit_click(start)
+        POPUP, text=_("Submit"), command=lambda: on_submit_click(start)
     )
     close_button.grid(row=2, column=0, pady=10)
 
 
 def update_popup_source(
-    scrollable_frame: ctk.CTkScrollableFrame, map: list, button_num: int
+        scrollable_frame: ctk.CTkScrollableFrame, map: list, button_num: int
 ) -> list:
     global source_label_dict
 
     source_path = ctk.filedialog.askopenfilename(
-        title="select an source image",
+        title=_("select an source image"),
         initialdir=RECENT_DIRECTORY_SOURCE,
         filetypes=[img_ft],
     )
@@ -495,7 +509,7 @@ def update_popup_source(
             x_min, y_min, x_max, y_max = face["bbox"]
 
             map[button_num]["source"] = {
-                "cv2": cv2_img[int(y_min) : int(y_max), int(x_min) : int(x_max)],
+                "cv2": cv2_img[int(y_min): int(y_max), int(x_min): int(x_max)],
                 "face": face,
             }
 
@@ -526,7 +540,7 @@ def create_preview(parent: ctk.CTkToplevel) -> ctk.CTkToplevel:
 
     preview = ctk.CTkToplevel(parent)
     preview.withdraw()
-    preview.title("Preview")
+    preview.title(_("Preview"))
     # Set default window size
     preview.geometry("800x600")
     preview.configure()
@@ -544,16 +558,16 @@ def create_preview(parent: ctk.CTkToplevel) -> ctk.CTkToplevel:
 
 
 def update_status(text: str) -> None:
-    status_label.configure(text=text)
+    status_label.configure(text=_(text))
     ROOT.update()
 
 
 def update_pop_status(text: str) -> None:
-    popup_status_label.configure(text=text)
+    popup_status_label.configure(text=_(text))
 
 
 def update_pop_live_status(text: str) -> None:
-    popup_status_label_live.configure(text=text)
+    popup_status_label_live.configure(text=_(text))
 
 
 def update_tumbler(var: str, value: bool) -> None:
@@ -572,7 +586,7 @@ def select_source_path() -> None:
 
     PREVIEW.withdraw()
     source_path = ctk.filedialog.askopenfilename(
-        title="select an source image",
+        title=_("select an source image"),
         initialdir=RECENT_DIRECTORY_SOURCE,
         filetypes=[img_ft],
     )
@@ -615,7 +629,7 @@ def select_target_path() -> None:
 
     PREVIEW.withdraw()
     target_path = ctk.filedialog.askopenfilename(
-        title="select an target image or video",
+        title=_("select an target image or video"),
         initialdir=RECENT_DIRECTORY_TARGET,
         filetypes=[img_ft, vid_ft],
     )
@@ -639,7 +653,7 @@ def select_output_path(start: Callable[[], None]) -> None:
 
     if is_image(modules.globals.target_path):
         output_path = ctk.filedialog.asksaveasfilename(
-            title="save image output file",
+            title=_("save image output file"),
             filetypes=[img_ft],
             defaultextension=".png",
             initialfile="output.png",
@@ -647,7 +661,7 @@ def select_output_path(start: Callable[[], None]) -> None:
         )
     elif is_video(modules.globals.target_path):
         output_path = ctk.filedialog.asksaveasfilename(
-            title="save video output file",
+            title=_("save video output file"),
             filetypes=[vid_ft],
             defaultextension=".mp4",
             initialfile="output.mp4",
@@ -706,7 +720,7 @@ def render_image_preview(image_path: str, size: Tuple[int, int]) -> ctk.CTkImage
 
 
 def render_video_preview(
-    video_path: str, size: Tuple[int, int], frame_number: int = 0
+        video_path: str, size: Tuple[int, int], frame_number: int = 0
 ) -> ctk.CTkImage:
     capture = cv2.VideoCapture(video_path)
     if frame_number:
@@ -746,7 +760,7 @@ def update_preview(frame_number: int = 0) -> None:
         if modules.globals.nsfw_filter and check_and_ignore_nsfw(temp_frame):
             return
         for frame_processor in get_frame_processors_modules(
-            modules.globals.frame_processors
+                modules.globals.frame_processors
         ):
             temp_frame = frame_processor.process_frame(
                 get_one_face(cv2.imread(modules.globals.source_path)), temp_frame
@@ -762,6 +776,13 @@ def update_preview(frame_number: int = 0) -> None:
 
 
 def webcam_preview(root: ctk.CTk, camera_index: int):
+    global POPUP_LIVE
+
+    if POPUP_LIVE and POPUP_LIVE.winfo_exists():
+        update_status("Source x Target Mapper is already open.")
+        POPUP_LIVE.focus()
+        return
+
     if not modules.globals.map_faces:
         if modules.globals.source_path is None:
             update_status("Please select a source image first")
@@ -772,6 +793,7 @@ def webcam_preview(root: ctk.CTk, camera_index: int):
         create_source_target_popup_for_webcam(
             root, modules.globals.souce_target_map, camera_index
         )
+
 
 
 def get_available_cameras():
@@ -821,7 +843,7 @@ def get_available_cameras():
                 camera_indices.append(0)
                 camera_names.append("FaceTime Camera")
                 cap.release()
-                
+
             # On macOS, additional cameras typically use indices 1 and 2
             for i in [1, 2]:
                 cap = cv2.VideoCapture(i)
@@ -937,20 +959,20 @@ def create_webcam_preview(camera_index: int):
 
 
 def create_source_target_popup_for_webcam(
-    root: ctk.CTk, map: list, camera_index: int
+        root: ctk.CTk, map: list, camera_index: int
 ) -> None:
     global POPUP_LIVE, popup_status_label_live
 
     POPUP_LIVE = ctk.CTkToplevel(root)
-    POPUP_LIVE.title("Source x Target Mapper")
+    POPUP_LIVE.title(_("Source x Target Mapper"))
     POPUP_LIVE.geometry(f"{POPUP_LIVE_WIDTH}x{POPUP_LIVE_HEIGHT}")
     POPUP_LIVE.focus()
 
     def on_submit_click():
         if has_valid_map():
-            POPUP_LIVE.destroy()
             simplify_maps()
-            create_webcam_preview(camera_index)
+            update_pop_live_status("Mappings successfully submitted!")
+            create_webcam_preview(camera_index)  # Open the preview window
         else:
             update_pop_live_status("At least 1 source with target is required!")
 
@@ -959,16 +981,43 @@ def create_source_target_popup_for_webcam(
         refresh_data(map)
         update_pop_live_status("Please provide mapping!")
 
+    def on_clear_click():
+        clear_source_target_images(map)
+        refresh_data(map)
+        update_pop_live_status("All mappings cleared!")
+
     popup_status_label_live = ctk.CTkLabel(POPUP_LIVE, text=None, justify="center")
     popup_status_label_live.grid(row=1, column=0, pady=15)
 
-    add_button = ctk.CTkButton(POPUP_LIVE, text="Add", command=lambda: on_add_click())
-    add_button.place(relx=0.2, rely=0.92, relwidth=0.2, relheight=0.05)
+    add_button = ctk.CTkButton(POPUP_LIVE, text=_("Add"), command=lambda: on_add_click())
+    add_button.place(relx=0.1, rely=0.92, relwidth=0.2, relheight=0.05)
+
+    clear_button = ctk.CTkButton(POPUP_LIVE, text=_("Clear"), command=lambda: on_clear_click())
+    clear_button.place(relx=0.4, rely=0.92, relwidth=0.2, relheight=0.05)
 
     close_button = ctk.CTkButton(
-        POPUP_LIVE, text="Submit", command=lambda: on_submit_click()
+        POPUP_LIVE, text=_("Submit"), command=lambda: on_submit_click()
     )
-    close_button.place(relx=0.6, rely=0.92, relwidth=0.2, relheight=0.05)
+    close_button.place(relx=0.7, rely=0.92, relwidth=0.2, relheight=0.05)
+
+
+
+def clear_source_target_images(map: list):
+    global source_label_dict_live, target_label_dict_live
+
+    for item in map:
+        if "source" in item:
+            del item["source"]
+        if "target" in item:
+            del item["target"]
+
+    for button_num in list(source_label_dict_live.keys()):
+        source_label_dict_live[button_num].destroy()
+        del source_label_dict_live[button_num]
+
+    for button_num in list(target_label_dict_live.keys()):
+        target_label_dict_live[button_num].destroy()
+        del target_label_dict_live[button_num]
 
 
 def refresh_data(map: list):
@@ -990,7 +1039,7 @@ def refresh_data(map: list):
 
         button = ctk.CTkButton(
             scrollable_frame,
-            text="Select source image",
+            text=_("Select source image"),
             command=lambda id=id: on_sbutton_click(map, id),
             width=DEFAULT_BUTTON_WIDTH,
             height=DEFAULT_BUTTON_HEIGHT,
@@ -1007,7 +1056,7 @@ def refresh_data(map: list):
 
         button = ctk.CTkButton(
             scrollable_frame,
-            text="Select target image",
+            text=_("Select target image"),
             command=lambda id=id: on_tbutton_click(map, id),
             width=DEFAULT_BUTTON_WIDTH,
             height=DEFAULT_BUTTON_HEIGHT,
@@ -1052,12 +1101,12 @@ def refresh_data(map: list):
 
 
 def update_webcam_source(
-    scrollable_frame: ctk.CTkScrollableFrame, map: list, button_num: int
+        scrollable_frame: ctk.CTkScrollableFrame, map: list, button_num: int
 ) -> list:
     global source_label_dict_live
 
     source_path = ctk.filedialog.askopenfilename(
-        title="select an source image",
+        title=_("select an source image"),
         initialdir=RECENT_DIRECTORY_SOURCE,
         filetypes=[img_ft],
     )
@@ -1077,7 +1126,7 @@ def update_webcam_source(
             x_min, y_min, x_max, y_max = face["bbox"]
 
             map[button_num]["source"] = {
-                "cv2": cv2_img[int(y_min) : int(y_max), int(x_min) : int(x_max)],
+                "cv2": cv2_img[int(y_min): int(y_max), int(x_min): int(x_max)],
                 "face": face,
             }
 
@@ -1104,12 +1153,12 @@ def update_webcam_source(
 
 
 def update_webcam_target(
-    scrollable_frame: ctk.CTkScrollableFrame, map: list, button_num: int
+        scrollable_frame: ctk.CTkScrollableFrame, map: list, button_num: int
 ) -> list:
     global target_label_dict_live
 
     target_path = ctk.filedialog.askopenfilename(
-        title="select an target image",
+        title=_("select an target image"),
         initialdir=RECENT_DIRECTORY_SOURCE,
         filetypes=[img_ft],
     )
@@ -1129,7 +1178,7 @@ def update_webcam_target(
             x_min, y_min, x_max, y_max = face["bbox"]
 
             map[button_num]["target"] = {
-                "cv2": cv2_img[int(y_min) : int(y_max), int(x_min) : int(x_max)],
+                "cv2": cv2_img[int(y_min): int(y_max), int(x_min): int(x_max)],
                 "face": face,
             }
 
