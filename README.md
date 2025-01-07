@@ -13,6 +13,13 @@
   <img src="media/avgpcperformancedemo.gif" alt="Performance Demo GIF">
 </p>
 
+## TLDR; Deepfake in 3 Steps!
+![easysteps](https://github.com/user-attachments/assets/af825228-852c-411b-b787-ffd9aac72fc6)
+1. Select a face
+2. Select which camera to use
+3. Press live!
+
+
 ##  Disclaimer
 ###### This software is intended as a productive contribution to the AI-generated media industry. It aims to assist artists with tasks like animating custom characters or using them as models for clothing, etc.
 
