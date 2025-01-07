@@ -44,6 +44,7 @@ def parse_args() -> None:
     program.add_argument('--mouth-mask', help='mask the mouth region', dest='mouth_mask', action='store_true', default=False)
     program.add_argument('--video-encoder', help='adjust output video encoder', dest='video_encoder', default='libx264', choices=['libx264', 'libx265', 'libvpx-vp9'])
     program.add_argument('--video-quality', help='adjust output video quality', dest='video_quality', type=int, default=18, choices=range(52), metavar='[0-51]')
+    program.add_argument('-l', '--lang', help='Ui language', default="en")
     program.add_argument('--live-mirror', help='The live camera display as you see it in the front-facing camera frame', dest='live_mirror', action='store_true', default=False)
     program.add_argument('--live-resizable', help='The live camera frame is resizable', dest='live_resizable', action='store_true', default=False)
     program.add_argument('--max-memory', help='maximum amount of RAM in GB', dest='max_memory', type=int, default=suggest_max_memory())
@@ -78,6 +79,7 @@ def parse_args() -> None:
     modules.globals.max_memory = args.max_memory
     modules.globals.execution_providers = decode_execution_providers(args.execution_provider)
     modules.globals.execution_threads = args.execution_threads
+    modules.globals.lang = args.lang
 
     #for ENHANCER tumbler:
     if 'face_enhancer' in args.frame_processor:
@@ -253,5 +255,5 @@ def run() -> None:
     if modules.globals.headless:
         start()
     else:
-        window = ui.init(start, destroy)
+        window = ui.init(start, destroy, modules.globals.lang)
         window.mainloop()

@@ -13,24 +13,52 @@
   <img src="media/avgpcperformancedemo.gif" alt="Performance Demo GIF">
 </p>
 
+##  Disclaimer
+###### This software is intended as a productive contribution to the AI-generated media industry. It aims to assist artists with tasks like animating custom characters or using them as models for clothing, etc.
 
-## Disclaimer
+###### We are aware of the potential for unethical applications and are committed to preventative measures. A built-in check prevents the program from processing inappropriate media (nudity, graphic content, sensitive material like war footage, etc.). We will continue to develop this project responsibly, adhering to the law and ethics. We may shut down the project or add watermarks if legally required.
 
-This software is intended as a productive contribution to the AI-generated media industry. It aims to assist artists with tasks like animating custom characters or using them as models for clothing, etc.
+###### Users are expected to use this software responsibly and legally. If using a real person's face, obtain their consent and clearly label any output as a deepfake when sharing online. We are not responsible for end-user actions.
 
-We are aware of the potential for unethical applications and are committed to preventative measures. A built-in check prevents the program from processing inappropriate media (nudity, graphic content, sensitive material like war footage, etc.). We will continue to develop this project responsibly, adhering to law and ethics. We may shut down the project or add watermarks if legally required.
+## Quick Start - Pre-built
+<div align="center">
+  <a href="https://hacksider.gumroad.com/l/vccdmm">
+    <img src="https://github.com/user-attachments/assets/7d993b32-e3e8-4cd3-bbfb-a549152ebdd5" width="285" height="77" />
+  </a>
+  <a href="https://krshh.gumroad.com/l/Deep-Live-Cam-Mac">
+    <img src="https://github.com/user-attachments/assets/d5d913b5-a7de-4609-96b9-979a5749a703" width="285" height="77" />
+  </a>
+</div>
 
-Users are expected to use this software responsibly and legally. If using a real person's face, obtain their consent and clearly label any output as a deepfake when sharing online. We are not responsible for end-user actions.
+## Features - Everything is real-time
 
+### Mouth Mask
 
-## Quick Start (Windows / Nvidia)
+**Retain your original mouth using Mouth Mask**
 
-[![Download](media/download.png)](https://hacksider.gumroad.com/l/vccdmm) 
+![resizable-gif](media/ludwig.gif)
 
-[Download latest pre-built version with CUDA support](https://hacksider.gumroad.com/l/vccdmm) - No Manual Installation/Downloading required and Early features testing.
+### Face Mapping
+
+**Use different faces on multiple subjects**
+
+![face\_mapping\_source](media/streamers.gif)
+
+### Your Movie, Your Face
+
+**Watch movies with any face in real-time**
+
+![movie](media/movie.gif)
+
+## Benchmarks
+
+**Nearly 0% detection!**
+
+![bench](media/deepwarebench.gif)
 
 ## Installation (Manual)
-**Please be aware that the installation needs technical skills and is not for beginners, consider downloading the prebuilt.**
+
+**Please be aware that the installation requires technical skills and is not for beginners. Consider downloading the prebuilt version.**
 
 <details>
 <summary>Click to see the process</summary>
@@ -39,24 +67,24 @@ Users are expected to use this software responsibly and legally. If using a real
 
 This is more likely to work on your computer but will be slower as it utilizes the CPU.
 
-**1. Setup Your Platform**
+**1. Set up Your Platform**
 
-- Python (3.10 recommended)
-- pip
-- git
-- [ffmpeg](https://www.youtube.com/watch?v=OlNWCpFdVMA) 
-- [Visual Studio 2022 Runtimes (Windows)](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
+-   Python (3.10 recommended)
+-   pip
+-   git
+-   [ffmpeg](https://www.youtube.com/watch?v=OlNWCpFdVMA)
+-   [Visual Studio 2022 Runtimes (Windows)](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
 
-**2. Clone Repository**
+**2. Clone the Repository**
 
 ```bash
 https://github.com/hacksider/Deep-Live-Cam.git
 ```
 
-**3. Download Models**
+**3. Download the Models**
 
 1. [GFPGANv1.4](https://huggingface.co/hacksider/deep-live-cam/resolve/main/GFPGANv1.4.pth)
-2. [inswapper_128_fp16.onnx](https://huggingface.co/hacksider/deep-live-cam/resolve/main/inswapper_128.onnx) (Note: Use this [replacement version](https://github.com/facefusion/facefusion-assets/releases/download/models/inswapper_128.onnx) if you encounter issues)
+2. [inswapper\_128\_fp16.onnx](https://huggingface.co/hacksider/deep-live-cam/resolve/main/inswapper_128.onnx) (Note: Use this [replacement version](https://github.com/facefusion/facefusion-assets/releases/download/models/inswapper_128.onnx) if you encounter issues)
 
 Place these files in the "**models**" folder.
 
@@ -76,18 +104,20 @@ brew install python-tk@3.10
 
 **Run:** If you don't have a GPU, you can run Deep-Live-Cam using `python run.py`. Note that initial execution will download models (~300MB).
 
-
-### GPU Acceleration 
+### GPU Acceleration
 
 **CUDA Execution Provider (Nvidia)**
 
-1. Install [CUDA Toolkit 11.8](https://developer.nvidia.com/cuda-11-8-0-download-archive)
+1. Install [CUDA Toolkit 11.8](https://developer.nvidia.com/cuda-11-8-0-download-archive) or [CUDA Toolkit 12.1.1](https://developer.nvidia.com/cuda-12-1-1-download-archive)
 2. Install dependencies:
+
 ```bash
 pip uninstall onnxruntime onnxruntime-gpu
 pip install onnxruntime-gpu==1.16.3
 ```
+
 3. Usage:
+
 ```bash
 python run.py --execution-provider cuda
 ```
@@ -95,11 +125,14 @@ python run.py --execution-provider cuda
 **CoreML Execution Provider (Apple Silicon)**
 
 1. Install dependencies:
+
 ```bash
 pip uninstall onnxruntime onnxruntime-silicon
 pip install onnxruntime-silicon==1.13.1
 ```
+
 2. Usage:
+
 ```bash
 python run.py --execution-provider coreml
 ```
@@ -107,11 +140,14 @@ python run.py --execution-provider coreml
 **CoreML Execution Provider (Apple Legacy)**
 
 1. Install dependencies:
+
 ```bash
 pip uninstall onnxruntime onnxruntime-coreml
 pip install onnxruntime-coreml==1.13.1
 ```
+
 2. Usage:
+
 ```bash
 python run.py --execution-provider coreml
 ```
@@ -119,11 +155,14 @@ python run.py --execution-provider coreml
 **DirectML Execution Provider (Windows)**
 
 1. Install dependencies:
+
 ```bash
 pip uninstall onnxruntime onnxruntime-directml
 pip install onnxruntime-directml==1.15.1
 ```
+
 2. Usage:
+
 ```bash
 python run.py --execution-provider directml
 ```
@@ -131,62 +170,37 @@ python run.py --execution-provider directml
 **OpenVINO™ Execution Provider (Intel)**
 
 1. Install dependencies:
+
 ```bash
 pip uninstall onnxruntime onnxruntime-openvino
 pip install onnxruntime-openvino==1.15.0
 ```
+
 2. Usage:
+
 ```bash
 python run.py --execution-provider openvino
 ```
 
 </details>
 
-
 ## Usage
 
 **1. Image/Video Mode**
 
-- Execute `python run.py`. 
-- Choose a source face image and a target image/video.
-- Click "Start".
-- The output will be saved in a directory named after the target video.
+-   Execute `python run.py`.
+-   Choose a source face image and a target image/video.
+-   Click "Start".
+-   The output will be saved in a directory named after the target video.
 
 **2. Webcam Mode**
 
-- Execute `python run.py`.
-- Select a source face image.
-- Click "Live".
-- Wait for the preview to appear (10-30 seconds).
-- Use a screen capture tool like OBS to stream.
-- To change the face, select a new source image.
-
-## Features - Everything is realtime
-
-### Mouth Mask
-
-**Retain your original mouth using Mouth Mask** 
-
-![resizable-gif](media/ludwig.gif)
-
-### Face Mapping
-
-**Use different faces on multiple subjects**
-
-![face_mapping_source](media/streamers.gif)
-
-### Your Movie, Your Face
-
-**Watch movies with any face in realtime**
-
-![movie](media/movie.gif)
-
-
-## Benchmarks
-
-**Nearly 0% detection!**
-
-![bench](media/deepwarebench.gif)
+-   Execute `python run.py`.
+-   Select a source face image.
+-   Click "Live".
+-   Wait for the preview to appear (10-30 seconds).
+-   Use a screen capture tool like OBS to stream.
+-   To change the face, select a new source image.
 
 ## Command Line Arguments (Unmaintained)
 
@@ -216,9 +230,9 @@ options:
 
 Looking for a CLI mode? Using the -s/--source argument will make the run program in cli mode.
 
-
 ## Press
- **We are always open to criticism and ready to improve, that's why we didn't cherrypick anything.** 
+
+**We are always open to criticism and are ready to improve, that's why we didn't cherry-pick anything.**
 
  - [*"Deep-Live-Cam goes viral, allowing anyone to become a digital doppelganger"*](https://arstechnica.com/information-technology/2024/08/new-ai-tool-enables-real-time-face-swapping-on-webcams-raising-fraud-concerns/) - Ars Technica
  - [*"Thanks Deep Live Cam, shapeshifters are among us now"*](https://dataconomy.com/2024/08/15/what-is-deep-live-cam-github-deepfake/) - Dataconomy
@@ -231,24 +245,28 @@ Looking for a CLI mode? Using the -s/--source argument will make the run program
  - [*"New Real-Time Face-Swapping AI Allows Anyone to Mimic Famous Faces"*](https://www.digitalmusicnews.com/2024/08/15/face-swapping-ai-real-time-mimic/) - Digital Music News
  - [*"This real-time webcam deepfake tool raises alarms about the future of identity theft"*](https://www.diyphotography.net/this-real-time-webcam-deepfake-tool-raises-alarms-about-the-future-of-identity-theft/) - DIYPhotography
  - [*"That's Crazy, Oh God. That's Fucking Freaky Dude... That's So Wild Dude"*](https://www.youtube.com/watch?time_continue=1074&v=py4Tc-Y8BcY) - SomeOrdinaryGamers
+ - [*"Alright look look look, now look chat, we can do any face we want to look like chat"*](https://www.youtube.com/live/mFsCe7AIxq8?feature=shared&t=2686) - IShowSpeed
 
 ## Credits
 
-- [ffmpeg](https://ffmpeg.org/): for making video related operations easy
-- [deepinsight](https://github.com/deepinsight): for their [insightface](https://github.com/deepinsight/insightface) project which provided a well-made library and models. Please be reminded that the [use of the model is for non-commercial research purposes only](https://github.com/deepinsight/insightface?tab=readme-ov-file#license).
-- [havok2-htwo](https://github.com/havok2-htwo) : for sharing the code for webcam
-- [GosuDRM](https://github.com/GosuDRM) : for open version of roop
-- [pereiraroland26](https://github.com/pereiraroland26) : Multiple faces support
-- [vic4key](https://github.com/vic4key) : For supporting/contributing on this project
-- [KRSHH](https://github.com/KRSHH) : For his contributions
-- and [all developers](https://github.com/hacksider/Deep-Live-Cam/graphs/contributors) behind libraries used in this project.
-- Foot Note: Please be informed that the base author of the code is [s0md3v](https://github.com/s0md3v/roop)
-- All the wonderful users who helped making this project go viral by starring the repo ❤️
+-   [ffmpeg](https://ffmpeg.org/): for making video-related operations easy
+-   [deepinsight](https://github.com/deepinsight): for their [insightface](https://github.com/deepinsight/insightface) project which provided a well-made library and models. Please be reminded that the [use of the model is for non-commercial research purposes only](https://github.com/deepinsight/insightface?tab=readme-ov-file#license).
+-   [havok2-htwo](https://github.com/havok2-htwo): for sharing the code for webcam
+-   [GosuDRM](https://github.com/GosuDRM): for the open version of roop
+-   [pereiraroland26](https://github.com/pereiraroland26): Multiple faces support
+-   [vic4key](https://github.com/vic4key): For supporting/contributing to this project
+-   [kier007](https://github.com/kier007): for improving the user experience
+-   [qitianai](https://github.com/qitianai): for multi-lingual support
+-   and [all developers](https://github.com/hacksider/Deep-Live-Cam/graphs/contributors) behind libraries used in this project.
+-   Footnote: Please be informed that the base author of the code is [s0md3v](https://github.com/s0md3v/roop)
+-   All the wonderful users who helped make this project go viral by starring the repo ❤️
 
 [![Stargazers](https://reporoster.com/stars/hacksider/Deep-Live-Cam)](https://github.com/hacksider/Deep-Live-Cam/stargazers)
 
 ## Contributions
+
 ![Alt](https://repobeats.axiom.co/api/embed/fec8e29c45dfdb9c5916f3a7830e1249308d20e1.svg "Repobeats analytics image")
+
 ## Stars to the Moon 🚀
 
 <a href="https://star-history.com/#hacksider/deep-live-cam&Date">
