@@ -160,12 +160,12 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     select_face_button = ctk.CTkButton(
         root, text=_("Select a face"), cursor="hand2", command=lambda: select_source_path()
     )
-    select_face_button.place(relx=0.1, rely=0.4, relwidth=0.3, relheight=0.1)
+    select_face_button.place(relx=0.1, rely=0.375, relwidth=0.3, relheight=0.1)
 
     swap_faces_button = ctk.CTkButton(
         root, text="↔", cursor="hand2", command=lambda: swap_faces_paths()
     )
-    swap_faces_button.place(relx=0.45, rely=0.4, relwidth=0.1, relheight=0.1)
+    swap_faces_button.place(relx=0.45, rely=0.375, relwidth=0.1, relheight=0.1)
 
     select_target_button = ctk.CTkButton(
         root,
@@ -173,7 +173,27 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         cursor="hand2",
         command=lambda: select_target_path(),
     )
-    select_target_button.place(relx=0.6, rely=0.4, relwidth=0.3, relheight=0.1)
+    select_target_button.place(relx=0.6, rely=0.375, relwidth=0.3, relheight=0.1)
+
+    transparency_values = ["25%", "50%", "75%", "100%"]
+    transparency_var = ctk.StringVar(value="100%")  # Default to 100%
+
+    def on_transparency_change(value: str):
+        percentage = int(value.strip('%'))
+        opacity = percentage / 100.0
+        modules.globals.opacity = opacity  # Save opacity globally for real-time updates
+        update_status(f"Transparency set to {value}")
+
+    transparency_label = ctk.CTkLabel(root, text="Transparency:")
+    transparency_label.place(relx=0.1, rely=0.5, relwidth=0.2, relheight=0.05)
+
+    transparency_dropdown = ctk.CTkOptionMenu(
+        root,
+        values=transparency_values,
+        variable=transparency_var,
+        command=on_transparency_change,
+    )
+    transparency_dropdown.place(relx=0.35, rely=0.5, relwidth=0.25, relheight=0.05)
 
     keep_fps_value = ctk.BooleanVar(value=modules.globals.keep_fps)
     keep_fps_checkbox = ctk.CTkSwitch(
