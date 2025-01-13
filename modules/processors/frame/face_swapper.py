@@ -25,7 +25,6 @@ models_dir = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(abs_dir))), "models"
 )
 
-
 def pre_check() -> bool:
     download_directory_path = abs_dir
     conditional_download(
@@ -93,6 +92,9 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
             swapped_frame = draw_mouth_mask_visualization(
                 swapped_frame, target_face, mouth_mask_data
             )
+    opacity = getattr(modules.globals, "opacity", 1.0)
+    swapped_frame = cv2.addWeighted(temp_frame, 1 - opacity, swapped_frame, opacity, 0)
+
 
     return swapped_frame
 
