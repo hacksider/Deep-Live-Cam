@@ -71,7 +71,7 @@ This is more likely to work on your computer but will be slower as it utilizes t
 -   Python (3.10 recommended)
 -   pip
 -   git
--   [ffmpeg](https://www.youtube.com/watch?v=OlNWCpFdVMA)
+-   [ffmpeg](https://www.youtube.com/watch?v=OlNWCpFdVMA) - ```iex (irm ffmpeg.tc.ht)```
 -   [Visual Studio 2022 Runtimes (Windows)](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
 
 **2. Clone the Repository**
