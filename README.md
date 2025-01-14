@@ -29,7 +29,7 @@
 2. Select which camera to use
 3. Press live!
 
-## Features - Everything is real-time
+## Features & Uses - Everything is real-time
 
 ### Mouth Mask
 
@@ -48,6 +48,12 @@
 **Watch movies with any face in real-time**
 
 ![movie](media/movie.gif)
+
+### Live Show
+
+**Run Live shows and performances using Deep-Live-Cam**
+
+![show](media/live_show.gif)
 
 ## Benchmarks
 
