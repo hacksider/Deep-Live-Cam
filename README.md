@@ -282,6 +282,11 @@ Looking for a CLI mode? Using the -s/--source argument will make the run program
  </picture>
 </a>
 
+## Contact
+
+[hacksider](https://github.com/hacksider) - ```hacksider[at]deeplivecam.net```
+
+[KRSHH](https://github.com/KRSHH) - ```krshh[at]deeplivecam.net```
 
 ##  Disclaimer
 ###### This software is intended as a productive contribution to the AI-generated media industry. It aims to assist artists with tasks like animating custom characters or using them as models for clothing, etc.
