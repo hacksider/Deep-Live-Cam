@@ -14,6 +14,7 @@ from modules.utilities import (
     is_video,
 )
 from modules.cluster_analysis import find_closest_centroid
+from modules.globals import face_swapper_enabled, opacity
 import os
 
 FACE_SWAPPER = None
@@ -100,6 +101,9 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
 
 
 def process_frame(source_face: Face, temp_frame: Frame) -> Frame:
+    if getattr(modules.globals, "opacity", 1.0) == 0:
+        return temp_frame
+
     if modules.globals.color_correction:
         temp_frame = cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB)
 
@@ -116,6 +120,9 @@ def process_frame(source_face: Face, temp_frame: Frame) -> Frame:
 
 
 def process_frame_v2(temp_frame: Frame, temp_frame_path: str = "") -> Frame:
+    if getattr(modules.globals, "opacity", 1.0) == 0:
+        return temp_frame
+
     if is_image(modules.globals.target_path):
         if modules.globals.many_faces:
             source_face = default_source_face()

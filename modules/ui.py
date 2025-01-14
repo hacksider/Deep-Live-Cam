@@ -27,6 +27,7 @@ from modules.utilities import (
 )
 from modules.video_capture import VideoCapturer
 from modules.gettext import LanguageManager
+from modules import globals
 import platform
 
 if platform.system() == "Windows":
@@ -175,14 +176,22 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     )
     select_target_button.place(relx=0.6, rely=0.375, relwidth=0.3, relheight=0.1)
 
-    transparency_values = ["25%", "50%", "75%", "100%"]
+    transparency_values = ["0%","25%", "50%", "75%", "100%"]
     transparency_var = ctk.StringVar(value="100%")  # Default to 100%
 
     def on_transparency_change(value: str):
         percentage = int(value.strip('%'))
-        opacity = percentage / 100.0
-        modules.globals.opacity = opacity  # Save opacity globally for real-time updates
-        update_status(f"Transparency set to {value}")
+        modules.globals.opacity = percentage / 100.0
+
+        if percentage == 0:
+            modules.globals.fp_ui["face_enhancer"] = False
+            update_status("Transparency set to 0% - Face swapping disabled.")
+        elif percentage == 100:
+            modules.globals.face_swapper_enabled = True
+            update_status("Transparency set to 100%.")
+        else:
+            modules.globals.face_swapper_enabled = True
+            update_status(f"Transparency set to {value}")
 
     transparency_label = ctk.CTkLabel(root, text="Transparency:")
     transparency_label.place(relx=0.1, rely=0.5, relwidth=0.2, relheight=0.05)
