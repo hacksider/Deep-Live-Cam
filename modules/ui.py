@@ -27,6 +27,7 @@ from modules.utilities import (
 )
 from modules.video_capture import VideoCapturer
 from modules.gettext import LanguageManager
+from modules import globals
 import platform
 
 if platform.system() == "Windows":
@@ -183,7 +184,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         modules.globals.opacity = percentage / 100.0
 
         if percentage == 0:
-            modules.globals.face_swapper_enabled = False
+            modules.globals.fp_ui["face_enhancer"] = False
             update_status("Transparency set to 0% - Face swapping disabled.")
         elif percentage == 100:
             modules.globals.face_swapper_enabled = True
