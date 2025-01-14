@@ -103,6 +103,9 @@ def process_frame(source_face: Face, temp_frame: Frame) -> Frame:
     if modules.globals.color_correction:
         temp_frame = cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB)
 
+    if modules.globals.opacity or modules.globals.face_swapper_enabled == 0:
+        return temp_frame
+
     if modules.globals.many_faces:
         many_faces = get_many_faces(temp_frame)
         if many_faces:
