@@ -570,6 +570,8 @@ def create_preview(parent: ctk.CTkToplevel) -> ctk.CTkToplevel:
     preview = ctk.CTkToplevel(parent)
     preview.withdraw()
     preview.title(_("Preview"))
+    # Set default window size
+    preview.geometry("800x600")
     preview.configure()
     preview.protocol("WM_DELETE_WINDOW", lambda: toggle_preview())
     preview.resizable(width=True, height=True)
