@@ -68,7 +68,7 @@
 **Create Your most viral meme yet**
 
 <p align="center">
-  <img src="media/meme.gif" alt="show">
+  <img src="media/meme.gif" alt="show" width="450"> 
   <br>
   <sub>Created using Many Faces feature in Deep-Live-Cam</sub>
 </p>
