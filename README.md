@@ -33,27 +33,45 @@
 
 ### Mouth Mask
 
-**Retain your original mouth using Mouth Mask**
+**Retain your original mouth for accurate movement using Mouth Mask**
 
-![resizable-gif](media/ludwig.gif)
+<p align="center">
+  <img src="media/ludwig.gif" alt="resizable-gif">
+</p>
 
 ### Face Mapping
 
-**Use different faces on multiple subjects**
+**Use different faces on multiple subjects simultaneously**
 
-![face\_mapping\_source](media/streamers.gif)
+<p align="center">
+  <img src="media/streamers.gif" alt="face_mapping_source">
+</p>
 
 ### Your Movie, Your Face
 
 **Watch movies with any face in real-time**
 
-![movie](media/movie.gif)
+<p align="center">
+  <img src="media/movie.gif" alt="movie">
+</p>
 
 ### Live Show
 
-**Run Live shows and performances using Deep-Live-Cam**
+**Run Live shows and performances**
 
-![show](media/live_show.gif)
+<p align="center">
+  <img src="media/live_show.gif" alt="show">
+</p>
+
+### Memes
+
+**Create Your most viral meme yet**
+
+<p align="center">
+  <img src="media/meme.gif" alt="show">
+  <br>
+  <sub>Created using Many Faces feature in Deep-Live-Cam</sub>
+</p>
 
 ## Benchmarks
 
