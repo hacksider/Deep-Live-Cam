@@ -81,11 +81,6 @@
   <sub>Created using Many Faces feature in Deep-Live-Cam</sub>
 </p>
 
-## Benchmarks
-
-**Nearly 0% detection!**
-
-![bench](media/deepwarebench.gif)
 
 ## Installation (Manual)
 
