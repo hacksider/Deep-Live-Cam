@@ -14,7 +14,6 @@
 
 ##  Disclaimer
 
-**NSFW Faceswaps are strictly prohibited**
 ###### This software is intended as a productive contribution to the AI-generated media industry. It aims to assist artists with tasks like animating custom characters or using them as models for clothing, etc.
 
 ###### We are aware of the potential for unethical applications and are committed to preventative measures. A built-in check prevents the program from processing inappropriate media (nudity, graphic content, sensitive material like war footage, etc.). We will continue to develop this project responsibly, adhering to the law and ethics. We may shut down the project or add watermarks if legally required.
@@ -308,11 +307,5 @@ Looking for a CLI mode? Using the -s/--source argument will make the run program
    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=hacksider/deep-live-cam&type=Date" />
  </picture>
 </a>
-
-## Contact
-
-[hacksider](https://github.com/hacksider) - ```hacksider[at]deeplivecam.net```
-
-[KRSHH](https://github.com/KRSHH) - ```krshh[at]deeplivecam.net```
 
 
