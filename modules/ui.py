@@ -28,6 +28,7 @@ from modules.utilities import (
 from modules.video_capture import VideoCapturer
 from modules.gettext import LanguageManager
 import platform
+from modules.fake_face_handler import cleanup_fake_face, refresh_fake_face
 
 if platform.system() == "Windows":
     from pygrabber.dshow_graph import FilterGraph
@@ -91,47 +92,52 @@ def init(start: Callable[[], None], destroy: Callable[[], None], lang: str) -> c
 
 
 def save_switch_states():
-    switch_states = {
-        "keep_fps": modules.globals.keep_fps,
-        "keep_audio": modules.globals.keep_audio,
-        "keep_frames": modules.globals.keep_frames,
-        "many_faces": modules.globals.many_faces,
-        "map_faces": modules.globals.map_faces,
-        "color_correction": modules.globals.color_correction,
-        "nsfw_filter": modules.globals.nsfw_filter,
-        "live_mirror": modules.globals.live_mirror,
-        "live_resizable": modules.globals.live_resizable,
-        "fp_ui": modules.globals.fp_ui,
-        "show_fps": modules.globals.show_fps,
-        "mouth_mask": modules.globals.mouth_mask,
-        "show_mouth_mask_box": modules.globals.show_mouth_mask_box,
-    }
-    with open("switch_states.json", "w") as f:
-        json.dump(switch_states, f)
+    try:
+        states = {
+            "keep_fps": modules.globals.keep_fps,
+            "keep_audio": modules.globals.keep_audio,
+            "keep_frames": modules.globals.keep_frames,
+            "many_faces": modules.globals.many_faces,
+            "map_faces": modules.globals.map_faces,
+            "color_correction": modules.globals.color_correction,
+            "nsfw_filter": modules.globals.nsfw_filter,
+            "live_mirror": modules.globals.live_mirror,
+            "live_resizable": modules.globals.live_resizable,
+            "fp_ui": modules.globals.fp_ui,
+            "show_fps": modules.globals.show_fps,
+            "mouth_mask": modules.globals.mouth_mask,
+            "show_mouth_mask_box": modules.globals.show_mouth_mask_box,
+            "use_fake_face": modules.globals.use_fake_face
+        }
+        with open(get_config_path(), 'w') as f:
+            json.dump(states, f)
+    except Exception as e:
+        print(f"Error saving switch states: {str(e)}")
 
 
 def load_switch_states():
     try:
-        with open("switch_states.json", "r") as f:
-            switch_states = json.load(f)
-        modules.globals.keep_fps = switch_states.get("keep_fps", True)
-        modules.globals.keep_audio = switch_states.get("keep_audio", True)
-        modules.globals.keep_frames = switch_states.get("keep_frames", False)
-        modules.globals.many_faces = switch_states.get("many_faces", False)
-        modules.globals.map_faces = switch_states.get("map_faces", False)
-        modules.globals.color_correction = switch_states.get("color_correction", False)
-        modules.globals.nsfw_filter = switch_states.get("nsfw_filter", False)
-        modules.globals.live_mirror = switch_states.get("live_mirror", False)
-        modules.globals.live_resizable = switch_states.get("live_resizable", False)
-        modules.globals.fp_ui = switch_states.get("fp_ui", {"face_enhancer": False})
-        modules.globals.show_fps = switch_states.get("show_fps", False)
-        modules.globals.mouth_mask = switch_states.get("mouth_mask", False)
-        modules.globals.show_mouth_mask_box = switch_states.get(
-            "show_mouth_mask_box", False
-        )
-    except FileNotFoundError:
-        # If the file doesn't exist, use default values
-        pass
+        if os.path.exists(get_config_path()):
+            with open(get_config_path(), 'r') as f:
+                states = json.load(f)
+                modules.globals.keep_fps = states.get("keep_fps", True)
+                modules.globals.keep_audio = states.get("keep_audio", True)
+                modules.globals.keep_frames = states.get("keep_frames", False)
+                modules.globals.many_faces = states.get("many_faces", False)
+                modules.globals.map_faces = states.get("map_faces", False)
+                modules.globals.color_correction = states.get("color_correction", False)
+                modules.globals.nsfw_filter = states.get("nsfw_filter", False)
+                modules.globals.live_mirror = states.get("live_mirror", False)
+                modules.globals.live_resizable = states.get("live_resizable", False)
+                modules.globals.fp_ui = states.get("fp_ui", {"face_enhancer": False})
+                modules.globals.show_fps = states.get("show_fps", False)
+                modules.globals.mouth_mask = states.get("mouth_mask", False)
+                modules.globals.show_mouth_mask_box = states.get(
+                    "show_mouth_mask_box", False
+                )
+                modules.globals.use_fake_face = states.get('use_fake_face', False)
+    except Exception as e:
+        print(f"Error loading switch states: {str(e)}")
 
 
 def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.CTk:
@@ -176,6 +182,27 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     )
     select_target_button.place(relx=0.6, rely=0.4, relwidth=0.3, relheight=0.1)
 
+    # AI Generated Face controls
+    fake_face_value = ctk.BooleanVar(value=modules.globals.use_fake_face)
+    fake_face_switch = ctk.CTkSwitch(
+        root,
+        text=_("Privacy Mode"),
+        variable=fake_face_value,
+        cursor="hand2",
+        command=lambda: toggle_fake_face(fake_face_value)
+    )
+    fake_face_switch.place(relx=0.1, rely=0.55)
+
+    # Add refresh button next to the switch
+    refresh_face_button = ctk.CTkButton(
+        root,
+        text="↻",
+        width=30,
+        cursor="hand2",
+        command=lambda: refresh_fake_face_clicked()
+    )
+    refresh_face_button.place(relx=0.35, rely=0.55)
+
     # Face Processing Options (Middle Left)
     many_faces_value = ctk.BooleanVar(value=modules.globals.many_faces)
     many_faces_switch = ctk.CTkSwitch(
@@ -188,7 +215,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             save_switch_states(),
         ),
     )
-    many_faces_switch.place(relx=0.1, rely=0.55)
+    many_faces_switch.place(relx=0.1, rely=0.60)
 
     map_faces = ctk.BooleanVar(value=modules.globals.map_faces)
     map_faces_switch = ctk.CTkSwitch(
@@ -202,7 +229,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             close_mapper_window() if not map_faces.get() else None
         ),
     )
-    map_faces_switch.place(relx=0.1, rely=0.6)
+    map_faces_switch.place(relx=0.1, rely=0.65)
 
     enhancer_value = ctk.BooleanVar(value=modules.globals.fp_ui["face_enhancer"])
     enhancer_switch = ctk.CTkSwitch(
@@ -215,7 +242,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             save_switch_states(),
         ),
     )
-    enhancer_switch.place(relx=0.1, rely=0.65)
+    enhancer_switch.place(relx=0.1, rely=0.70)
 
     # Additional Options (Middle Right)
     mouth_mask_var = ctk.BooleanVar(value=modules.globals.mouth_mask)
@@ -257,21 +284,21 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     start_button = ctk.CTkButton(
         root, text=_("Start"), cursor="hand2", command=lambda: analyze_target(start, root)
     )
-    start_button.place(relx=0.15, rely=0.75, relwidth=0.2, relheight=0.05)
+    start_button.place(relx=0.15, rely=0.80, relwidth=0.2, relheight=0.05)
 
     preview_button = ctk.CTkButton(
         root, text=_("Preview"), cursor="hand2", command=lambda: toggle_preview()
     )
-    preview_button.place(relx=0.4, rely=0.75, relwidth=0.2, relheight=0.05)
+    preview_button.place(relx=0.4, rely=0.80, relwidth=0.2, relheight=0.05)
 
     stop_button = ctk.CTkButton(
         root, text=_("Destroy"), cursor="hand2", command=lambda: destroy()
     )
-    stop_button.place(relx=0.65, rely=0.75, relwidth=0.2, relheight=0.05)
+    stop_button.place(relx=0.65, rely=0.80, relwidth=0.2, relheight=0.05)
 
     # Camera Section (Bottom)
     camera_label = ctk.CTkLabel(root, text=_("Select Camera:"))
-    camera_label.place(relx=0.1, rely=0.85, relwidth=0.2, relheight=0.05)
+    camera_label.place(relx=0.1, rely=0.87, relwidth=0.2, relheight=0.05)
 
     available_cameras = get_available_cameras()
     camera_indices, camera_names = available_cameras
@@ -290,7 +317,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             root, variable=camera_variable, values=camera_names
         )
 
-    camera_optionmenu.place(relx=0.35, rely=0.85, relwidth=0.25, relheight=0.05)
+    camera_optionmenu.place(relx=0.35, rely=0.87, relwidth=0.25, relheight=0.05)
 
     live_button = ctk.CTkButton(
         root,
@@ -310,7 +337,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             else "disabled"
         ),
     )
-    live_button.place(relx=0.65, rely=0.85, relwidth=0.2, relheight=0.05)
+    live_button.place(relx=0.65, rely=0.87, relwidth=0.2, relheight=0.05)
 
     # Status and Links (Bottom)
     status_label = ctk.CTkLabel(root, text=None, justify="center")
@@ -1148,3 +1175,32 @@ def update_webcam_target(
         else:
             update_pop_live_status("Face could not be detected in last upload!")
         return map
+
+def toggle_fake_face(switch_var: ctk.BooleanVar) -> None:
+    modules.globals.use_fake_face = switch_var.get()
+    if modules.globals.use_fake_face:
+        if not modules.globals.fake_face_path:
+            if refresh_fake_face():
+                modules.globals.source_path = modules.globals.fake_face_path
+                # Update the source image preview
+                image = render_image_preview(modules.globals.source_path, (200, 200))
+                source_label.configure(image=image)
+    else:
+        cleanup_fake_face()
+        # Clear the source image preview
+        source_label.configure(image=None)
+        modules.globals.source_path = None
+
+def refresh_fake_face_clicked() -> None:
+    if modules.globals.use_fake_face:
+        if refresh_fake_face():
+            modules.globals.source_path = modules.globals.fake_face_path
+            # Update the source image preview
+            image = render_image_preview(modules.globals.source_path, (200, 200))
+            source_label.configure(image=image)
+
+def get_config_path() -> str:
+    """Get the path to the config file"""
+    config_dir = os.path.join(os.path.expanduser("~"), ".deep-live-cam")
+    os.makedirs(config_dir, exist_ok=True)
+    return os.path.join(config_dir, "switch_states.json")

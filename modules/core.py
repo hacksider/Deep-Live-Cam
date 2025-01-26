@@ -20,6 +20,7 @@ import modules.metadata
 import modules.ui as ui
 from modules.processors.frame.core import get_frame_processors_modules
 from modules.utilities import has_image_extension, is_image, is_video, detect_fps, create_video, extract_frames, get_temp_frame_paths, restore_audio, create_temp, move_temp, clean_temp, normalize_output_path
+from modules.fake_face_handler import cleanup_fake_face
 
 if 'ROCMExecutionProvider' in modules.globals.execution_providers:
     del torch
@@ -239,6 +240,7 @@ def start() -> None:
 def destroy(to_quit=True) -> None:
     if modules.globals.target_path:
         clean_temp(modules.globals.target_path)
+    cleanup_fake_face()
     if to_quit: quit()
 
 
