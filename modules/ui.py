@@ -285,6 +285,20 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     )
     keep_audio_switch.place(relx=0.6, rely=0.65)
 
+    # Add show FPS switch
+    show_fps_value = ctk.BooleanVar(value=modules.globals.show_fps)
+    show_fps_switch = ctk.CTkSwitch(
+        root,
+        text=_("Show FPS"),
+        variable=show_fps_value,
+        cursor="hand2",
+        command=lambda: (
+            setattr(modules.globals, "show_fps", show_fps_value.get()),
+            save_switch_states(),
+        ),
+    )
+    show_fps_switch.place(relx=0.6, rely=0.70)
+
     # Main Control Buttons (Bottom)
     start_button = ctk.CTkButton(
         root, text=_("Start"), cursor="hand2", command=lambda: analyze_target(start, root)
@@ -1202,12 +1216,18 @@ def toggle_fake_face(switch_var: ctk.BooleanVar) -> None:
         modules.globals.source_path = None
 
 def refresh_fake_face_clicked() -> None:
+    """Handle refresh button click to update fake face during live preview"""
     if modules.globals.use_fake_face:
         if refresh_fake_face():
             modules.globals.source_path = modules.globals.fake_face_path
             # Update the source image preview
             image = render_image_preview(modules.globals.source_path, (200, 200))
             source_label.configure(image=image)
+            
+            # Force reload of frame processors to use new source face
+            global FRAME_PROCESSORS_MODULES
+            FRAME_PROCESSORS_MODULES = []
+            frame_processors = get_frame_processors_modules(modules.globals.frame_processors)
 
 def get_config_path() -> str:
     """Get the path to the config file"""
