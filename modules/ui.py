@@ -79,9 +79,12 @@ target_label_dict_live = {}
 
 img_ft, vid_ft = modules.globals.file_types
 
+fake_face_switch = None
+fake_face_value = None
+
 
 def init(start: Callable[[], None], destroy: Callable[[], None], lang: str) -> ctk.CTk:
-    global ROOT, PREVIEW, _
+    global ROOT, PREVIEW, _, fake_face_switch, fake_face_value
 
     lang_manager = LanguageManager(lang)
     _ = lang_manager._
@@ -135,13 +138,13 @@ def load_switch_states():
                 modules.globals.show_mouth_mask_box = states.get(
                     "show_mouth_mask_box", False
                 )
-                modules.globals.use_fake_face = states.get('use_fake_face', False)
+                modules.globals.use_fake_face = False
     except Exception as e:
         print(f"Error loading switch states: {str(e)}")
 
 
 def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.CTk:
-    global source_label, target_label, status_label, show_fps_switch
+    global source_label, target_label, status_label, show_fps_switch, fake_face_switch, fake_face_value
 
     load_switch_states()
 
@@ -579,7 +582,7 @@ def update_tumbler(var: str, value: bool) -> None:
 
 
 def select_source_path() -> None:
-    global RECENT_DIRECTORY_SOURCE, img_ft, vid_ft
+    global RECENT_DIRECTORY_SOURCE, img_ft, vid_ft, fake_face_switch, fake_face_value
 
     PREVIEW.withdraw()
     source_path = ctk.filedialog.askopenfilename(
@@ -588,6 +591,10 @@ def select_source_path() -> None:
         filetypes=[img_ft],
     )
     if is_image(source_path):
+        modules.globals.use_fake_face = False
+        fake_face_value.set(False)
+        cleanup_fake_face()
+        
         modules.globals.source_path = source_path
         RECENT_DIRECTORY_SOURCE = os.path.dirname(modules.globals.source_path)
         image = render_image_preview(modules.globals.source_path, (200, 200))
@@ -1217,17 +1224,21 @@ def toggle_fake_face(switch_var: ctk.BooleanVar) -> None:
 
 def refresh_fake_face_clicked() -> None:
     """Handle refresh button click to update fake face during live preview"""
-    if modules.globals.use_fake_face:
-        if refresh_fake_face():
-            modules.globals.source_path = modules.globals.fake_face_path
-            # Update the source image preview
-            image = render_image_preview(modules.globals.source_path, (200, 200))
-            source_label.configure(image=image)
-            
-            # Force reload of frame processors to use new source face
-            global FRAME_PROCESSORS_MODULES
-            FRAME_PROCESSORS_MODULES = []
-            frame_processors = get_frame_processors_modules(modules.globals.frame_processors)
+    if not modules.globals.use_fake_face:
+        # If privacy mode is off, turn it on first
+        modules.globals.use_fake_face = True
+        fake_face_value.set(True)
+        
+    if refresh_fake_face():
+        modules.globals.source_path = modules.globals.fake_face_path
+        # Update the source image preview
+        image = render_image_preview(modules.globals.source_path, (200, 200))
+        source_label.configure(image=image)
+        
+        # Force reload of frame processors to use new source face
+        global FRAME_PROCESSORS_MODULES
+        FRAME_PROCESSORS_MODULES = []
+        frame_processors = get_frame_processors_modules(modules.globals.frame_processors)
 
 def get_config_path() -> str:
     """Get the path to the config file"""
