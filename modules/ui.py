@@ -156,6 +156,11 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     )
     root.configure()
     root.protocol("WM_DELETE_WINDOW", lambda: destroy())
+    
+    # Add icon to the main window
+    icon_path = resolve_relative_path("deeplivecam.ico")
+    if os.path.exists(icon_path):
+        root.iconbitmap(icon_path)
 
     # Image Selection Area (Top)
     source_label = ctk.CTkLabel(root, text=None)
@@ -519,6 +524,11 @@ def create_preview(parent: ctk.CTkToplevel) -> ctk.CTkToplevel:
     preview.configure()
     preview.protocol("WM_DELETE_WINDOW", lambda: toggle_preview())
     preview.resizable(width=True, height=True)
+    
+    # Add icon to the preview window
+    icon_path = resolve_relative_path("deeplivecam.ico")
+    if os.path.exists(icon_path):
+        preview.iconbitmap(icon_path)
 
     preview_label = ctk.CTkLabel(preview, text=None)
     preview_label.pack(fill="both", expand=True)
