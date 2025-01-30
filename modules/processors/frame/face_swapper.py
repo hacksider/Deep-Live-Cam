@@ -74,10 +74,10 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
         temp_frame, target_face, source_face, paste_back=True
     )
 
-    if modules.globals.mouth_mask:
-        # Create a mask for the target face
-        face_mask = create_face_mask(target_face, temp_frame)
+    # Create face mask for both mouth and eyes masking
+    face_mask = create_face_mask(target_face, temp_frame)
 
+    if modules.globals.mouth_mask:
         # Create the mouth mask
         mouth_mask, mouth_cutout, mouth_box, lower_lip_polygon = (
             create_lower_mouth_mask(target_face, temp_frame)
@@ -92,6 +92,23 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
             mouth_mask_data = (mouth_mask, mouth_cutout, mouth_box, lower_lip_polygon)
             swapped_frame = draw_mouth_mask_visualization(
                 swapped_frame, target_face, mouth_mask_data
+            )
+
+    if modules.globals.eyes_mask:
+        # Create the eyes mask
+        eyes_mask, eyes_cutout, eyes_box, eyes_polygon = (
+            create_eyes_mask(target_face, temp_frame)
+        )
+
+        # Apply the eyes area
+        swapped_frame = apply_eyes_area(
+            swapped_frame, eyes_cutout, eyes_box, face_mask, eyes_polygon
+        )
+
+        if modules.globals.show_eyes_mask_box:
+            eyes_mask_data = (eyes_mask, eyes_cutout, eyes_box, eyes_polygon)
+            swapped_frame = draw_eyes_mask_visualization(
+                swapped_frame, target_face, eyes_mask_data
             )
 
     return swapped_frame
@@ -613,3 +630,232 @@ def apply_color_transfer(source, target):
     source = (source - source_mean) * (target_std / source_std) + target_mean
 
     return cv2.cvtColor(np.clip(source, 0, 255).astype("uint8"), cv2.COLOR_LAB2BGR)
+
+
+def create_eyes_mask(face: Face, frame: Frame) -> (np.ndarray, np.ndarray, tuple, np.ndarray):
+    mask = np.zeros(frame.shape[:2], dtype=np.uint8)
+    eyes_cutout = None
+    landmarks = face.landmark_2d_106
+    if landmarks is not None:
+        # Left eye landmarks (87-96) and right eye landmarks (33-42)
+        left_eye = landmarks[87:96]
+        right_eye = landmarks[33:42]
+        
+        # Calculate centers and dimensions for each eye
+        left_eye_center = np.mean(left_eye, axis=0).astype(np.int32)
+        right_eye_center = np.mean(right_eye, axis=0).astype(np.int32)
+        
+        # Calculate eye dimensions
+        def get_eye_dimensions(eye_points):
+            x_coords = eye_points[:, 0]
+            y_coords = eye_points[:, 1]
+            width = int((np.max(x_coords) - np.min(x_coords)) * (1 + modules.globals.mask_down_size))
+            height = int((np.max(y_coords) - np.min(y_coords)) * (1 + modules.globals.mask_down_size))
+            return width, height
+        
+        left_width, left_height = get_eye_dimensions(left_eye)
+        right_width, right_height = get_eye_dimensions(right_eye)
+        
+        # Add extra padding
+        padding = int(max(left_width, right_width) * 0.2)
+        
+        # Calculate bounding box for both eyes
+        min_x = min(left_eye_center[0] - left_width//2, right_eye_center[0] - right_width//2) - padding
+        max_x = max(left_eye_center[0] + left_width//2, right_eye_center[0] + right_width//2) + padding
+        min_y = min(left_eye_center[1] - left_height//2, right_eye_center[1] - right_height//2) - padding
+        max_y = max(left_eye_center[1] + left_height//2, right_eye_center[1] + right_height//2) + padding
+        
+        # Ensure coordinates are within frame bounds
+        min_x = max(0, min_x)
+        min_y = max(0, min_y)
+        max_x = min(frame.shape[1], max_x)
+        max_y = min(frame.shape[0], max_y)
+        
+        # Create mask for the eyes region
+        mask_roi = np.zeros((max_y - min_y, max_x - min_x), dtype=np.uint8)
+        
+        # Draw ellipses for both eyes
+        left_center = (left_eye_center[0] - min_x, left_eye_center[1] - min_y)
+        right_center = (right_eye_center[0] - min_x, right_eye_center[1] - min_y)
+        
+        # Calculate axes lengths (half of width and height)
+        left_axes = (left_width//2, left_height//2)
+        right_axes = (right_width//2, right_height//2)
+        
+        # Draw filled ellipses
+        cv2.ellipse(mask_roi, left_center, left_axes, 0, 0, 360, 255, -1)
+        cv2.ellipse(mask_roi, right_center, right_axes, 0, 0, 360, 255, -1)
+        
+        # Apply Gaussian blur to soften mask edges
+        mask_roi = cv2.GaussianBlur(mask_roi, (15, 15), 5)
+        
+        # Place the mask ROI in the full-sized mask
+        mask[min_y:max_y, min_x:max_x] = mask_roi
+        
+        # Extract the masked area from the frame
+        eyes_cutout = frame[min_y:max_y, min_x:max_x].copy()
+        
+        # Create polygon points for visualization
+        def create_ellipse_points(center, axes):
+            t = np.linspace(0, 2*np.pi, 32)
+            x = center[0] + axes[0] * np.cos(t)
+            y = center[1] + axes[1] * np.sin(t)
+            return np.column_stack((x, y)).astype(np.int32)
+        
+        # Generate points for both ellipses
+        left_points = create_ellipse_points((left_eye_center[0], left_eye_center[1]), (left_width//2, left_height//2))
+        right_points = create_ellipse_points((right_eye_center[0], right_eye_center[1]), (right_width//2, right_height//2))
+        
+        # Combine points for both eyes
+        eyes_polygon = np.vstack([left_points, right_points])
+        
+    return mask, eyes_cutout, (min_x, min_y, max_x, max_y), eyes_polygon
+
+
+def apply_eyes_area(
+    frame: np.ndarray,
+    eyes_cutout: np.ndarray,
+    eyes_box: tuple,
+    face_mask: np.ndarray,
+    eyes_polygon: np.ndarray,
+) -> np.ndarray:
+    min_x, min_y, max_x, max_y = eyes_box
+    box_width = max_x - min_x
+    box_height = max_y - min_y
+
+    if (
+        eyes_cutout is None
+        or box_width is None
+        or box_height is None
+        or face_mask is None
+        or eyes_polygon is None
+    ):
+        return frame
+
+    try:
+        resized_eyes_cutout = cv2.resize(eyes_cutout, (box_width, box_height))
+        roi = frame[min_y:max_y, min_x:max_x]
+
+        if roi.shape != resized_eyes_cutout.shape:
+            resized_eyes_cutout = cv2.resize(
+                resized_eyes_cutout, (roi.shape[1], roi.shape[0])
+            )
+
+        color_corrected_eyes = apply_color_transfer(resized_eyes_cutout, roi)
+
+        # Create mask for both eyes
+        polygon_mask = np.zeros(roi.shape[:2], dtype=np.uint8)
+        
+        # Split points for left and right eyes
+        mid_point = len(eyes_polygon) // 2
+        left_eye_points = eyes_polygon[:mid_point] - [min_x, min_y]
+        right_eye_points = eyes_polygon[mid_point:] - [min_x, min_y]
+        
+        # Draw filled ellipses using points
+        left_rect = cv2.minAreaRect(left_eye_points)
+        right_rect = cv2.minAreaRect(right_eye_points)
+        
+        # Convert rect to ellipse parameters
+        def rect_to_ellipse_params(rect):
+            center = rect[0]
+            size = rect[1]
+            angle = rect[2]
+            return (int(center[0]), int(center[1])), (int(size[0]/2), int(size[1]/2)), angle
+        
+        # Draw filled ellipses
+        left_params = rect_to_ellipse_params(left_rect)
+        right_params = rect_to_ellipse_params(right_rect)
+        cv2.ellipse(polygon_mask, left_params[0], left_params[1], left_params[2], 0, 360, 255, -1)
+        cv2.ellipse(polygon_mask, right_params[0], right_params[1], right_params[2], 0, 360, 255, -1)
+
+        # Apply feathering
+        feather_amount = min(
+            30,
+            box_width // modules.globals.mask_feather_ratio,
+            box_height // modules.globals.mask_feather_ratio,
+        )
+        feathered_mask = cv2.GaussianBlur(
+            polygon_mask.astype(float), (0, 0), feather_amount
+        )
+        feathered_mask = feathered_mask / feathered_mask.max()
+
+        face_mask_roi = face_mask[min_y:max_y, min_x:max_x]
+        combined_mask = feathered_mask * (face_mask_roi / 255.0)
+
+        combined_mask = combined_mask[:, :, np.newaxis]
+        blended = (
+            color_corrected_eyes * combined_mask + roi * (1 - combined_mask)
+        ).astype(np.uint8)
+
+        # Apply face mask to blended result
+        face_mask_3channel = (
+            np.repeat(face_mask_roi[:, :, np.newaxis], 3, axis=2) / 255.0
+        )
+        final_blend = blended * face_mask_3channel + roi * (1 - face_mask_3channel)
+
+        frame[min_y:max_y, min_x:max_x] = final_blend.astype(np.uint8)
+    except Exception as e:
+        pass
+
+    return frame
+
+
+def draw_eyes_mask_visualization(
+    frame: Frame, face: Face, eyes_mask_data: tuple
+) -> Frame:
+    landmarks = face.landmark_2d_106
+    if landmarks is not None and eyes_mask_data is not None:
+        mask, eyes_cutout, (min_x, min_y, max_x, max_y), eyes_polygon = eyes_mask_data
+
+        vis_frame = frame.copy()
+
+        # Ensure coordinates are within frame bounds
+        height, width = vis_frame.shape[:2]
+        min_x, min_y = max(0, min_x), max(0, min_y)
+        max_x, max_y = min(width, max_x), min(height, max_y)
+
+        # Draw the eyes ellipses
+        mid_point = len(eyes_polygon) // 2
+        left_points = eyes_polygon[:mid_point]
+        right_points = eyes_polygon[mid_point:]
+        
+        try:
+            # Fit ellipses to points - need at least 5 points
+            if len(left_points) >= 5 and len(right_points) >= 5:
+                # Convert points to the correct format for ellipse fitting
+                left_points = left_points.astype(np.float32)
+                right_points = right_points.astype(np.float32)
+                
+                # Fit ellipses
+                left_ellipse = cv2.fitEllipse(left_points)
+                right_ellipse = cv2.fitEllipse(right_points)
+                
+                # Draw the ellipses
+                cv2.ellipse(vis_frame, left_ellipse, (0, 255, 0), 2)
+                cv2.ellipse(vis_frame, right_ellipse, (0, 255, 0), 2)
+        except Exception as e:
+            # If ellipse fitting fails, draw simple rectangles as fallback
+            left_rect = cv2.boundingRect(left_points)
+            right_rect = cv2.boundingRect(right_points)
+            cv2.rectangle(vis_frame, 
+                        (left_rect[0], left_rect[1]), 
+                        (left_rect[0] + left_rect[2], left_rect[1] + left_rect[3]), 
+                        (0, 255, 0), 2)
+            cv2.rectangle(vis_frame,
+                        (right_rect[0], right_rect[1]),
+                        (right_rect[0] + right_rect[2], right_rect[1] + right_rect[3]),
+                        (0, 255, 0), 2)
+
+        # Add label
+        cv2.putText(
+            vis_frame,
+            "Eyes Mask",
+            (min_x, min_y - 10),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            (255, 255, 255),
+            1,
+        )
+
+        return vis_frame
+    return frame

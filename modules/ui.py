@@ -3,7 +3,7 @@ import webbrowser
 import customtkinter as ctk
 from typing import Callable, Tuple
 import cv2
-from cv2_enumerate_cameras import enumerate_cameras  # Add this import
+from cv2_enumerate_cameras import enumerate_cameras
 from PIL import Image, ImageOps
 import time
 import json
@@ -252,6 +252,19 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     )
     enhancer_switch.place(relx=0.1, rely=0.70)
 
+    keep_audio_value = ctk.BooleanVar(value=modules.globals.keep_audio)
+    keep_audio_switch = ctk.CTkSwitch(
+        root,
+        text=_("Keep audio"),
+        variable=keep_audio_value,
+        cursor="hand2",
+        command=lambda: (
+            setattr(modules.globals, "keep_audio", keep_audio_value.get()),
+            save_switch_states(),
+        ),
+    )
+    keep_audio_switch.place(relx=0.1, rely=0.75)
+
     # Additional Options (Middle Right)
     mouth_mask_var = ctk.BooleanVar(value=modules.globals.mouth_mask)
     mouth_mask_switch = ctk.CTkSwitch(
@@ -273,20 +286,31 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             modules.globals, "show_mouth_mask_box", show_mouth_mask_box_var.get()
         ),
     )
-    show_mouth_mask_box_switch.place(relx=0.6, rely=0.6)
+    show_mouth_mask_box_switch.place(relx=0.6, rely=0.60)
 
-    keep_audio_value = ctk.BooleanVar(value=modules.globals.keep_audio)
-    keep_audio_switch = ctk.CTkSwitch(
+    # Add eyes mask switch
+    eyes_mask_var = ctk.BooleanVar(value=modules.globals.eyes_mask)
+    eyes_mask_switch = ctk.CTkSwitch(
         root,
-        text=_("Keep audio"),
-        variable=keep_audio_value,
+        text=_("Eyes Mask"),
+        variable=eyes_mask_var,
         cursor="hand2",
-        command=lambda: (
-            setattr(modules.globals, "keep_audio", keep_audio_value.get()),
-            save_switch_states(),
+        command=lambda: setattr(modules.globals, "eyes_mask", eyes_mask_var.get()),
+    )
+    eyes_mask_switch.place(relx=0.6, rely=0.65)
+
+    # Add show eyes mask box switch
+    show_eyes_mask_box_var = ctk.BooleanVar(value=modules.globals.show_eyes_mask_box)
+    show_eyes_mask_box_switch = ctk.CTkSwitch(
+        root,
+        text=_("Show Eyes Mask Box"),
+        variable=show_eyes_mask_box_var,
+        cursor="hand2",
+        command=lambda: setattr(
+            modules.globals, "show_eyes_mask_box", show_eyes_mask_box_var.get()
         ),
     )
-    keep_audio_switch.place(relx=0.6, rely=0.65)
+    show_eyes_mask_box_switch.place(relx=0.6, rely=0.70)
 
     # Add show FPS switch
     show_fps_value = ctk.BooleanVar(value=modules.globals.show_fps)
@@ -300,7 +324,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             save_switch_states(),
         ),
     )
-    show_fps_switch.place(relx=0.6, rely=0.70)
+    show_fps_switch.place(relx=0.6, rely=0.75)
 
     # Main Control Buttons (Bottom)
     start_button = ctk.CTkButton(
@@ -767,8 +791,7 @@ def update_preview(frame_number: int = 0) -> None:
                 modules.globals.frame_processors
         ):
             temp_frame = frame_processor.process_frame(
-                get_one_face(cv2.imread(modules.globals.source_path)), temp_frame
-            )
+                get_one_face(cv2.imread(modules.globals.source_path)), temp_frame)
         image = Image.fromarray(cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB))
         image = ImageOps.contain(
             image, (PREVIEW_MAX_WIDTH, PREVIEW_MAX_HEIGHT), Image.LANCZOS
