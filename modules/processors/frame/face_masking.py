@@ -285,6 +285,65 @@ def create_eyes_mask(face: Face, frame: Frame) -> (np.ndarray, np.ndarray, tuple
         
     return mask, eyes_cutout, (min_x, min_y, max_x, max_y), eyes_polygon
 
+def create_curved_eyebrow(points):
+    if len(points) >= 5:
+        # Sort points by x-coordinate
+        sorted_idx = np.argsort(points[:, 0])
+        sorted_points = points[sorted_idx]
+        
+        # Calculate dimensions
+        x_min, y_min = np.min(sorted_points, axis=0)
+        x_max, y_max = np.max(sorted_points, axis=0)
+        width = x_max - x_min
+        height = y_max - y_min
+        
+        # Create more points for smoother curve
+        num_points = 50
+        x = np.linspace(x_min, x_max, num_points)
+        
+        # Fit quadratic curve through points for more natural arch
+        coeffs = np.polyfit(sorted_points[:, 0], sorted_points[:, 1], 2)  # Changed to quadratic
+        y = np.polyval(coeffs, x)
+        
+        # Create points for top and bottom curves with consistent offsets
+        top_offset = height * 0.3  # Simplified offset for cleaner curve
+        bottom_offset = height * 0.1  # Thinner bottom curve
+        
+        # Create smooth curves
+        top_curve = y - top_offset
+        bottom_curve = y + bottom_offset
+        
+        # Create curved endpoints with slight taper
+        end_points = 5
+        start_x = np.linspace(x[0] - width * 0.1, x[0], end_points)
+        end_x = np.linspace(x[-1], x[-1] + width * 0.1, end_points)
+        
+        # Create tapered ends
+        start_curve = np.column_stack((
+            start_x,
+            np.linspace(bottom_curve[0], top_curve[0], end_points)
+        ))
+        end_curve = np.column_stack((
+            end_x,
+            np.linspace(bottom_curve[-1], top_curve[-1], end_points)
+        ))
+        
+        # Combine all points to form a smooth contour
+        contour_points = np.vstack([
+            start_curve,
+            np.column_stack((x, top_curve)),
+            end_curve,
+            np.column_stack((x[::-1], bottom_curve[::-1]))
+        ])
+        
+        # Add slight padding for better coverage
+        center = np.mean(contour_points, axis=0)
+        vectors = contour_points - center
+        padded_points = center + vectors * 1.15  # 15% padding
+        
+        return padded_points
+    return points
+
 def create_eyebrows_mask(face: Face, frame: Frame) -> (np.ndarray, np.ndarray, tuple, np.ndarray):
     mask = np.zeros(frame.shape[:2], dtype=np.uint8)
     eyebrows_cutout = None
@@ -335,33 +394,30 @@ def create_eyebrows_mask(face: Face, frame: Frame) -> (np.ndarray, np.ndarray, t
                     num_points = 50
                     x = np.linspace(x_min, x_max, num_points)
                     
-                    # Fit cubic curve through points for more natural arch
-                    coeffs = np.polyfit(sorted_points[:, 0], sorted_points[:, 1], 3)
+                    # Fit quadratic curve through points for more natural arch
+                    coeffs = np.polyfit(sorted_points[:, 0], sorted_points[:, 1], 2)  # Changed to quadratic
                     y = np.polyval(coeffs, x)
                     
-                    # Create points for top and bottom curves with varying offsets
-                    top_offset = np.linspace(height * 0.4, height * 0.3, num_points)  # Varying offset for more natural shape
-                    bottom_offset = np.linspace(height * 0.2, height * 0.15, num_points)
+                    # Create points for top and bottom curves with consistent offsets
+                    top_offset = height * 0.3  # Simplified offset for cleaner curve
+                    bottom_offset = height * 0.1  # Thinner bottom curve
                     
-                    # Add some randomness to the offsets for more natural look
-                    top_offset += np.random.normal(0, height * 0.02, num_points)
-                    bottom_offset += np.random.normal(0, height * 0.01, num_points)
-                    
-                    # Smooth the offsets
-                    top_offset = cv2.GaussianBlur(top_offset.reshape(-1, 1), (1, 3), 1).reshape(-1)
-                    bottom_offset = cv2.GaussianBlur(bottom_offset.reshape(-1, 1), (1, 3), 1).reshape(-1)
-                    
+                    # Create smooth curves
                     top_curve = y - top_offset
                     bottom_curve = y + bottom_offset
                     
-                    # Create curved endpoints
+                    # Create curved endpoints with slight taper
                     end_points = 5
+                    start_x = np.linspace(x[0] - width * 0.1, x[0], end_points)
+                    end_x = np.linspace(x[-1], x[-1] + width * 0.1, end_points)
+                    
+                    # Create tapered ends
                     start_curve = np.column_stack((
-                        np.linspace(x[0] - width * 0.05, x[0], end_points),
+                        start_x,
                         np.linspace(bottom_curve[0], top_curve[0], end_points)
                     ))
                     end_curve = np.column_stack((
-                        np.linspace(x[-1], x[-1] + width * 0.05, end_points),
+                        end_x,
                         np.linspace(bottom_curve[-1], top_curve[-1], end_points)
                     ))
                     
@@ -373,13 +429,10 @@ def create_eyebrows_mask(face: Face, frame: Frame) -> (np.ndarray, np.ndarray, t
                         np.column_stack((x[::-1], bottom_curve[::-1]))
                     ])
                     
-                    # Add padding and smooth the shape
+                    # Add slight padding for better coverage
                     center = np.mean(contour_points, axis=0)
                     vectors = contour_points - center
-                    padded_points = center + vectors * 1.2  # 20% padding
-                    
-                    # Convert to integer coordinates and draw
-                    cv2.fillPoly(mask_roi, [padded_points.astype(np.int32)], 255)
+                    padded_points = center + vectors * 1.15  # 15% padding
                     
                     return padded_points
                 return points
