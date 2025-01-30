@@ -36,7 +36,7 @@ if platform.system() == "Windows":
 ROOT = None
 POPUP = None
 POPUP_LIVE = None
-ROOT_HEIGHT = 700
+ROOT_HEIGHT = 730
 ROOT_WIDTH = 600
 
 PREVIEW = None
@@ -167,20 +167,20 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
 
     # Image Selection Area (Top)
     source_label = ctk.CTkLabel(root, text=None)
-    source_label.place(relx=0.1, rely=0.1, relwidth=0.3, relheight=0.25)
+    source_label.place(relx=0.1, rely=0.05, relwidth=0.3, relheight=0.25)
 
     target_label = ctk.CTkLabel(root, text=None)
-    target_label.place(relx=0.6, rely=0.1, relwidth=0.3, relheight=0.25)
+    target_label.place(relx=0.6, rely=0.05, relwidth=0.3, relheight=0.25)
 
     select_face_button = ctk.CTkButton(
         root, text=_("Select a face"), cursor="hand2", command=lambda: select_source_path()
     )
-    select_face_button.place(relx=0.1, rely=0.4, relwidth=0.3, relheight=0.1)
+    select_face_button.place(relx=0.1, rely=0.35, relwidth=0.3, relheight=0.1)
 
     swap_faces_button = ctk.CTkButton(
         root, text="↔", cursor="hand2", command=lambda: swap_faces_paths()
     )
-    swap_faces_button.place(relx=0.45, rely=0.4, relwidth=0.1, relheight=0.1)
+    swap_faces_button.place(relx=0.45, rely=0.35, relwidth=0.1, relheight=0.1)
 
     select_target_button = ctk.CTkButton(
         root,
@@ -188,7 +188,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         cursor="hand2",
         command=lambda: select_target_path(),
     )
-    select_target_button.place(relx=0.6, rely=0.4, relwidth=0.3, relheight=0.1)
+    select_target_button.place(relx=0.6, rely=0.35, relwidth=0.3, relheight=0.1)
 
     # AI Generated Face controls
     fake_face_value = ctk.BooleanVar(value=modules.globals.use_fake_face)
@@ -199,7 +199,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         cursor="hand2",
         command=lambda: toggle_fake_face(fake_face_value)
     )
-    fake_face_switch.place(relx=0.1, rely=0.55)
+    fake_face_switch.place(relx=0.1, rely=0.50)
 
     # Add refresh button next to the switch
     refresh_face_button = ctk.CTkButton(
@@ -209,7 +209,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         cursor="hand2",
         command=lambda: refresh_fake_face_clicked()
     )
-    refresh_face_button.place(relx=0.35, rely=0.55)
+    refresh_face_button.place(relx=0.35, rely=0.50)
 
     # Face Processing Options (Middle Left)
     many_faces_value = ctk.BooleanVar(value=modules.globals.many_faces)
@@ -223,7 +223,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             save_switch_states(),
         ),
     )
-    many_faces_switch.place(relx=0.1, rely=0.60)
+    many_faces_switch.place(relx=0.1, rely=0.55)
 
     map_faces = ctk.BooleanVar(value=modules.globals.map_faces)
     map_faces_switch = ctk.CTkSwitch(
@@ -237,7 +237,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             close_mapper_window() if not map_faces.get() else None
         ),
     )
-    map_faces_switch.place(relx=0.1, rely=0.65)
+    map_faces_switch.place(relx=0.1, rely=0.60)
 
     enhancer_value = ctk.BooleanVar(value=modules.globals.fp_ui["face_enhancer"])
     enhancer_switch = ctk.CTkSwitch(
@@ -250,7 +250,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             save_switch_states(),
         ),
     )
-    enhancer_switch.place(relx=0.1, rely=0.70)
+    enhancer_switch.place(relx=0.1, rely=0.65)
 
     keep_audio_value = ctk.BooleanVar(value=modules.globals.keep_audio)
     keep_audio_switch = ctk.CTkSwitch(
@@ -263,7 +263,21 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             save_switch_states(),
         ),
     )
-    keep_audio_switch.place(relx=0.1, rely=0.75)
+    keep_audio_switch.place(relx=0.1, rely=0.70)
+
+    # Add show FPS switch right after keep_audio_switch
+    show_fps_value = ctk.BooleanVar(value=modules.globals.show_fps)
+    show_fps_switch = ctk.CTkSwitch(
+        root,
+        text=_("Show FPS"),
+        variable=show_fps_value,
+        cursor="hand2",
+        command=lambda: (
+            setattr(modules.globals, "show_fps", show_fps_value.get()),
+            save_switch_states(),
+        ),
+    )
+    show_fps_switch.place(relx=0.1, rely=0.75)
 
     # Additional Options (Middle Right)
     mouth_mask_var = ctk.BooleanVar(value=modules.globals.mouth_mask)
@@ -274,7 +288,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         cursor="hand2",
         command=lambda: setattr(modules.globals, "mouth_mask", mouth_mask_var.get()),
     )
-    mouth_mask_switch.place(relx=0.6, rely=0.55)
+    mouth_mask_switch.place(relx=0.6, rely=0.50)
 
     show_mouth_mask_box_var = ctk.BooleanVar(value=modules.globals.show_mouth_mask_box)
     show_mouth_mask_box_switch = ctk.CTkSwitch(
@@ -286,7 +300,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             modules.globals, "show_mouth_mask_box", show_mouth_mask_box_var.get()
         ),
     )
-    show_mouth_mask_box_switch.place(relx=0.6, rely=0.60)
+    show_mouth_mask_box_switch.place(relx=0.6, rely=0.55)
 
     # Add eyes mask switch
     eyes_mask_var = ctk.BooleanVar(value=modules.globals.eyes_mask)
@@ -297,7 +311,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         cursor="hand2",
         command=lambda: setattr(modules.globals, "eyes_mask", eyes_mask_var.get()),
     )
-    eyes_mask_switch.place(relx=0.6, rely=0.65)
+    eyes_mask_switch.place(relx=0.6, rely=0.60)
 
     # Add show eyes mask box switch
     show_eyes_mask_box_var = ctk.BooleanVar(value=modules.globals.show_eyes_mask_box)
@@ -310,21 +324,30 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             modules.globals, "show_eyes_mask_box", show_eyes_mask_box_var.get()
         ),
     )
-    show_eyes_mask_box_switch.place(relx=0.6, rely=0.70)
+    show_eyes_mask_box_switch.place(relx=0.6, rely=0.65)
 
-    # Add show FPS switch
-    show_fps_value = ctk.BooleanVar(value=modules.globals.show_fps)
-    show_fps_switch = ctk.CTkSwitch(
+    # Move the eyebrows mask switches up slightly
+    eyebrows_mask_var = ctk.BooleanVar(value=modules.globals.eyebrows_mask)
+    eyebrows_mask_switch = ctk.CTkSwitch(
         root,
-        text=_("Show FPS"),
-        variable=show_fps_value,
+        text=_("Eyebrows Mask"),
+        variable=eyebrows_mask_var,
         cursor="hand2",
-        command=lambda: (
-            setattr(modules.globals, "show_fps", show_fps_value.get()),
-            save_switch_states(),
+        command=lambda: setattr(modules.globals, "eyebrows_mask", eyebrows_mask_var.get()),
+    )
+    eyebrows_mask_switch.place(relx=0.6, rely=0.70)
+
+    show_eyebrows_mask_box_var = ctk.BooleanVar(value=modules.globals.show_eyebrows_mask_box)
+    show_eyebrows_mask_box_switch = ctk.CTkSwitch(
+        root,
+        text=_("Show Eyebrows Mask Box"),
+        variable=show_eyebrows_mask_box_var,
+        cursor="hand2",
+        command=lambda: setattr(
+            modules.globals, "show_eyebrows_mask_box", show_eyebrows_mask_box_var.get()
         ),
     )
-    show_fps_switch.place(relx=0.6, rely=0.75)
+    show_eyebrows_mask_box_switch.place(relx=0.6, rely=0.75)
 
     # Main Control Buttons (Bottom)
     start_button = ctk.CTkButton(
@@ -392,7 +415,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     donate_label = ctk.CTkLabel(
         root, text="Deep Live Cam", justify="center", cursor="hand2"
     )
-    donate_label.place(relx=0.1, rely=0.95, relwidth=0.8)
+    donate_label.place(relx=0.1, rely=0.94, relwidth=0.8)
     donate_label.configure(
         text_color=ctk.ThemeManager.theme.get("URL").get("text_color")
     )

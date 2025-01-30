@@ -111,6 +111,23 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
                 swapped_frame, target_face, eyes_mask_data
             )
 
+    if modules.globals.eyebrows_mask:
+        # Create the eyebrows mask
+        eyebrows_mask, eyebrows_cutout, eyebrows_box, eyebrows_polygon = (
+            create_eyebrows_mask(target_face, temp_frame)
+        )
+
+        # Apply the eyebrows area
+        swapped_frame = apply_eyebrows_area(
+            swapped_frame, eyebrows_cutout, eyebrows_box, face_mask, eyebrows_polygon
+        )
+
+        if modules.globals.show_eyebrows_mask_box:
+            eyebrows_mask_data = (eyebrows_mask, eyebrows_cutout, eyebrows_box, eyebrows_polygon)
+            swapped_frame = draw_eyebrows_mask_visualization(
+                swapped_frame, target_face, eyebrows_mask_data
+            )
+
     return swapped_frame
 
 
@@ -850,6 +867,267 @@ def draw_eyes_mask_visualization(
         cv2.putText(
             vis_frame,
             "Eyes Mask",
+            (min_x, min_y - 10),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            (255, 255, 255),
+            1,
+        )
+
+        return vis_frame
+    return frame
+
+
+def create_eyebrows_mask(face: Face, frame: Frame) -> (np.ndarray, np.ndarray, tuple, np.ndarray):
+    mask = np.zeros(frame.shape[:2], dtype=np.uint8)
+    eyebrows_cutout = None
+    landmarks = face.landmark_2d_106
+    if landmarks is not None:
+        # Left eyebrow landmarks (97-105) and right eyebrow landmarks (43-51)
+        left_eyebrow = landmarks[97:105].astype(np.float32)
+        right_eyebrow = landmarks[43:51].astype(np.float32)
+        
+        # Calculate centers and dimensions for each eyebrow
+        left_center = np.mean(left_eyebrow, axis=0)
+        right_center = np.mean(right_eyebrow, axis=0)
+        
+        # Calculate bounding box with padding
+        all_points = np.vstack([left_eyebrow, right_eyebrow])
+        min_x = np.min(all_points[:, 0]) - 25
+        max_x = np.max(all_points[:, 0]) + 25
+        min_y = np.min(all_points[:, 1]) - 20
+        max_y = np.max(all_points[:, 1]) + 15
+        
+        # Ensure coordinates are within frame bounds
+        min_x = max(0, int(min_x))
+        min_y = max(0, int(min_y))
+        max_x = min(frame.shape[1], int(max_x))
+        max_y = min(frame.shape[0], int(max_y))
+        
+        # Create mask for the eyebrows region
+        mask_roi = np.zeros((max_y - min_y, max_x - min_x), dtype=np.uint8)
+        
+        try:
+            # Convert points to local coordinates
+            left_local = left_eyebrow - [min_x, min_y]
+            right_local = right_eyebrow - [min_x, min_y]
+            
+            def create_curved_eyebrow(points):
+                if len(points) >= 5:
+                    # Sort points by x-coordinate
+                    sorted_idx = np.argsort(points[:, 0])
+                    sorted_points = points[sorted_idx]
+                    
+                    # Calculate dimensions
+                    x_min, y_min = np.min(sorted_points, axis=0)
+                    x_max, y_max = np.max(sorted_points, axis=0)
+                    width = x_max - x_min
+                    height = y_max - y_min
+                    
+                    # Create more points for smoother curve
+                    num_points = 50
+                    x = np.linspace(x_min, x_max, num_points)
+                    
+                    # Fit cubic curve through points for more natural arch
+                    coeffs = np.polyfit(sorted_points[:, 0], sorted_points[:, 1], 3)
+                    y = np.polyval(coeffs, x)
+                    
+                    # Create points for top and bottom curves with varying offsets
+                    top_offset = np.linspace(height * 0.4, height * 0.3, num_points)  # Varying offset for more natural shape
+                    bottom_offset = np.linspace(height * 0.2, height * 0.15, num_points)
+                    
+                    # Add some randomness to the offsets for more natural look
+                    top_offset += np.random.normal(0, height * 0.02, num_points)
+                    bottom_offset += np.random.normal(0, height * 0.01, num_points)
+                    
+                    # Smooth the offsets
+                    top_offset = cv2.GaussianBlur(top_offset.reshape(-1, 1), (1, 3), 1).reshape(-1)
+                    bottom_offset = cv2.GaussianBlur(bottom_offset.reshape(-1, 1), (1, 3), 1).reshape(-1)
+                    
+                    top_curve = y - top_offset
+                    bottom_curve = y + bottom_offset
+                    
+                    # Create curved endpoints
+                    end_points = 5
+                    start_curve = np.column_stack((
+                        np.linspace(x[0] - width * 0.05, x[0], end_points),
+                        np.linspace(bottom_curve[0], top_curve[0], end_points)
+                    ))
+                    end_curve = np.column_stack((
+                        np.linspace(x[-1], x[-1] + width * 0.05, end_points),
+                        np.linspace(bottom_curve[-1], top_curve[-1], end_points)
+                    ))
+                    
+                    # Combine all points to form a smooth contour
+                    contour_points = np.vstack([
+                        start_curve,
+                        np.column_stack((x, top_curve)),
+                        end_curve,
+                        np.column_stack((x[::-1], bottom_curve[::-1]))
+                    ])
+                    
+                    # Add padding and smooth the shape
+                    center = np.mean(contour_points, axis=0)
+                    vectors = contour_points - center
+                    padded_points = center + vectors * 1.2  # 20% padding
+                    
+                    # Convert to integer coordinates and draw
+                    cv2.fillPoly(mask_roi, [padded_points.astype(np.int32)], 255)
+                    
+                    return padded_points
+                return points
+            
+            # Generate and draw eyebrow shapes
+            left_shape = create_curved_eyebrow(left_local)
+            right_shape = create_curved_eyebrow(right_local)
+            
+            # Apply multi-stage blurring for natural feathering
+            # First, strong Gaussian blur for initial softening
+            mask_roi = cv2.GaussianBlur(mask_roi, (21, 21), 7)
+            
+            # Second, medium blur for transition areas
+            mask_roi = cv2.GaussianBlur(mask_roi, (11, 11), 3)
+            
+            # Finally, light blur for fine details
+            mask_roi = cv2.GaussianBlur(mask_roi, (5, 5), 1)
+            
+            # Normalize mask values
+            mask_roi = cv2.normalize(mask_roi, None, 0, 255, cv2.NORM_MINMAX)
+            
+            # Place the mask ROI in the full-sized mask
+            mask[min_y:max_y, min_x:max_x] = mask_roi
+            
+            # Extract the masked area from the frame
+            eyebrows_cutout = frame[min_y:max_y, min_x:max_x].copy()
+            
+            # Combine points for visualization
+            eyebrows_polygon = np.vstack([
+                left_shape + [min_x, min_y],
+                right_shape + [min_x, min_y]
+            ]).astype(np.int32)
+            
+        except Exception as e:
+            # Fallback to simple polygons if curve fitting fails
+            left_local = left_eyebrow - [min_x, min_y]
+            right_local = right_eyebrow - [min_x, min_y]
+            cv2.fillPoly(mask_roi, [left_local.astype(np.int32)], 255)
+            cv2.fillPoly(mask_roi, [right_local.astype(np.int32)], 255)
+            mask_roi = cv2.GaussianBlur(mask_roi, (21, 21), 7)
+            mask[min_y:max_y, min_x:max_x] = mask_roi
+            eyebrows_cutout = frame[min_y:max_y, min_x:max_x].copy()
+            eyebrows_polygon = np.vstack([left_eyebrow, right_eyebrow]).astype(np.int32)
+        
+    return mask, eyebrows_cutout, (min_x, min_y, max_x, max_y), eyebrows_polygon
+
+
+def apply_eyebrows_area(
+    frame: np.ndarray,
+    eyebrows_cutout: np.ndarray,
+    eyebrows_box: tuple,
+    face_mask: np.ndarray,
+    eyebrows_polygon: np.ndarray,
+) -> np.ndarray:
+    min_x, min_y, max_x, max_y = eyebrows_box
+    box_width = max_x - min_x
+    box_height = max_y - min_y
+
+    if (
+        eyebrows_cutout is None
+        or box_width is None
+        or box_height is None
+        or face_mask is None
+        or eyebrows_polygon is None
+    ):
+        return frame
+
+    try:
+        resized_eyebrows_cutout = cv2.resize(eyebrows_cutout, (box_width, box_height))
+        roi = frame[min_y:max_y, min_x:max_x]
+
+        if roi.shape != resized_eyebrows_cutout.shape:
+            resized_eyebrows_cutout = cv2.resize(
+                resized_eyebrows_cutout, (roi.shape[1], roi.shape[0])
+            )
+
+        color_corrected_eyebrows = apply_color_transfer(resized_eyebrows_cutout, roi)
+
+        # Create mask for both eyebrows
+        polygon_mask = np.zeros(roi.shape[:2], dtype=np.uint8)
+        
+        # Split points for left and right eyebrows
+        mid_point = len(eyebrows_polygon) // 2
+        left_points = eyebrows_polygon[:mid_point] - [min_x, min_y]
+        right_points = eyebrows_polygon[mid_point:] - [min_x, min_y]
+        
+        # Draw filled polygons
+        cv2.fillPoly(polygon_mask, [left_points], 255)
+        cv2.fillPoly(polygon_mask, [right_points], 255)
+
+        # Apply strong initial feathering
+        polygon_mask = cv2.GaussianBlur(polygon_mask, (21, 21), 7)
+
+        # Apply additional feathering
+        feather_amount = min(
+            30,
+            box_width // modules.globals.mask_feather_ratio,
+            box_height // modules.globals.mask_feather_ratio,
+        )
+        feathered_mask = cv2.GaussianBlur(
+            polygon_mask.astype(float), (0, 0), feather_amount
+        )
+        feathered_mask = feathered_mask / feathered_mask.max()
+
+        # Apply additional smoothing to the mask edges
+        feathered_mask = cv2.GaussianBlur(feathered_mask, (5, 5), 1)
+
+        face_mask_roi = face_mask[min_y:max_y, min_x:max_x]
+        combined_mask = feathered_mask * (face_mask_roi / 255.0)
+
+        combined_mask = combined_mask[:, :, np.newaxis]
+        blended = (
+            color_corrected_eyebrows * combined_mask + roi * (1 - combined_mask)
+        ).astype(np.uint8)
+
+        # Apply face mask to blended result
+        face_mask_3channel = (
+            np.repeat(face_mask_roi[:, :, np.newaxis], 3, axis=2) / 255.0
+        )
+        final_blend = blended * face_mask_3channel + roi * (1 - face_mask_3channel)
+
+        frame[min_y:max_y, min_x:max_x] = final_blend.astype(np.uint8)
+    except Exception as e:
+        pass
+
+    return frame
+
+
+def draw_eyebrows_mask_visualization(
+    frame: Frame, face: Face, eyebrows_mask_data: tuple
+) -> Frame:
+    landmarks = face.landmark_2d_106
+    if landmarks is not None and eyebrows_mask_data is not None:
+        mask, eyebrows_cutout, (min_x, min_y, max_x, max_y), eyebrows_polygon = eyebrows_mask_data
+
+        vis_frame = frame.copy()
+
+        # Ensure coordinates are within frame bounds
+        height, width = vis_frame.shape[:2]
+        min_x, min_y = max(0, min_x), max(0, min_y)
+        max_x, max_y = min(width, max_x), min(height, max_y)
+
+        # Draw the eyebrows curves
+        mid_point = len(eyebrows_polygon) // 2
+        left_points = eyebrows_polygon[:mid_point]
+        right_points = eyebrows_polygon[mid_point:]
+        
+        # Draw smooth curves with anti-aliasing
+        cv2.polylines(vis_frame, [left_points], True, (0, 255, 0), 2, cv2.LINE_AA)
+        cv2.polylines(vis_frame, [right_points], True, (0, 255, 0), 2, cv2.LINE_AA)
+
+        # Add label
+        cv2.putText(
+            vis_frame,
+            "Eyebrows Mask",
             (min_x, min_y - 10),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.5,

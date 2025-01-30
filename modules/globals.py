@@ -43,5 +43,7 @@ mask_down_size = 0.50
 mask_size = 1
 eyes_mask = False
 show_eyes_mask_box = False
+eyebrows_mask = False
+show_eyebrows_mask_box = False
 use_fake_face = False
 fake_face_path = None
