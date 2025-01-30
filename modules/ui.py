@@ -279,7 +279,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     )
     show_fps_switch.place(relx=0.1, rely=0.75)
 
-    # Additional Options (Middle Right)
+    # Mask Switches (Middle Right - Top Section)
     mouth_mask_var = ctk.BooleanVar(value=modules.globals.mouth_mask)
     mouth_mask_switch = ctk.CTkSwitch(
         root,
@@ -290,19 +290,6 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     )
     mouth_mask_switch.place(relx=0.6, rely=0.50)
 
-    show_mouth_mask_box_var = ctk.BooleanVar(value=modules.globals.show_mouth_mask_box)
-    show_mouth_mask_box_switch = ctk.CTkSwitch(
-        root,
-        text=_("Show Mouth Mask Box"),
-        variable=show_mouth_mask_box_var,
-        cursor="hand2",
-        command=lambda: setattr(
-            modules.globals, "show_mouth_mask_box", show_mouth_mask_box_var.get()
-        ),
-    )
-    show_mouth_mask_box_switch.place(relx=0.6, rely=0.55)
-
-    # Add eyes mask switch
     eyes_mask_var = ctk.BooleanVar(value=modules.globals.eyes_mask)
     eyes_mask_switch = ctk.CTkSwitch(
         root,
@@ -311,22 +298,8 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         cursor="hand2",
         command=lambda: setattr(modules.globals, "eyes_mask", eyes_mask_var.get()),
     )
-    eyes_mask_switch.place(relx=0.6, rely=0.60)
+    eyes_mask_switch.place(relx=0.6, rely=0.55)
 
-    # Add show eyes mask box switch
-    show_eyes_mask_box_var = ctk.BooleanVar(value=modules.globals.show_eyes_mask_box)
-    show_eyes_mask_box_switch = ctk.CTkSwitch(
-        root,
-        text=_("Show Eyes Mask Box"),
-        variable=show_eyes_mask_box_var,
-        cursor="hand2",
-        command=lambda: setattr(
-            modules.globals, "show_eyes_mask_box", show_eyes_mask_box_var.get()
-        ),
-    )
-    show_eyes_mask_box_switch.place(relx=0.6, rely=0.65)
-
-    # Move the eyebrows mask switches up slightly
     eyebrows_mask_var = ctk.BooleanVar(value=modules.globals.eyebrows_mask)
     eyebrows_mask_switch = ctk.CTkSwitch(
         root,
@@ -335,12 +308,37 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         cursor="hand2",
         command=lambda: setattr(modules.globals, "eyebrows_mask", eyebrows_mask_var.get()),
     )
-    eyebrows_mask_switch.place(relx=0.6, rely=0.70)
+    eyebrows_mask_switch.place(relx=0.6, rely=0.60)
+
+    # Box Visualization Switches (Middle Right - Bottom Section)
+    show_mouth_mask_box_var = ctk.BooleanVar(value=modules.globals.show_mouth_mask_box)
+    show_mouth_mask_box_switch = ctk.CTkSwitch(
+        root,
+        text=_("Show Mouth Box"),
+        variable=show_mouth_mask_box_var,
+        cursor="hand2",
+        command=lambda: setattr(
+            modules.globals, "show_mouth_mask_box", show_mouth_mask_box_var.get()
+        ),
+    )
+    show_mouth_mask_box_switch.place(relx=0.6, rely=0.65)
+
+    show_eyes_mask_box_var = ctk.BooleanVar(value=modules.globals.show_eyes_mask_box)
+    show_eyes_mask_box_switch = ctk.CTkSwitch(
+        root,
+        text=_("Show Eyes Box"),
+        variable=show_eyes_mask_box_var,
+        cursor="hand2",
+        command=lambda: setattr(
+            modules.globals, "show_eyes_mask_box", show_eyes_mask_box_var.get()
+        ),
+    )
+    show_eyes_mask_box_switch.place(relx=0.6, rely=0.70)
 
     show_eyebrows_mask_box_var = ctk.BooleanVar(value=modules.globals.show_eyebrows_mask_box)
     show_eyebrows_mask_box_switch = ctk.CTkSwitch(
         root,
-        text=_("Show Eyebrows Mask Box"),
+        text=_("Show Eyebrows Box"),
         variable=show_eyebrows_mask_box_var,
         cursor="hand2",
         command=lambda: setattr(

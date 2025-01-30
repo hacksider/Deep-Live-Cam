@@ -302,21 +302,21 @@ def create_curved_eyebrow(points):
         x = np.linspace(x_min, x_max, num_points)
         
         # Fit quadratic curve through points for more natural arch
-        coeffs = np.polyfit(sorted_points[:, 0], sorted_points[:, 1], 2)  # Changed to quadratic
+        coeffs = np.polyfit(sorted_points[:, 0], sorted_points[:, 1], 2)
         y = np.polyval(coeffs, x)
         
-        # Create points for top and bottom curves with consistent offsets
-        top_offset = height * 0.3  # Simplified offset for cleaner curve
-        bottom_offset = height * 0.1  # Thinner bottom curve
+        # Increased offsets to create more separation
+        top_offset = height * 0.5  # Increased from 0.3 to shift up more
+        bottom_offset = height * 0.2  # Increased from 0.1 to shift down more
         
         # Create smooth curves
         top_curve = y - top_offset
         bottom_curve = y + bottom_offset
         
-        # Create curved endpoints with slight taper
+        # Create curved endpoints with more pronounced taper
         end_points = 5
-        start_x = np.linspace(x[0] - width * 0.1, x[0], end_points)
-        end_x = np.linspace(x[-1], x[-1] + width * 0.1, end_points)
+        start_x = np.linspace(x[0] - width * 0.15, x[0], end_points)  # Increased taper
+        end_x = np.linspace(x[-1], x[-1] + width * 0.15, end_points)  # Increased taper
         
         # Create tapered ends
         start_curve = np.column_stack((
@@ -339,7 +339,7 @@ def create_curved_eyebrow(points):
         # Add slight padding for better coverage
         center = np.mean(contour_points, axis=0)
         vectors = contour_points - center
-        padded_points = center + vectors * 1.15  # 15% padding
+        padded_points = center + vectors * 1.2  # Increased padding slightly
         
         return padded_points
     return points
@@ -395,21 +395,21 @@ def create_eyebrows_mask(face: Face, frame: Frame) -> (np.ndarray, np.ndarray, t
                     x = np.linspace(x_min, x_max, num_points)
                     
                     # Fit quadratic curve through points for more natural arch
-                    coeffs = np.polyfit(sorted_points[:, 0], sorted_points[:, 1], 2)  # Changed to quadratic
+                    coeffs = np.polyfit(sorted_points[:, 0], sorted_points[:, 1], 2)
                     y = np.polyval(coeffs, x)
                     
-                    # Create points for top and bottom curves with consistent offsets
-                    top_offset = height * 0.3  # Simplified offset for cleaner curve
-                    bottom_offset = height * 0.1  # Thinner bottom curve
+                    # Increased offsets to create more separation
+                    top_offset = height * 0.5  # Increased from 0.3 to shift up more
+                    bottom_offset = height * 0.2  # Increased from 0.1 to shift down more
                     
                     # Create smooth curves
                     top_curve = y - top_offset
                     bottom_curve = y + bottom_offset
                     
-                    # Create curved endpoints with slight taper
+                    # Create curved endpoints with more pronounced taper
                     end_points = 5
-                    start_x = np.linspace(x[0] - width * 0.1, x[0], end_points)
-                    end_x = np.linspace(x[-1], x[-1] + width * 0.1, end_points)
+                    start_x = np.linspace(x[0] - width * 0.15, x[0], end_points)  # Increased taper
+                    end_x = np.linspace(x[-1], x[-1] + width * 0.15, end_points)  # Increased taper
                     
                     # Create tapered ends
                     start_curve = np.column_stack((
@@ -432,7 +432,7 @@ def create_eyebrows_mask(face: Face, frame: Frame) -> (np.ndarray, np.ndarray, t
                     # Add slight padding for better coverage
                     center = np.mean(contour_points, axis=0)
                     vectors = contour_points - center
-                    padded_points = center + vectors * 1.15  # 15% padding
+                    padded_points = center + vectors * 1.2  # Increased padding slightly
                     
                     return padded_points
                 return points
