@@ -696,7 +696,7 @@ def check_and_ignore_nsfw(target, destroy: Callable = None) -> bool:
 
 
 def fit_image_to_size(image, width: int, height: int):
-    if width is None and height is None:
+    if width is None or height is None or width <= 0 or height <= 0:
         return image
     h, w, _ = image.shape
     ratio_h = 0.0
@@ -707,6 +707,16 @@ def fit_image_to_size(image, width: int, height: int):
         ratio_w = width / w
     ratio = max(ratio_w, ratio_h)
     new_size = (int(ratio * w), int(ratio * h))
+    ratio_w = width / w
+    ratio_h = height / h
+    # Use the smaller ratio to ensure the image fits within the given dimensions
+    ratio = min(ratio_w, ratio_h)
+    
+    # Compute new dimensions, ensuring they're at least 1 pixel
+    new_width = max(1, int(ratio * w))
+    new_height = max(1, int(ratio * h))
+    new_size = (new_width, new_height)
+
     return cv2.resize(image, dsize=new_size)
 
 
