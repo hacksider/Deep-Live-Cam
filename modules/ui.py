@@ -701,12 +701,6 @@ def fit_image_to_size(image, width: int, height: int):
     h, w, _ = image.shape
     ratio_h = 0.0
     ratio_w = 0.0
-    if width > height:
-        ratio_h = height / h
-    else:
-        ratio_w = width / w
-    ratio = max(ratio_w, ratio_h)
-    new_size = (int(ratio * w), int(ratio * h))
     ratio_w = width / w
     ratio_h = height / h
     # Use the smaller ratio to ensure the image fits within the given dimensions
