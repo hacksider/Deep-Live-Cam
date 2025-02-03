@@ -9,7 +9,7 @@ file_types = [
     ("Video", ("*.mp4", "*.mkv")),
 ]
 
-souce_target_map = []
+source_target_map = []
 simple_map = {}
 
 source_path = None
