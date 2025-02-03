@@ -290,6 +290,17 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     )
     mouth_mask_switch.place(relx=0.6, rely=0.50)
 
+    # Add mouth mask size slider
+    mouth_mask_size_slider = ctk.CTkSlider(
+        root,
+        from_=0.5,
+        to=2.0,
+        number_of_steps=30,
+        command=lambda value: setattr(modules.globals, "mouth_mask_size", value)
+    )
+    mouth_mask_size_slider.set(modules.globals.mouth_mask_size)
+    mouth_mask_size_slider.place(relx=0.8, rely=0.50, relwidth=0.1)
+
     eyes_mask_var = ctk.BooleanVar(value=modules.globals.eyes_mask)
     eyes_mask_switch = ctk.CTkSwitch(
         root,
@@ -300,6 +311,17 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     )
     eyes_mask_switch.place(relx=0.6, rely=0.55)
 
+    # Add eyes mask size slider
+    eyes_mask_size_slider = ctk.CTkSlider(
+        root,
+        from_=0.5,
+        to=2.0,
+        number_of_steps=30,
+        command=lambda value: setattr(modules.globals, "eyes_mask_size", value)
+    )
+    eyes_mask_size_slider.set(modules.globals.eyes_mask_size)
+    eyes_mask_size_slider.place(relx=0.8, rely=0.55, relwidth=0.1)
+
     eyebrows_mask_var = ctk.BooleanVar(value=modules.globals.eyebrows_mask)
     eyebrows_mask_switch = ctk.CTkSwitch(
         root,
@@ -309,6 +331,17 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         command=lambda: setattr(modules.globals, "eyebrows_mask", eyebrows_mask_var.get()),
     )
     eyebrows_mask_switch.place(relx=0.6, rely=0.60)
+
+    # Add eyebrows mask size slider
+    eyebrows_mask_size_slider = ctk.CTkSlider(
+        root,
+        from_=0.5,
+        to=2.0,
+        number_of_steps=30,
+        command=lambda value: setattr(modules.globals, "eyebrows_mask_size", value)
+    )
+    eyebrows_mask_size_slider.set(modules.globals.eyebrows_mask_size)
+    eyebrows_mask_size_slider.place(relx=0.8, rely=0.60, relwidth=0.1)
 
     # Box Visualization Switches (Middle Right - Bottom Section)
     show_mouth_mask_box_var = ctk.BooleanVar(value=modules.globals.show_mouth_mask_box)

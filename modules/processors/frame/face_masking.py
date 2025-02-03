@@ -128,10 +128,10 @@ def create_lower_mouth_mask(
         # Calculate the center of the landmarks
         center = np.mean(lower_lip_landmarks, axis=0)
 
-        # Expand the landmarks outward
+        # Expand the landmarks outward using the mouth_mask_size
         expansion_factor = (
-            1 + modules.globals.mask_down_size
-        )  # Adjust this for more or less expansion
+            1 + modules.globals.mask_down_size * modules.globals.mouth_mask_size
+        )  # Adjust expansion based on slider
         expanded_landmarks = (lower_lip_landmarks - center) * expansion_factor + center
 
         # Extend the top lip part
@@ -145,8 +145,8 @@ def create_lower_mouth_mask(
             5,
         ]  # Indices for landmarks 2, 65, 66, 62, 70, 69, 18
         toplip_extension = (
-            modules.globals.mask_size * 0.5
-        )  # Adjust this factor to control the extension
+            modules.globals.mask_size * modules.globals.mouth_mask_size * 0.5
+        )  # Adjust extension based on slider
         for idx in toplip_indices:
             direction = expanded_landmarks[idx] - center
             direction = direction / np.linalg.norm(direction)
@@ -219,12 +219,12 @@ def create_eyes_mask(face: Face, frame: Frame) -> (np.ndarray, np.ndarray, tuple
         left_eye_center = np.mean(left_eye, axis=0).astype(np.int32)
         right_eye_center = np.mean(right_eye, axis=0).astype(np.int32)
         
-        # Calculate eye dimensions
+        # Calculate eye dimensions with size adjustment
         def get_eye_dimensions(eye_points):
             x_coords = eye_points[:, 0]
             y_coords = eye_points[:, 1]
-            width = int((np.max(x_coords) - np.min(x_coords)) * (1 + modules.globals.mask_down_size))
-            height = int((np.max(y_coords) - np.min(y_coords)) * (1 + modules.globals.mask_down_size))
+            width = int((np.max(x_coords) - np.min(x_coords)) * (1 + modules.globals.mask_down_size * modules.globals.eyes_mask_size))
+            height = int((np.max(y_coords) - np.min(y_coords)) * (1 + modules.globals.mask_down_size * modules.globals.eyes_mask_size))
             return width, height
         
         left_width, left_height = get_eye_dimensions(left_eye)
@@ -357,12 +357,13 @@ def create_eyebrows_mask(face: Face, frame: Frame) -> (np.ndarray, np.ndarray, t
         left_center = np.mean(left_eyebrow, axis=0)
         right_center = np.mean(right_eyebrow, axis=0)
         
-        # Calculate bounding box with padding
+        # Calculate bounding box with padding adjusted by size
         all_points = np.vstack([left_eyebrow, right_eyebrow])
-        min_x = np.min(all_points[:, 0]) - 25
-        max_x = np.max(all_points[:, 0]) + 25
-        min_y = np.min(all_points[:, 1]) - 20
-        max_y = np.max(all_points[:, 1]) + 15
+        padding_factor = modules.globals.eyebrows_mask_size
+        min_x = np.min(all_points[:, 0]) - 25 * padding_factor
+        max_x = np.max(all_points[:, 0]) + 25 * padding_factor
+        min_y = np.min(all_points[:, 1]) - 20 * padding_factor
+        max_y = np.max(all_points[:, 1]) + 15 * padding_factor
         
         # Ensure coordinates are within frame bounds
         min_x = max(0, int(min_x))
