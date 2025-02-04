@@ -49,7 +49,7 @@ Users are expected to use this software responsibly and legally. If using a real
 2. Select which camera to use
 3. Press live!
 
-## Features & Uses - Everything is real-time
+## Features & Uses - Everything is in real-time
 
 ### Mouth Mask
 
