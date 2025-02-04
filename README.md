@@ -85,7 +85,7 @@ Users are expected to use this software responsibly and legally. If using a real
 
 ### Memes
 
-**Create Your most viral meme yet**
+**Create Your Most Viral Meme Yet**
 
 <p align="center">
   <img src="media/meme.gif" alt="show" width="450"> 
@@ -93,6 +93,13 @@ Users are expected to use this software responsibly and legally. If using a real
   <sub>Created using Many Faces feature in Deep-Live-Cam</sub>
 </p>
 
+### Omegle
+
+**Surprise people on Omegle**
+
+<p align="center">
+  <video src="https://github.com/user-attachments/assets/97e7c622-fe3b-4894-89b9-09eefd97101b" width="450" controls></video>
+</p>
 
 ## Installation (Manual)
 
