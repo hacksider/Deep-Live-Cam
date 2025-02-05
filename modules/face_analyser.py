@@ -39,13 +39,13 @@ def get_many_faces(frame: Frame) -> Any:
         return None
 
 def has_valid_map() -> bool:
-    for map in modules.globals.souce_target_map:
+    for map in modules.globals.source_target_map:
         if "source" in map and "target" in map:
             return True
     return False
 
 def default_source_face() -> Any:
-    for map in modules.globals.souce_target_map:
+    for map in modules.globals.source_target_map:
         if "source" in map:
             return map['source']['face']
     return None
@@ -53,7 +53,7 @@ def default_source_face() -> Any:
 def simplify_maps() -> Any:
     centroids = []
     faces = []
-    for map in modules.globals.souce_target_map:
+    for map in modules.globals.source_target_map:
         if "source" in map and "target" in map:
             centroids.append(map['target']['face'].normed_embedding)
             faces.append(map['source']['face'])
@@ -64,10 +64,10 @@ def simplify_maps() -> Any:
 def add_blank_map() -> Any:
     try:
         max_id = -1
-        if len(modules.globals.souce_target_map) > 0:
-            max_id = max(modules.globals.souce_target_map, key=lambda x: x['id'])['id']
+        if len(modules.globals.source_target_map) > 0:
+            max_id = max(modules.globals.source_target_map, key=lambda x: x['id'])['id']
 
-        modules.globals.souce_target_map.append({
+        modules.globals.source_target_map.append({
                 'id' : max_id + 1
                 })
     except ValueError:
@@ -75,14 +75,14 @@ def add_blank_map() -> Any:
     
 def get_unique_faces_from_target_image() -> Any:
     try:
-        modules.globals.souce_target_map = []
+        modules.globals.source_target_map = []
         target_frame = cv2.imread(modules.globals.target_path)
         many_faces = get_many_faces(target_frame)
         i = 0
 
         for face in many_faces:
             x_min, y_min, x_max, y_max = face['bbox']
-            modules.globals.souce_target_map.append({
+            modules.globals.source_target_map.append({
                 'id' : i, 
                 'target' : {
                             'cv2' : target_frame[int(y_min):int(y_max), int(x_min):int(x_max)],
@@ -96,7 +96,7 @@ def get_unique_faces_from_target_image() -> Any:
     
 def get_unique_faces_from_target_video() -> Any:
     try:
-        modules.globals.souce_target_map = []
+        modules.globals.source_target_map = []
         frame_face_embeddings = []
         face_embeddings = []
     
@@ -127,7 +127,7 @@ def get_unique_faces_from_target_video() -> Any:
                 face['target_centroid'] = closest_centroid_index
 
         for i in range(len(centroids)):
-            modules.globals.souce_target_map.append({
+            modules.globals.source_target_map.append({
                 'id' : i
             })
 
@@ -135,7 +135,7 @@ def get_unique_faces_from_target_video() -> Any:
             for frame in tqdm(frame_face_embeddings, desc=f"Mapping frame embeddings to centroids-{i}"):
                 temp.append({'frame': frame['frame'], 'faces': [face for face in frame['faces'] if face['target_centroid'] == i], 'location': frame['location']})
 
-            modules.globals.souce_target_map[i]['target_faces_in_frame'] = temp
+            modules.globals.source_target_map[i]['target_faces_in_frame'] = temp
 
         # dump_faces(centroids, frame_face_embeddings)
         default_target_face()
@@ -144,7 +144,7 @@ def get_unique_faces_from_target_video() -> Any:
     
 
 def default_target_face():
-    for map in modules.globals.souce_target_map:
+    for map in modules.globals.source_target_map:
         best_face = None
         best_frame = None
         for frame in map['target_faces_in_frame']:
