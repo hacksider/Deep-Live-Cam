@@ -9,10 +9,10 @@ psutil==5.9.8
 tk==0.1.0
 customtkinter==5.2.2
 pillow==11.1.0
-torch==2.5.1; sys_platform != 'darwin'
-torch==2.5.1; sys_platform == 'darwin'
+torch==2.5.1+cu121; sys_platform != 'darwin'
+torch==2.5.1+cu121; sys_platform == 'darwin'
 torchvision==0.20.1; sys_platform != 'darwin'
-torchvision==0.20.1; sys_platform == 'darwin'
+torchvision==0.20.1+cu121; sys_platform == 'darwin'
 onnxruntime-silicon==1.16.3; sys_platform == 'darwin' and platform_machine == 'arm64'
 onnxruntime-gpu==1.16.3; sys_platform != 'darwin'
 tensorflow==2.12.1; sys_platform != 'darwin'
