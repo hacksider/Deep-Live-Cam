@@ -442,8 +442,8 @@ def create_source_target_popup(
     )
     scrollable_frame.grid(row=0, column=0, padx=0, pady=0, sticky="nsew")
 
-    def on_button_click(map, button_num):
-        map = update_popup_source(scrollable_frame, map, button_num)
+    def on_button_click(map, button_num, fname = None):
+        map = update_popup_source(scrollable_frame, map, button_num, fname)
 
     for item in map:
         id = item["id"]
@@ -456,6 +456,8 @@ def create_source_target_popup(
             height=DEFAULT_BUTTON_HEIGHT,
         )
         button.grid(row=id, column=0, padx=50, pady=10)
+        button.drop_target_register(DND_FILES)
+        button.dnd_bind('<<Drop>>', lambda e, id=id: on_button_click(map, id, e.data))
 
         x_label = ctk.CTkLabel(
             scrollable_frame,
@@ -490,15 +492,19 @@ def create_source_target_popup(
 
 
 def update_popup_source(
-        scrollable_frame: ctk.CTkScrollableFrame, map: list, button_num: int
+        scrollable_frame: ctk.CTkScrollableFrame, map: list, button_num: int, fname: str = None
 ) -> list:
     global source_label_dict
 
-    source_path = ctk.filedialog.askopenfilename(
-        title=_("select an source image"),
-        initialdir=RECENT_DIRECTORY_SOURCE,
-        filetypes=[img_ft],
-    )
+    # drag-n-drop target, no need to open file dialog
+    if fname is None:
+        source_path = ctk.filedialog.askopenfilename(
+            title=_("select an source image"),
+            initialdir=RECENT_DIRECTORY_SOURCE,
+            filetypes=[img_ft],
+        )
+    else:
+        source_path = fname
 
     if "source" in map[button_num]:
         map[button_num].pop("source")
