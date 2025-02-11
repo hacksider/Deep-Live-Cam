@@ -156,12 +156,12 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     source_label = ctk.CTkLabel(root, text=None)
     source_label.place(relx=0.1, rely=0.1, relwidth=0.3, relheight=0.25)
     source_label.drop_target_register(DND_FILES)
-    source_label.dnd_bind('<<Drop>>', lambda e: print("SOURCE: ", e.data))
+    source_label.dnd_bind('<<Drop>>', lambda e: select_source_path(e.data))
 
     target_label = ctk.CTkLabel(root, text=None)
     target_label.place(relx=0.6, rely=0.1, relwidth=0.3, relheight=0.25)
     target_label.drop_target_register(DND_FILES)
-    target_label.dnd_bind('<<Drop>>', lambda e: print("TARGET: ", e.data))
+    target_label.dnd_bind('<<Drop>>', lambda e: select_target_path(e.data))
 
     select_face_button = ctk.CTkButton(
         root, text=_("Select a face"), cursor="hand2", command=lambda: select_source_path()
@@ -585,15 +585,21 @@ def update_tumbler(var: str, value: bool) -> None:
         )
 
 
-def select_source_path() -> None:
+def select_source_path(filepath: str = None) -> None:
     global RECENT_DIRECTORY_SOURCE, img_ft, vid_ft
 
     PREVIEW.withdraw()
-    source_path = ctk.filedialog.askopenfilename(
-        title=_("select an source image"),
-        initialdir=RECENT_DIRECTORY_SOURCE,
-        filetypes=[img_ft],
-    )
+
+    # drag-n-drop target, no need to open file dialog
+    if filepath is None:
+        source_path = ctk.filedialog.askopenfilename(
+            title=_("select an source image"),
+            initialdir=RECENT_DIRECTORY_SOURCE,
+            filetypes=[img_ft],
+        )
+    else:
+        source_path = filepath
+
     if is_image(source_path):
         modules.globals.source_path = source_path
         RECENT_DIRECTORY_SOURCE = os.path.dirname(modules.globals.source_path)
@@ -628,15 +634,21 @@ def swap_faces_paths() -> None:
     target_label.configure(image=target_image)
 
 
-def select_target_path() -> None:
+def select_target_path(filepath: str = None) -> None:
     global RECENT_DIRECTORY_TARGET, img_ft, vid_ft
 
     PREVIEW.withdraw()
-    target_path = ctk.filedialog.askopenfilename(
-        title=_("select an target image or video"),
-        initialdir=RECENT_DIRECTORY_TARGET,
-        filetypes=[img_ft, vid_ft],
-    )
+
+    # drag-n-drop target, no need to open file dialog
+    if filepath is None:
+        target_path = ctk.filedialog.askopenfilename(
+            title=_("select an target image or video"),
+            initialdir=RECENT_DIRECTORY_TARGET,
+            filetypes=[img_ft, vid_ft],
+        )
+    else:
+        target_path = filepath
+
     if is_image(target_path):
         modules.globals.target_path = target_path
         RECENT_DIRECTORY_TARGET = os.path.dirname(modules.globals.target_path)
