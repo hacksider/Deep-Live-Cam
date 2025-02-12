@@ -38,9 +38,9 @@ Users are expected to use this software responsibly and legally. If using a real
 ##### This is the fastest build you can get if you have a discrete NVIDIA GPU.
 
 ## Quick Start - Pre-built (Mac / Silicon)
-    
+
   <a href="https://krshh.gumroad.com/l/Deep-Live-Cam-Mac"> <img src="https://github.com/user-attachments/assets/d5d913b5-a7de-4609-96b9-979a5749a703" width="285" height="77" />
- 
+
 ###### These Pre-builts are perfect for non-technical users or those who don’t have time to, or can't manually install all the requirements. Just a heads-up: this is an open-source project, so you can also install it manually.
 
 ## TLDR; Live Deepfake in just 3 Clicks
@@ -88,7 +88,7 @@ Users are expected to use this software responsibly and legally. If using a real
 **Create Your Most Viral Meme Yet**
 
 <p align="center">
-  <img src="media/meme.gif" alt="show" width="450"> 
+  <img src="media/meme.gif" alt="show" width="450">
   <br>
   <sub>Created using Many Faces feature in Deep-Live-Cam</sub>
 </p>
@@ -234,7 +234,7 @@ python run.py --execution-provider openvino
 **1. Image/Video Mode**
 
 -   Execute `python run.py`.
--   Choose a source face image and a target image/video.
+-   Choose a source face image and a target image/video (you can drag-n-drop it into program window).
 -   Click "Start".
 -   The output will be saved in a directory named after the target video.
 
