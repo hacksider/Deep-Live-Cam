@@ -4,6 +4,7 @@ import insightface
 import threading
 import numpy as np
 import modules.globals
+import logging
 import modules.processors.frame.core
 from modules.core import update_status
 from modules.face_analyser import get_one_face, get_many_faces, default_source_face
@@ -105,12 +106,18 @@ def process_frame(source_face: Face, temp_frame: Frame) -> Frame:
         many_faces = get_many_faces(temp_frame)
         if many_faces:
             for target_face in many_faces:
-                temp_frame = swap_face(source_face, target_face, temp_frame)
+                if source_face and target_face:
+                    temp_frame = swap_face(source_face, target_face, temp_frame)
+                else:
+                    print("Face detection failed for target/source.")
     else:
         target_face = get_one_face(temp_frame)
-        if target_face:
+        if target_face and source_face:
             temp_frame = swap_face(source_face, target_face, temp_frame)
+        else:
+            logging.error("Face detection failed for target or source.")
     return temp_frame
+
 
 
 def process_frame_v2(temp_frame: Frame, temp_frame_path: str = "") -> Frame:
