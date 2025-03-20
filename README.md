@@ -37,7 +37,7 @@ Users are expected to use this software responsibly and legally. If using a real
 
 ##### This is the fastest build you can get if you have a discrete NVIDIA GPU.
  
-###### These Pre-builts are perfect for non-technical users or those who don’t have time to, or can't manually install all the requirements. Just a heads-up: this is an open-source project, so you can also install it manually.
+###### These Pre-builts are perfect for non-technical users or those who don't have time to, or can't manually install all the requirements. Just a heads-up: this is an open-source project, so you can also install it manually.
 
 ## TLDR; Live Deepfake in just 3 Clicks
 ![easysteps](https://github.com/user-attachments/assets/af825228-852c-411b-b787-ffd9aac72fc6)
@@ -119,7 +119,8 @@ This is more likely to work on your computer but will be slower as it utilizes t
 **2. Clone the Repository**
 
 ```bash
-https://github.com/hacksider/Deep-Live-Cam.git
+git clone https://github.com/hacksider/Deep-Live-Cam.git
+cd Deep-Live-Cam
 ```
 
 **3. Download the Models**
@@ -133,14 +134,30 @@ Place these files in the "**models**" folder.
 
 We highly recommend using a `venv` to avoid issues.
 
+For Windows:
 ```bash
+python -m venv venv
+venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-**For macOS:** Install or upgrade the `python-tk` package:
+**For macOS:**
+
+Apple Silicon (M1/M2/M3) requires specific setup:
 
 ```bash
+# Install Python 3.10 (specific version is important)
+brew install python@3.10
+
+# Install tkinter package (required for the GUI)
 brew install python-tk@3.10
+
+# Create and activate virtual environment with Python 3.10
+python3.10 -m venv venv
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
 ```
 
 **Run:** If you don't have a GPU, you can run Deep-Live-Cam using `python run.py`. Note that initial execution will download models (~300MB).
@@ -165,18 +182,27 @@ python run.py --execution-provider cuda
 
 **CoreML Execution Provider (Apple Silicon)**
 
-1. Install dependencies:
+Apple Silicon (M1/M2/M3) specific installation:
+
+1. Make sure you've completed the macOS setup above using Python 3.10.
+2. Install dependencies:
 
 ```bash
 pip uninstall onnxruntime onnxruntime-silicon
 pip install onnxruntime-silicon==1.13.1
 ```
 
-2. Usage:
+3. Usage (important: specify Python 3.10):
 
 ```bash
-python run.py --execution-provider coreml
+python3.10 run.py --execution-provider coreml
 ```
+
+**Important Notes for macOS:**
+- You **must** use Python 3.10, not newer versions like 3.11 or 3.13
+- Always run with `python3.10` command not just `python` if you have multiple Python versions installed
+- If you get error about `_tkinter` missing, reinstall the tkinter package: `brew reinstall python-tk@3.10`
+- If you get model loading errors, check that your models are in the correct folder
 
 **CoreML Execution Provider (Apple Legacy)**
 
@@ -222,7 +248,6 @@ pip install onnxruntime-openvino==1.15.0
 ```bash
 python run.py --execution-provider openvino
 ```
-
 </details>
 
 ## Usage
@@ -316,5 +341,3 @@ Looking for a CLI mode? Using the -s/--source argument will make the run program
    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=hacksider/deep-live-cam&type=Date" />
  </picture>
 </a>
-
-
