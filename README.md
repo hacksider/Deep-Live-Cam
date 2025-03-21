@@ -160,6 +160,20 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
+** In case something goes wrong and you need to reinstall the virtual environment **
+
+```bash
+# Deactivate the virtual environment
+rm -rf venv
+
+# Reinstall the virtual environment
+python -m venv venv
+source venv/bin/activate
+
+# install the dependencies again
+pip install -r requirements.txt
+```
+
 **Run:** If you don't have a GPU, you can run Deep-Live-Cam using `python run.py`. Note that initial execution will download models (~300MB).
 
 ### GPU Acceleration
@@ -203,6 +217,17 @@ python3.10 run.py --execution-provider coreml
 - Always run with `python3.10` command not just `python` if you have multiple Python versions installed
 - If you get error about `_tkinter` missing, reinstall the tkinter package: `brew reinstall python-tk@3.10`
 - If you get model loading errors, check that your models are in the correct folder
+- If you encounter conflicts with other Python versions, consider uninstalling them:
+  ```bash
+  # List all installed Python versions
+  brew list | grep python
+  
+  # Uninstall conflicting versions if needed
+  brew uninstall --ignore-dependencies python@3.11 python@3.13
+  
+  # Keep only Python 3.10
+  brew cleanup
+  ```
 
 **CoreML Execution Provider (Apple Legacy)**
 
