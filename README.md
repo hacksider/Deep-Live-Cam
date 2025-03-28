@@ -37,7 +37,7 @@ Users are expected to use this software responsibly and legally. If using a real
 
 ##### This is the fastest build you can get if you have a discrete NVIDIA GPU.
  
-###### These Pre-builts are perfect for non-technical users or those who don't have time to, or can't manually install all the requirements. Just a heads-up: this is an open-source project, so you can also install it manually.
+###### These Pre-builts are perfect for non-technical users or those who don't have time to, or can't manually install all the requirements. Just a heads-up: this is an open-source project, so you can also install it manually. This will be 45 days ahead on the open source version.
 
 ## TLDR; Live Deepfake in just 3 Clicks
 ![easysteps](https://github.com/user-attachments/assets/af825228-852c-411b-b787-ffd9aac72fc6)
