@@ -25,3 +25,4 @@ models/DMDNet.pth
 faceswap/
 .vscode/
 switch_states.json
+venv.rar
