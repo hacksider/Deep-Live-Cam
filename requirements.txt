@@ -12,7 +12,7 @@ torch; sys_platform != 'darwin' --index-url https://download.pytorch.org/whl/cu1
 torch; sys_platform == 'darwin' --index-url https://download.pytorch.org/whl/cu126
 torchvision; sys_platform != 'darwin' --index-url https://download.pytorch.org/whl/cu126
 torchvision; sys_platform == 'darwin' --index-url https://download.pytorch.org/whl/cu126
-onnxruntime-silicon==1.21; sys_platform == 'darwin' and platform_machine == 'arm64'
+onnxruntime-silicon==1.16.3; sys_platform == 'darwin' and platform_machine == 'arm64'
 onnxruntime-gpu==1.21; sys_platform != 'darwin'
 tensorflow; sys_platform != 'darwin'
 opennsfw2==0.10.2
