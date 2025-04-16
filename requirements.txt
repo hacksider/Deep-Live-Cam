@@ -1,23 +1,21 @@
+--extra-index-url https://download.pytorch.org/whl/cu118
+
 numpy>=1.23.5,<2
 typing-extensions>=4.8.0
-opencv-python==4.11.0.86
-onnx==1.17.0
-cv2_enumerate_cameras==1.1.18.3
+opencv-python==4.10.0.84
+cv2_enumerate_cameras==1.1.15
+onnx==1.16.0
 insightface==0.7.3
 psutil==5.9.8
 tk==0.1.0
 customtkinter==5.2.2
 pillow==11.1.0
-torch; sys_platform != 'darwin' --index-url https://download.pytorch.org/whl/cu126
-torch; sys_platform == 'darwin' --index-url https://download.pytorch.org/whl/cu126
-torchvision; sys_platform != 'darwin' --index-url https://download.pytorch.org/whl/cu126
-torchvision; sys_platform == 'darwin' --index-url https://download.pytorch.org/whl/cu126
+torch==2.5.1+cu118; sys_platform != 'darwin'
+torch==2.5.1; sys_platform == 'darwin'
+torchvision==0.20.1; sys_platform != 'darwin'
+torchvision==0.20.1; sys_platform == 'darwin'
 onnxruntime-silicon==1.16.3; sys_platform == 'darwin' and platform_machine == 'arm64'
-onnxruntime-gpu==1.21; sys_platform != 'darwin'
+onnxruntime-gpu==1.17; sys_platform != 'darwin'
 tensorflow; sys_platform != 'darwin'
 opennsfw2==0.10.2
 protobuf==4.23.2
-tqdm==4.66.4
-gfpgan==1.3.8
-tkinterdnd2==0.4.2
-pygrabber==0.2
