@@ -378,3 +378,39 @@ Looking for a CLI mode? Using the -s/--source argument will make the run program
    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=hacksider/deep-live-cam&type=Date" />
  </picture>
 </a>
+
+## Contributing
+
+### Forking the Repository
+
+To fork this repository, follow these steps:
+
+1. Go to the GitHub page of the repository you want to fork.
+2. Click the "Fork" button at the top right corner of the page.
+3. Choose your GitHub account or organization where you want to create the fork.
+4. After the fork is created, you can clone it to your local machine using the URL of your forked repository.
+
+### Cloning the Forked Repository
+
+To clone the forked repository to your local machine, follow these steps:
+
+1. Open a terminal or command prompt.
+2. Use the `git clone` command followed by the URL of your forked repository. For example:
+   ```bash
+   git clone https://github.com/your-username/Deep-Live-Cam.git
+   ```
+3. Navigate to the cloned repository directory:
+   ```bash
+   cd Deep-Live-Cam
+   ```
+
+### Creating a New Branch
+
+To create a new branch for your changes, follow these steps:
+
+1. Make sure you are in the cloned repository directory.
+2. Use the `git checkout` command to create and switch to a new branch. For example:
+   ```bash
+   git checkout -b my-new-branch
+   ```
+3. You can now make your changes in this new branch.
