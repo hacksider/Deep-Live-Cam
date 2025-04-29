@@ -797,7 +797,6 @@ def webcam_preview(root: ctk.CTk, camera_index: int):
         )
 
 
-
 def get_available_cameras():
     """Returns a list of available camera names and indices."""
     if platform.system() == "Windows":
@@ -845,14 +844,6 @@ def get_available_cameras():
                 camera_indices.append(0)
                 camera_names.append("FaceTime Camera")
                 cap.release()
-
-            # On macOS, additional cameras typically use indices 1 and 2
-            for i in [1, 2]:
-                cap = cv2.VideoCapture(i)
-                if cap.isOpened():
-                    camera_indices.append(i)
-                    camera_names.append(f"Camera {i}")
-                    cap.release()
         else:
             # Linux camera detection - test first 10 indices
             for i in range(10):
@@ -1001,7 +992,6 @@ def create_source_target_popup_for_webcam(
         POPUP_LIVE, text=_("Submit"), command=lambda: on_submit_click()
     )
     close_button.place(relx=0.7, rely=0.92, relwidth=0.2, relheight=0.05)
-
 
 
 def clear_source_target_images(map: list):
