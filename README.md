@@ -167,7 +167,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-** In case something goes wrong and you need to reinstall the virtual environment **
+**In case something goes wrong and you need to reinstall the virtual environment**
 
 ```bash
 # Deactivate the virtual environment
@@ -177,7 +177,21 @@ rm -rf venv
 python -m venv venv
 source venv/bin/activate
 
-# install the dependencies again
+# Install the dependencies again
+pip install -r requirements.txt
+```
+
+**If error `_Warning: Package 'insightface.data.images/insightface.data.objects/insightface.thirdparty.face3d.mesh.cython' is absent from the packages configuration` occur you need to use llvm as compiler**
+
+```bash
+# Install llvm libomp
+brew install llvm libomp
+
+# Export compiler variables
+export CC=$(brew --prefix llvm)/bin/clang
+export CXX=$(brew --prefix llvm)/bin/clang++
+
+# Install the dependencies again
 pip install -r requirements.txt
 ```
 
