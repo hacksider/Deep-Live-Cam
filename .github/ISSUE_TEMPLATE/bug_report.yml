@@ -4,7 +4,7 @@ name: Bug Report
 description: File a bug report to help us improve
 title: "[Bug]: "
 labels: ["bug", "triage"]
-assignees: []
+assignees: [] 
 body:
   - type: markdown
     attributes:
@@ -53,7 +53,7 @@ body:
         - CPU Only
         - Not Applicable
     validations:
-      required: false # Make optional as not all issues might be GPU related
+      required: false 
   - type: textarea
     id: logs
     attributes:
@@ -64,7 +64,7 @@ body:
     id: terms
     attributes:
       label: Code of Conduct
-      description: By submitting this issue, you agree to follow our [Code of Conduct](link/to/code_of_conduct.md) <!-- Replace with actual link if you have one -->
+      description: By submitting this issue, you agree to follow our [Collaboration Guidelines](CONTRIBUTING.md)
       options:
-        - label: I agree to follow this project's Code of Conduct
+        - label: I agree to follow this project's Collaboration Guidelines
           required: true
