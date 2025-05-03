@@ -202,12 +202,13 @@ pip install onnxruntime-directml
 ```
 
 3. Usage:
-
+For Nvidia -
 ```bash
-python run.py --execution-provider cuda   //for nvidia
+python run.py --execution-provider cuda
 ```
+For AMD -
 ```bash
-python run.py --execution-provider dml   //for amd
+python run.py --execution-provider dml
 ```
 
 **CoreML Execution Provider (Apple Silicon)**
