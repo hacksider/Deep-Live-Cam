@@ -181,7 +181,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-**If error `_Warning: Package 'insightface.data.images/insightface.data.objects/insightface.thirdparty.face3d.mesh.cython' is absent from the packages configuration` occur you need to use llvm as compiler**
+**If error `_Warning: Package 'insightface.data.images/insightface.data.objects/insightface.thirdparty.face3d.mesh.cython' is absent from the packages configuration` occurs you need to use llvm as compiler**
 
 ```bash
 # Install llvm libomp
