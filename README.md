@@ -195,7 +195,7 @@ pip uninstall onnxruntime onnxruntime-gpu
 pip install onnxruntime-gpu==1.16.3
 ```
 
-**ROCM Execution Provider (AMD GPU)**
+**DML Execution Provider (AMD GPU)**
 ```bash
 pip uninstall onnxruntime onnxruntime-gpu
 pip install onnxruntime-directml
