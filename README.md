@@ -133,10 +133,18 @@ Place these files in the "**models**" folder.
 
 We highly recommend using a `venv` to avoid issues.
 
+
 For Windows:
 ```bash
 python -m venv venv
 venv\Scripts\activate
+pip install -r requirements.txt
+```
+For Linux:
+```bash
+# Ensure you use the installed Python 3.10
+python3 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
 ```
 
