@@ -195,10 +195,19 @@ pip uninstall onnxruntime onnxruntime-gpu
 pip install onnxruntime-gpu==1.16.3
 ```
 
+**ROCM Execution Provider (AMD GPU)**
+```bash
+pip uninstall onnxruntime onnxruntime-gpu
+pip install onnxruntime-directml
+```
+
 3. Usage:
 
 ```bash
-python run.py --execution-provider cuda
+python run.py --execution-provider cuda   //for nvidia
+```
+```bash
+python run.py --execution-provider dml   //for amd
 ```
 
 **CoreML Execution Provider (Apple Silicon)**
