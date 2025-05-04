@@ -31,8 +31,12 @@ def pre_check() -> bool:
     # Use models_dir instead of abs_dir to save to the correct location
     download_directory_path = models_dir
     
-    # Make sure the models directory exists
-    os.makedirs(download_directory_path, exist_ok=True)
+    # Make sure the models directory exists, catch permission errors if they occur
+    try:
+        os.makedirs(download_directory_path, exist_ok=True)
+    except PermissionError as e:
+        logging.error(f"Failed to create directory {download_directory_path} due to permission error: {e}")
+        return False
     
     # Use the direct download URL from Hugging Face
     conditional_download(
