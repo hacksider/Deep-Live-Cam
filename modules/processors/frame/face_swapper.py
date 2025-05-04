@@ -28,11 +28,17 @@ models_dir = os.path.join(
 
 
 def pre_check() -> bool:
-    download_directory_path = abs_dir
+    # Use models_dir instead of abs_dir to save to the correct location
+    download_directory_path = models_dir
+    
+    # Make sure the models directory exists
+    os.makedirs(download_directory_path, exist_ok=True)
+    
+    # Use the direct download URL from Hugging Face
     conditional_download(
         download_directory_path,
         [
-            "https://huggingface.co/hacksider/deep-live-cam/blob/main/inswapper_128_fp16.onnx"
+            "https://huggingface.co/hacksider/deep-live-cam/resolve/main/inswapper_128_fp16.onnx"
         ],
     )
     return True
