@@ -34,7 +34,7 @@ def pre_check() -> bool:
     # Make sure the models directory exists, catch permission errors if they occur
     try:
         os.makedirs(download_directory_path, exist_ok=True)
-    except PermissionError as e:
+    except OSError as e:
         logging.error(f"Failed to create directory {download_directory_path} due to permission error: {e}")
         return False
     
