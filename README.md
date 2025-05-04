@@ -30,6 +30,12 @@ By using this software, you agree to these terms and commit to using it in a man
 
 Users are expected to use this software responsibly and legally. If using a real person's face, obtain their consent and clearly label any output as a deepfake when sharing online. We are not responsible for end-user actions.
 
+## App Design
+
+<p align="center">
+  <img src="media/app-design.gif" alt="App Design" width="1050" />
+</p>
+
 ## Exclusive v2.0 Quick Start - Pre-built (Windows)
 
 <a href="https://deeplivecam.net/index.php/quickstart"> <img src="media/Download.png" width="285" height="77" />
@@ -104,14 +110,6 @@ Users are expected to use this software responsibly and legally. If using a real
 
 <details>
 <summary>Click to see the process</summary>
-
-## App Design
-
-<p align="center">
-  <img src="media/app_design.gif" alt="App Design" width="450" />
-  <br>
-  <sub>App Design, created with CodeViz</sub>
-</p>
 
 ### Installation
 
