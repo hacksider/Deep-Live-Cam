@@ -32,7 +32,7 @@ Users are expected to use this software responsibly and legally. If using a real
 
 ## Exclusive v2.0 Quick Start - Pre-built (Windows)
 
-  <a href="https://deeplivecam.net/index.php/plans?plan_id=0&group_id=0"> <img src="media/Download.png" width="285" height="77" />
+  <a href="https://deeplivecam.net/index.php/quickstart"> <img src="media/Download.png" width="285" height="77" />
 
 ##### This is the fastest build you can get if you have a discrete NVIDIA or AMD GPU.
  
