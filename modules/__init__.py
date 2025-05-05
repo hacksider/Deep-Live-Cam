@@ -1,3 +1,4 @@
+import os 
 import cv2
 import numpy as np
 
@@ -11,8 +12,11 @@ cv2.imread = imread_unicode
 # Define a function to support unicode characters in file paths when saving
 def imwrite_unicode(path, img, params=None):
     # Encode the image
-    ext = path.split(".")[-1]  # Get file extension
-    result, encoded_img = cv2.imencode(f".{ext}", img, params if params else [])
+    root, ext = os.path.splitext(path)
+    # If no extension is found, you can choose a default extension (e.g., ".png")
+    if not ext:
+        ext = ".png"
+    result, encoded_img = cv2.imencode(ext, img, params if params else [])
 
     if result:
         encoded_img.tofile(path)  # Save image using numpy's `tofile()`
