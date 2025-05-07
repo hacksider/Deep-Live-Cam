@@ -429,7 +429,7 @@ def create_source_target_popup(
             POPUP.destroy()
             select_output_path(start)
         else:
-            update_pop_status("Atleast 1 source with target is required!")
+            update_pop_status("At least 1 source with target is required!")
 
     scrollable_frame = ctk.CTkScrollableFrame(
         POPUP, width=POPUP_SCROLL_WIDTH, height=POPUP_SCROLL_HEIGHT
@@ -489,7 +489,7 @@ def update_popup_source(
     global source_label_dict
 
     source_path = ctk.filedialog.askopenfilename(
-        title=_("select an source image"),
+        title=_("select a source image"),
         initialdir=RECENT_DIRECTORY_SOURCE,
         filetypes=[img_ft],
     )
@@ -584,7 +584,7 @@ def select_source_path() -> None:
 
     PREVIEW.withdraw()
     source_path = ctk.filedialog.askopenfilename(
-        title=_("select an source image"),
+        title=_("select a source image"),
         initialdir=RECENT_DIRECTORY_SOURCE,
         filetypes=[img_ft],
     )
@@ -627,7 +627,7 @@ def select_target_path() -> None:
 
     PREVIEW.withdraw()
     target_path = ctk.filedialog.askopenfilename(
-        title=_("select an target image or video"),
+        title=_("select a target image or video"),
         initialdir=RECENT_DIRECTORY_TARGET,
         filetypes=[img_ft, vid_ft],
     )
@@ -1108,7 +1108,7 @@ def update_webcam_source(
     global source_label_dict_live
 
     source_path = ctk.filedialog.askopenfilename(
-        title=_("select an source image"),
+        title=_("select a source image"),
         initialdir=RECENT_DIRECTORY_SOURCE,
         filetypes=[img_ft],
     )
@@ -1160,7 +1160,7 @@ def update_webcam_target(
     global target_label_dict_live
 
     target_path = ctk.filedialog.askopenfilename(
-        title=_("select an target image"),
+        title=_("select a target image"),
         initialdir=RECENT_DIRECTORY_SOURCE,
         filetypes=[img_ft],
     )
