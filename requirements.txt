@@ -20,8 +20,7 @@ torchvision==0.20.1; sys_platform != 'darwin'
 torchvision==0.20.1; sys_platform == 'darwin'
 
 # Use only GPU-accelerated ONNX runtime
-onnxruntime-silicon==1.16.3; sys_platform == 'darwin' and platform_machine == 'arm64'
-onnxruntime-gpu==1.17; sys_platform != 'darwin'
+onnxruntime-gpu==1.16.3
 
 tensorflow; sys_platform != 'darwin'
 
