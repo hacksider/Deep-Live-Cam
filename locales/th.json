@@ -1,5 +1,5 @@
 {
-    "Source x Target Mapper": "เครื่องมือจับคู่ต้นฉบับกับเป้าหมาย",
+    "Source x Target Mapper": "ตัวจับคู่ต้นทาง x ปลายทาง",
     "select a source image": "เลือกรูปภาพต้นฉบับ",
     "Preview": "ตัวอย่าง",
     "select a target image or video": "เลือกรูปภาพหรือวิดีโอเป้าหมาย",
@@ -41,5 +41,5 @@
     "Select Camera:": "เลือกกล้อง:",
     "All mappings cleared!": "ล้างการจับคู่ทั้งหมดแล้ว!",
     "Mappings successfully submitted!": "ส่งการจับคู่สำเร็จแล้ว!",
-    "Source x Target Mapper is already open.": "เครื่องมือจับคู่ต้นฉบับกับเป้าหมายเปิดอยู่แล้ว"
+    "Source x Target Mapper is already open.": "ตัวจับคู่ต้นทาง x ปลายทาง เปิดอยู่แล้ว"
 }
