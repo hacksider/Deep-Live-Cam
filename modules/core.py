@@ -114,8 +114,46 @@ def encode_execution_providers(execution_providers: List[str]) -> List[str]:
 
 
 def decode_execution_providers(execution_providers: List[str]) -> List[str]:
-    return [provider for provider, encoded_execution_provider in zip(onnxruntime.get_available_providers(), encode_execution_providers(onnxruntime.get_available_providers()))
-            if any(execution_provider in encoded_execution_provider for execution_provider in execution_providers)]
+    try:
+        available_providers = onnxruntime.get_available_providers()
+        encoded_available_providers = encode_execution_providers(available_providers)
+        
+        selected_providers = []
+        unavailable_providers = []
+        
+        for execution_provider in execution_providers:
+            provider_found = False
+            for provider, encoded_provider in zip(available_providers, encoded_available_providers):
+                if execution_provider in encoded_provider:
+                    selected_providers.append(provider)
+                    provider_found = True
+                    break
+            
+            if not provider_found:
+                unavailable_providers.append(execution_provider)
+        
+        if 'cuda' in [p.lower() for p in unavailable_providers]:
+            # CUDA was requested but not available
+            cuda_path = os.environ.get('CUDA_PATH')
+            if cuda_path:
+                update_status(f"Warning: CUDA_PATH is set ({cuda_path}) but CUDA wasn't able to be loaded. Check your CUDA installation.", "DLC.CORE")
+                if os.path.exists(cuda_path):
+                    # CUDA path exists but couldn't be loaded - likely missing DLLs or incorrect configuration
+                    update_status("CUDA path exists but CUDA libraries couldn't be loaded. Check if the CUDA runtime is properly installed.", "DLC.CORE")
+                else:
+                    update_status("CUDA_PATH is set but the directory doesn't exist. Check your environment variables.", "DLC.CORE")
+            else:
+                update_status("CUDA was requested but no CUDA_PATH is set in environment variables.", "DLC.CORE")
+                
+            # If no providers were selected, fall back to CPU
+            if not selected_providers:
+                update_status("Falling back to CPU execution provider.", "DLC.CORE")
+                selected_providers = ['CPUExecutionProvider']
+        
+        return selected_providers
+    except Exception as e:
+        update_status(f"Error determining execution providers: {str(e)}. Falling back to CPU.", "DLC.CORE")
+        return ['CPUExecutionProvider']
 
 
 def suggest_max_memory() -> int:
@@ -160,6 +198,56 @@ def release_resources() -> None:
         torch.cuda.empty_cache()
 
 
+def check_cuda_configuration() -> None:
+    """
+    Check CUDA configuration and provide diagnostic information.
+    This helps users identify issues with their CUDA setup.
+    """
+    if 'cuda' in [p.lower() for p in encode_execution_providers(modules.globals.execution_providers)]:
+        update_status("CUDA execution provider requested, checking configuration...", "DLC.CUDA")
+        
+        # Check for CUDA environment variables
+        cuda_path = os.environ.get('CUDA_PATH')
+        if cuda_path:
+            update_status(f"CUDA_PATH is set to: {cuda_path}", "DLC.CUDA")
+            
+            # Check if the directory exists
+            if os.path.exists(cuda_path):
+                update_status("CUDA_PATH directory exists", "DLC.CUDA")
+                
+                # Check for critical CUDA DLLs on Windows
+                if platform.system().lower() == 'windows':
+                    cuda_dll_path = os.path.join(cuda_path, 'bin', 'cudart64_*.dll')
+                    import glob
+                    cuda_dlls = glob.glob(cuda_dll_path)
+                    
+                    if cuda_dlls:
+                        update_status(f"CUDA Runtime DLLs found: {', '.join(os.path.basename(dll) for dll in cuda_dlls)}", "DLC.CUDA")
+                    else:
+                        update_status("Warning: No CUDA Runtime DLLs found in CUDA_PATH/bin", "DLC.CUDA")
+                        update_status("This may cause CUDA initialization failures", "DLC.CUDA")
+            else:
+                update_status("Warning: CUDA_PATH is set but directory doesn't exist", "DLC.CUDA")
+        else:
+            update_status("Warning: CUDA_PATH environment variable is not set", "DLC.CUDA")
+        
+        # Check if CUDA is in PATH
+        path_env = os.environ.get('PATH', '')
+        if cuda_path and cuda_path + '\\bin' in path_env:
+            update_status("CUDA bin directory is in PATH", "DLC.CUDA")
+        else:
+            update_status("Warning: CUDA bin directory not found in PATH", "DLC.CUDA")
+            update_status("This may prevent CUDA libraries from being found", "DLC.CUDA")
+        
+        # Try CUDA provider availability directly from onnxruntime
+        available_providers = onnxruntime.get_available_providers()
+        if 'CUDAExecutionProvider' in available_providers:
+            update_status("CUDA provider is available in ONNX Runtime", "DLC.CUDA")
+        else:
+            update_status("Warning: CUDA provider is not available in ONNX Runtime", "DLC.CUDA")
+            update_status("Available providers: " + ', '.join(available_providers), "DLC.CUDA")
+
+
 def pre_check() -> bool:
     if sys.version_info < (3, 9):
         update_status('Python version is not supported - please upgrade to 3.9 or higher.')
@@ -167,6 +255,10 @@ def pre_check() -> bool:
     if not shutil.which('ffmpeg'):
         update_status('ffmpeg is not installed.')
         return False
+        
+    # Check CUDA configuration if requested
+    check_cuda_configuration()
+        
     return True
 
 
