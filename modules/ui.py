@@ -880,7 +880,7 @@ def create_webcam_preview(camera_index: int):
     PREVIEW.deiconify()
 
     frame_processors = get_frame_processors_modules(modules.globals.frame_processors)
-    source_image = None
+    # source_image = None # Replaced by source_face_obj_for_cam
     prev_time = time.time()
     fps_update_interval = 0.5
     frame_count = 0
@@ -907,23 +907,80 @@ def create_webcam_preview(camera_index: int):
             )
 
         if not modules.globals.map_faces:
-            if source_image is None and modules.globals.source_path:
-                source_image = get_one_face(cv2.imread(modules.globals.source_path))
+            # Case 1: map_faces is False
+            source_face_obj_for_cam = None
+            source_frame_full_for_cam = None
+            if modules.globals.source_path and os.path.exists(modules.globals.source_path):
+                source_frame_full_for_cam = cv2.imread(modules.globals.source_path)
+                if source_frame_full_for_cam is not None:
+                    source_face_obj_for_cam = get_one_face(source_frame_full_for_cam)
+                    if source_face_obj_for_cam is None:
+                        update_status(f"Error: No face detected in source image at {modules.globals.source_path}")
+                        # Optional: could return here or allow running without a source face if some processors handle it
+                else:
+                    update_status(f"Error: Could not read source image at {modules.globals.source_path}")
+                    cap.release()
+                    PREVIEW.withdraw()
+                    return 
+            elif modules.globals.source_path: 
+                update_status(f"Error: Source image not found at {modules.globals.source_path}")
+                cap.release()
+                PREVIEW.withdraw()
+                return
+            else: 
+                update_status("Error: No source image selected for webcam mode.")
+                cap.release()
+                PREVIEW.withdraw()
+                return
 
             for frame_processor in frame_processors:
                 if frame_processor.NAME == "DLC.FACE-ENHANCER":
                     if modules.globals.fp_ui["face_enhancer"]:
-                        temp_frame = frame_processor.process_frame(None, temp_frame)
+                        # Assuming face_enhancer's process_frame doesn't need source_face or source_frame_full
+                        temp_frame = frame_processor.process_frame(None, temp_frame) 
                 else:
-                    temp_frame = frame_processor.process_frame(source_image, temp_frame)
+                    if source_face_obj_for_cam and source_frame_full_for_cam is not None:
+                        temp_frame = frame_processor.process_frame(source_face_obj_for_cam, source_frame_full_for_cam, temp_frame)
+                    # else: temp_frame remains unchanged if source isn't ready
         else:
-            modules.globals.target_path = None
+            # Case 2: map_faces is True
+            source_frame_full_for_cam_map_faces = None
+            if modules.globals.source_path and os.path.exists(modules.globals.source_path):
+                source_frame_full_for_cam_map_faces = cv2.imread(modules.globals.source_path)
+                if source_frame_full_for_cam_map_faces is None:
+                    update_status(f"Error: Could not read source image (for hair/background) at {modules.globals.source_path}")
+                    cap.release()
+                    PREVIEW.withdraw()
+                    return
+            elif modules.globals.source_path:
+                 update_status(f"Error: Source image (for hair/background) not found at {modules.globals.source_path}")
+                 cap.release()
+                 PREVIEW.withdraw()
+                 return
+            else:
+                update_status("Error: No global source image selected (for hair/background in map_faces mode).")
+                cap.release()
+                PREVIEW.withdraw()
+                return
+
+            # Also check if map is defined, though process_frame_v2 handles specific face mapping internally
+            if not modules.globals.source_target_map and not modules.globals.simple_map: # Check both map types
+                update_status("Error: No face map defined for map_faces mode.")
+                # This might not need a return if some processors can run without map
+                # but for face_swapper, it's likely needed.
+                # For now, we proceed and let process_frame_v2 handle it.
+
+            modules.globals.target_path = None # Standard for live mode
             for frame_processor in frame_processors:
                 if frame_processor.NAME == "DLC.FACE-ENHANCER":
                     if modules.globals.fp_ui["face_enhancer"]:
-                        temp_frame = frame_processor.process_frame_v2(temp_frame)
+                        # Pass source_frame_full_for_cam_map_faces for signature consistency
+                        # The enhancer can choose to ignore it if not needed.
+                        temp_frame = frame_processor.process_frame_v2(source_frame_full_for_cam_map_faces, temp_frame)
                 else:
-                    temp_frame = frame_processor.process_frame_v2(temp_frame)
+                    if source_frame_full_for_cam_map_faces is not None:
+                        temp_frame = frame_processor.process_frame_v2(source_frame_full_for_cam_map_faces, temp_frame)
+                    # else: temp_frame remains unchanged if global source for map_faces isn't ready
 
         # Calculate and display FPS
         current_time = time.time()
