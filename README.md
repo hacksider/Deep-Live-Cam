@@ -150,22 +150,64 @@ pip install -r requirements.txt
 
 **For macOS:**
 
-Apple Silicon (M1/M2/M3) requires specific setup:
+For a streamlined setup on macOS, use the provided shell scripts:
 
-```bash
-# Install Python 3.10 (specific version is important)
-brew install python@3.10
+1.  **Make scripts executable:**
+    Open your terminal, navigate to the cloned `Deep-Live-Cam` directory, and run:
+    ```bash
+    chmod +x setup_mac.sh
+    chmod +x run_mac*.sh
+    ```
 
-# Install tkinter package (required for the GUI)
-brew install python-tk@3.10
+2.  **Run the setup script:**
+    This will check for Python 3.9+, ffmpeg, create a virtual environment (`.venv`), and install required Python packages.
+    ```bash
+    ./setup_mac.sh
+    ```
+    If you encounter issues with specific packages during `pip install` (especially for libraries that compile C code, like some image processing libraries), you might need to install system libraries via Homebrew (e.g., `brew install jpeg libtiff ...`) or ensure Xcode Command Line Tools are installed (`xcode-select --install`).
 
-# Create and activate virtual environment with Python 3.10
-python3.10 -m venv venv
-source venv/bin/activate
+3.  **Activate the virtual environment (for manual runs):**
+    After setup, if you want to run commands manually or use developer tools from your terminal session:
+    ```bash
+    source .venv/bin/activate
+    ```
+    (To deactivate, simply type `deactivate` in the terminal.)
 
-# Install dependencies
-pip install -r requirements.txt
-```
+4.  **Run the application:**
+    Use the provided run scripts for convenience. These scripts automatically activate the virtual environment.
+    *   `./run_mac.sh`: Runs the application with the CPU execution provider by default. This is a good starting point.
+    *   `./run_mac_cpu.sh`: Explicitly uses the CPU execution provider.
+    *   `./run_mac_coreml.sh`: Attempts to use the CoreML execution provider for potential hardware acceleration on Apple Silicon and Intel Macs.
+    *   `./run_mac_mps.sh`: Attempts to use the MPS (Metal Performance Shaders) execution provider, primarily for Apple Silicon Macs.
+
+    Example of running with specific source/target arguments:
+    ```bash
+    ./run_mac.sh --source path/to/your_face.jpg --target path/to/video.mp4
+    ```
+    Or, to simply launch the UI:
+    ```bash
+    ./run_mac.sh
+    ```
+
+**Important Notes for macOS GPU Acceleration (CoreML/MPS):**
+
+*   The `setup_mac.sh` script installs packages from `requirements.txt`, which typically includes a general CPU-based version of `onnxruntime`.
+*   For optimal performance on Apple Silicon (M1/M2/M3) or specific GPU acceleration, you might need to install a different `onnxruntime` package *after* running `setup_mac.sh` and while the virtual environment (`.venv`) is active.
+*   **Example for `onnxruntime-silicon` (often requires Python 3.10 for older versions like 1.13.1):**
+    The original `README` noted that `onnxruntime-silicon==1.13.1` was specific to Python 3.10. If you intend to use this exact version for CoreML:
+    ```bash
+    # Ensure you are using Python 3.10 if required by your chosen onnxruntime-silicon version
+    # After running setup_mac.sh and activating .venv:
+    # source .venv/bin/activate
+    
+    pip uninstall onnxruntime onnxruntime-gpu # Uninstall any existing onnxruntime
+    pip install onnxruntime-silicon==1.13.1   # Or your desired version
+    
+    # Then use ./run_mac_coreml.sh
+    ```
+    Check the ONNX Runtime documentation for the latest recommended packages for Apple Silicon.
+*   **For MPS with ONNX Runtime:** This may require a specific build or version of `onnxruntime`. Consult the ONNX Runtime documentation. For PyTorch-based operations (like the Face Enhancer or Hair Segmenter if they were PyTorch native and not ONNX), PyTorch should automatically try to use MPS on compatible Apple Silicon hardware if available.
+*   **User Interface (Tkinter):** If you encounter errors related to `_tkinter` not being found when launching the UI, ensure your Python installation supports Tk. For Python installed via Homebrew, this is usually `python-tk` (e.g., `brew install python-tk@3.9` or `brew install python-tk@3.10`, matching your Python version).
 
 ** In case something goes wrong and you need to reinstall the virtual environment **
 

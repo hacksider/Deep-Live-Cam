@@ -68,94 +68,133 @@ def get_face_swapper() -> Any:
     return FACE_SWAPPER
 
 
+def _prepare_warped_source_material_and_mask(
+    source_face_obj: Face, 
+    source_frame_full: Frame, 
+    matrix: np.ndarray, 
+    dsize: tuple
+) -> tuple[Frame | None, Frame | None]:
+    """
+    Prepares warped source material (full image) and a combined (face+hair) mask for blending.
+    Returns (None, None) if essential masks cannot be generated.
+    """
+    # Generate Hair Mask
+    hair_only_mask_source_raw = segment_hair(source_frame_full)
+    if hair_only_mask_source_raw.ndim == 3 and hair_only_mask_source_raw.shape[2] == 3:
+        hair_only_mask_source_raw = cv2.cvtColor(hair_only_mask_source_raw, cv2.COLOR_BGR2GRAY)
+    _, hair_only_mask_source_binary = cv2.threshold(hair_only_mask_source_raw, 127, 255, cv2.THRESH_BINARY)
+
+    # Generate Face Mask
+    face_only_mask_source_raw = create_face_mask(source_face_obj, source_frame_full)
+    _, face_only_mask_source_binary = cv2.threshold(face_only_mask_source_raw, 127, 255, cv2.THRESH_BINARY)
+
+    # Combine Face and Hair Masks
+    if face_only_mask_source_binary.shape != hair_only_mask_source_binary.shape:
+        logging.warning("Resizing hair mask to match face mask for source during preparation.")
+        hair_only_mask_source_binary = cv2.resize(
+            hair_only_mask_source_binary, 
+            (face_only_mask_source_binary.shape[1], face_only_mask_source_binary.shape[0]), 
+            interpolation=cv2.INTER_NEAREST
+        )
+    
+    actual_combined_source_mask = cv2.bitwise_or(face_only_mask_source_binary, hair_only_mask_source_binary)
+    actual_combined_source_mask_blurred = cv2.GaussianBlur(actual_combined_source_mask, (5, 5), 3)
+
+    # Warp the Combined Mask and Full Source Material
+    warped_full_source_material = cv2.warpAffine(source_frame_full, matrix, dsize)
+    warped_combined_mask_temp = cv2.warpAffine(actual_combined_source_mask_blurred, matrix, dsize)
+    _, warped_combined_mask_binary_for_clone = cv2.threshold(warped_combined_mask_temp, 127, 255, cv2.THRESH_BINARY)
+    
+    return warped_full_source_material, warped_combined_mask_binary_for_clone
+
+
+def _blend_material_onto_frame(
+    base_frame: Frame, 
+    material_to_blend: Frame, 
+    mask_for_blending: Frame
+) -> Frame:
+    """
+    Blends material onto a base frame using a mask.
+    Uses seamlessClone if possible, otherwise falls back to simple masking.
+    """
+    x, y, w, h = cv2.boundingRect(mask_for_blending)
+    output_frame = base_frame # Start with base, will be modified by blending
+
+    if w > 0 and h > 0:
+        center = (x + w // 2, y + h // 2)
+        
+        if material_to_blend.shape == base_frame.shape and \
+           material_to_blend.dtype == base_frame.dtype and \
+           mask_for_blending.dtype == np.uint8:
+            try:
+                # Important: seamlessClone modifies the first argument (dst) if it's the same as the output var
+                # So, if base_frame is final_swapped_frame, it will be modified in place.
+                # If we want to keep base_frame pristine, it should be base_frame.copy() if it's also final_swapped_frame.
+                # Given final_swapped_frame is already a copy of swapped_frame at this point, this is fine.
+                output_frame = cv2.seamlessClone(material_to_blend, base_frame, mask_for_blending, center, cv2.NORMAL_CLONE)
+            except cv2.error as e:
+                logging.warning(f"cv2.seamlessClone failed: {e}. Falling back to simple blending.")
+                boolean_mask = mask_for_blending > 127 
+                output_frame[boolean_mask] = material_to_blend[boolean_mask]
+        else:
+            logging.warning("Mismatch in shape/type for seamlessClone. Falling back to simple blending.")
+            boolean_mask = mask_for_blending > 127
+            output_frame[boolean_mask] = material_to_blend[boolean_mask]
+    else:
+        logging.info("Warped mask for blending is empty. Skipping blending.")
+    
+    return output_frame
+
+
 def swap_face(source_face_obj: Face, target_face: Face, source_frame_full: Frame, temp_frame: Frame) -> Frame:
     face_swapper = get_face_swapper()
 
-    # Apply the face swap
-    swapped_frame = face_swapper.get(
-        temp_frame, target_face, source_face_obj, paste_back=True
-    )
+    # Apply the base face swap
+    swapped_frame = face_swapper.get(temp_frame, target_face, source_face_obj, paste_back=True)
+    final_swapped_frame = swapped_frame # Initialize with the base swap. Copy is made only if needed.
 
-    final_swapped_frame = swapped_frame.copy() # Initialize final_swapped_frame
+    if modules.globals.enable_hair_swapping:
+        if not (source_face_obj.kps is not None and \
+                target_face.kps is not None and \
+                source_face_obj.kps.shape[0] >= 3 and \
+                target_face.kps.shape[0] >= 3):
+            logging.warning(
+                f"Skipping hair blending due to insufficient keypoints. "
+                f"Source kps: {source_face_obj.kps.shape if source_face_obj.kps is not None else 'None'}, "
+                f"Target kps: {target_face.kps.shape if target_face.kps is not None else 'None'}."
+            )
+        else:
+            source_kps_float = source_face_obj.kps.astype(np.float32)
+            target_kps_float = target_face.kps.astype(np.float32)
+            matrix, _ = cv2.estimateAffinePartial2D(source_kps_float, target_kps_float, method=cv2.LMEDS)
 
-    # START of Hair Blending Logic
-    if source_face_obj.kps is not None and target_face.kps is not None and source_face_obj.kps.shape[0] >=2 and target_face.kps.shape[0] >=2 : # kps are 5x2 landmarks
-        hair_only_mask_source = segment_hair(source_frame_full)
-
-        # Ensure kps are float32 for estimateAffinePartial2D
-        source_kps_float = source_face_obj.kps.astype(np.float32)
-        target_kps_float = target_face.kps.astype(np.float32)
-
-        # b. Estimate Transformation Matrix
-        # Using LMEDS for robustness
-        matrix, _ = cv2.estimateAffinePartial2D(source_kps_float, target_kps_float, method=cv2.LMEDS)
-
-        if matrix is not None:
-            # c. Warp Source Hair and its Mask
-            dsize = (temp_frame.shape[1], temp_frame.shape[0]) # width, height
-
-            # Ensure hair_only_mask_source is 8-bit single channel
-            if hair_only_mask_source.ndim == 3 and hair_only_mask_source.shape[2] == 3:
-                hair_only_mask_source_gray = cv2.cvtColor(hair_only_mask_source, cv2.COLOR_BGR2GRAY)
+            if matrix is None:
+                logging.warning("Failed to estimate affine transformation matrix for hair. Skipping hair blending.")
             else:
-                hair_only_mask_source_gray = hair_only_mask_source
-            
-            # Threshold to ensure binary mask for warping
-            _, hair_only_mask_source_binary = cv2.threshold(hair_only_mask_source_gray, 127, 255, cv2.THRESH_BINARY)
-
-            warped_hair_mask = cv2.warpAffine(hair_only_mask_source_binary, matrix, dsize)
-            warped_source_hair_image = cv2.warpAffine(source_frame_full, matrix, dsize)
-
-            # d. Color Correct Warped Source Hair
-            # Using swapped_frame (face-swapped output) as the target for color correction
-            color_corrected_warped_hair = apply_color_transfer(warped_source_hair_image, swapped_frame)
-
-            # e. Blend Hair onto Swapped Frame
-            # Ensure warped_hair_mask is binary (0 or 255) after warping
-            _, warped_hair_mask_binary = cv2.threshold(warped_hair_mask, 127, 255, cv2.THRESH_BINARY)
-
-            # Preferred: cv2.seamlessClone
-            x, y, w, h = cv2.boundingRect(warped_hair_mask_binary)
-            if w > 0 and h > 0:
-                center = (x + w // 2, y + h // 2)
-                # seamlessClone expects target image, source image, mask, center, method
-                # The mask should be single channel 8-bit.
-                # The source (color_corrected_warped_hair) and target (swapped_frame) should be 8-bit 3-channel.
+                dsize = (temp_frame.shape[1], temp_frame.shape[0]) # width, height
                 
-                # Check if swapped_frame is suitable for seamlessClone (it should be the base)
-                # Ensure color_corrected_warped_hair is also 8UC3
-                if color_corrected_warped_hair.shape == swapped_frame.shape and \
-                   color_corrected_warped_hair.dtype == swapped_frame.dtype and \
-                   warped_hair_mask_binary.dtype == np.uint8:
-                    try:
-                        final_swapped_frame = cv2.seamlessClone(color_corrected_warped_hair, swapped_frame, warped_hair_mask_binary, center, cv2.NORMAL_CLONE)
-                    except cv2.error as e:
-                        logging.warning(f"cv2.seamlessClone failed: {e}. Falling back to simple blending.")
-                        # Fallback: Simple Blending (if seamlessClone fails)
-                        warped_hair_mask_3ch = cv2.cvtColor(warped_hair_mask_binary, cv2.COLOR_GRAY2BGR) > 0 # boolean mask
-                        final_swapped_frame[warped_hair_mask_3ch] = color_corrected_warped_hair[warped_hair_mask_3ch]
-                else:
-                    logging.warning("Mismatch in shape/type for seamlessClone. Falling back to simple blending.")
-                    # Fallback: Simple Blending
-                    warped_hair_mask_3ch = cv2.cvtColor(warped_hair_mask_binary, cv2.COLOR_GRAY2BGR) > 0
-                    final_swapped_frame[warped_hair_mask_3ch] = color_corrected_warped_hair[warped_hair_mask_3ch]
-            else:
-                # Mask is empty, no hair to blend, final_swapped_frame remains as is (copy of swapped_frame)
-                logging.info("Warped hair mask is empty. Skipping hair blending.")
-                # final_swapped_frame is already a copy of swapped_frame
-        else:
-            logging.warning("Failed to estimate affine transformation matrix for hair. Skipping hair blending.")
-            # final_swapped_frame is already a copy of swapped_frame
-    else:
-        if source_face_obj.kps is None or target_face.kps is None:
-            logging.warning("Source or target keypoints (kps) are None. Skipping hair blending.")
-        else:
-            logging.warning(f"Not enough keypoints for hair transformation. Source kps: {source_face_obj.kps.shape if source_face_obj.kps is not None else 'None'}, Target kps: {target_face.kps.shape if target_face.kps is not None else 'None'}. Skipping hair blending.")
-        # final_swapped_frame is already a copy of swapped_frame
-    # END of Hair Blending Logic
+                warped_material, warped_mask = _prepare_warped_source_material_and_mask(
+                    source_face_obj, source_frame_full, matrix, dsize
+                )
 
-    # f. Mouth Mask Logic
+                if warped_material is not None and warped_mask is not None:
+                    # Make a copy only now that we are sure we will modify it for hair.
+                    final_swapped_frame = swapped_frame.copy() 
+                    
+                    color_corrected_material = apply_color_transfer(warped_material, final_swapped_frame) # Use final_swapped_frame for color context
+                    
+                    final_swapped_frame = _blend_material_onto_frame(
+                        final_swapped_frame, 
+                        color_corrected_material, 
+                        warped_mask
+                    )
+    
+    # Mouth Mask Logic (operates on final_swapped_frame)
     if modules.globals.mouth_mask:
+        # If final_swapped_frame wasn't copied for hair, it needs to be copied now before mouth mask modification.
+        if final_swapped_frame is swapped_frame: # Check if it's still the same object
+            final_swapped_frame = swapped_frame.copy()
+
         # Create a mask for the target face
         face_mask = create_face_mask(target_face, temp_frame)
 
@@ -201,99 +240,91 @@ def process_frame(source_face_obj: Face, source_frame_full: Frame, temp_frame: F
 
 
 # process_frame_v2 needs to accept source_frame_full as well
+
+def _process_image_target_v2(source_frame_full: Frame, temp_frame: Frame) -> Frame:
+    if modules.globals.many_faces:
+        source_face_obj = default_source_face()
+        if source_face_obj:
+            for map_item in modules.globals.source_target_map:
+                target_face = map_item["target"]["face"]
+                temp_frame = swap_face(source_face_obj, target_face, source_frame_full, temp_frame)
+    else: # not many_faces
+        for map_item in modules.globals.source_target_map:
+            if "source" in map_item:
+                source_face_obj = map_item["source"]["face"]
+                target_face = map_item["target"]["face"]
+                temp_frame = swap_face(source_face_obj, target_face, source_frame_full, temp_frame)
+    return temp_frame
+
+def _process_video_target_v2(source_frame_full: Frame, temp_frame: Frame, temp_frame_path: str) -> Frame:
+    if modules.globals.many_faces:
+        source_face_obj = default_source_face()
+        if source_face_obj:
+            for map_item in modules.globals.source_target_map:
+                target_frames_data = [f for f in map_item.get("target_faces_in_frame", []) if f.get("location") == temp_frame_path]
+                for frame_data in target_frames_data:
+                    for target_face in frame_data.get("faces", []):
+                        temp_frame = swap_face(source_face_obj, target_face, source_frame_full, temp_frame)
+    else: # not many_faces
+        for map_item in modules.globals.source_target_map:
+            if "source" in map_item:
+                source_face_obj = map_item["source"]["face"]
+                target_frames_data = [f for f in map_item.get("target_faces_in_frame", []) if f.get("location") == temp_frame_path]
+                for frame_data in target_frames_data:
+                    for target_face in frame_data.get("faces", []):
+                        temp_frame = swap_face(source_face_obj, target_face, source_frame_full, temp_frame)
+    return temp_frame
+
+def _process_live_target_v2(source_frame_full: Frame, temp_frame: Frame) -> Frame:
+    detected_faces = get_many_faces(temp_frame)
+    if not detected_faces:
+        return temp_frame
+
+    if modules.globals.many_faces:
+        source_face_obj = default_source_face()
+        if source_face_obj:
+            for target_face in detected_faces:
+                temp_frame = swap_face(source_face_obj, target_face, source_frame_full, temp_frame)
+    else: # not many_faces (apply simple_map logic)
+        if not modules.globals.simple_map or \
+           not modules.globals.simple_map.get("target_embeddings") or \
+           not modules.globals.simple_map.get("source_faces"):
+            logging.warning("Simple map is not configured correctly. Skipping face swap.")
+            return temp_frame
+
+        target_embeddings = modules.globals.simple_map["target_embeddings"]
+        source_faces_from_map = modules.globals.simple_map["source_faces"]
+
+        if len(detected_faces) <= len(target_embeddings):
+            for detected_face in detected_faces:
+                closest_centroid_index, _ = find_closest_centroid(target_embeddings, detected_face.normed_embedding)
+                if closest_centroid_index < len(source_faces_from_map):
+                    source_face_obj_from_map = source_faces_from_map[closest_centroid_index]
+                    temp_frame = swap_face(source_face_obj_from_map, detected_face, source_frame_full, temp_frame)
+                else:
+                    logging.warning(f"Centroid index {closest_centroid_index} out of bounds for source_faces_from_map.")
+        else: # More detected faces than target embeddings in simple_map
+            detected_faces_embeddings = [face.normed_embedding for face in detected_faces]
+            for i, target_embedding in enumerate(target_embeddings):
+                if i < len(source_faces_from_map):
+                    closest_detected_face_index, _ = find_closest_centroid(detected_faces_embeddings, target_embedding)
+                    source_face_obj_from_map = source_faces_from_map[i]
+                    target_face_to_swap = detected_faces[closest_detected_face_index]
+                    temp_frame = swap_face(source_face_obj_from_map, target_face_to_swap, source_frame_full, temp_frame)
+                    # Optionally, remove the swapped detected face to prevent re-swapping if one source maps to multiple targets.
+                    # This depends on desired behavior. For now, simple independent mapping.
+                else:
+                    logging.warning(f"Index {i} out of bounds for source_faces_from_map in simple_map else case.")
+    return temp_frame
+
+
 def process_frame_v2(source_frame_full: Frame, temp_frame: Frame, temp_frame_path: str = "") -> Frame:
     if is_image(modules.globals.target_path):
-        if modules.globals.many_faces:
-            source_face_obj = default_source_face() # This function needs to be checked if it needs source_frame_full
-            if source_face_obj: # Ensure default_source_face actually returns a face
-                 for map_item in modules.globals.source_target_map: # Renamed map to map_item to avoid conflict
-                    target_face = map_item["target"]["face"]
-                    temp_frame = swap_face(source_face_obj, target_face, source_frame_full, temp_frame)
-
-        elif not modules.globals.many_faces:
-            for map_item in modules.globals.source_target_map: # Renamed map to map_item
-                if "source" in map_item:
-                    source_face_obj = map_item["source"]["face"]
-                    target_face = map_item["target"]["face"]
-                    temp_frame = swap_face(source_face_obj, target_face, source_frame_full, temp_frame)
-
+        return _process_image_target_v2(source_frame_full, temp_frame)
     elif is_video(modules.globals.target_path):
-        if modules.globals.many_faces:
-            source_face_obj = default_source_face() # This function needs to be checked
-            if source_face_obj:
-                for map_item in modules.globals.source_target_map: # Renamed map to map_item
-                    target_frames_data = [ # Renamed target_frame to target_frames_data
-                        f
-                        for f in map_item["target_faces_in_frame"]
-                        if f["location"] == temp_frame_path
-                    ]
-
-                    for frame_data in target_frames_data: # Renamed frame to frame_data
-                        for target_face in frame_data["faces"]:
-                            temp_frame = swap_face(source_face_obj, target_face, source_frame_full, temp_frame)
-
-        elif not modules.globals.many_faces:
-            for map_item in modules.globals.source_target_map: # Renamed map to map_item
-                if "source" in map_item:
-                    target_frames_data = [ # Renamed target_frame to target_frames_data
-                        f
-                        for f in map_item["target_faces_in_frame"]
-                        if f["location"] == temp_frame_path
-                    ]
-                    source_face_obj = map_item["source"]["face"]
-
-                    for frame_data in target_frames_data: # Renamed frame to frame_data
-                        for target_face in frame_data["faces"]:
-                            temp_frame = swap_face(source_face_obj, target_face, source_frame_full, temp_frame)
-
+        return _process_video_target_v2(source_frame_full, temp_frame, temp_frame_path)
     else: # This is the live cam / generic case
-        detected_faces = get_many_faces(temp_frame)
-        if modules.globals.many_faces:
-            if detected_faces:
-                source_face_obj = default_source_face() # This function needs to be checked
-                if source_face_obj:
-                    for target_face in detected_faces:
-                        temp_frame = swap_face(source_face_obj, target_face, source_frame_full, temp_frame)
-
-        elif not modules.globals.many_faces:
-            if detected_faces:
-                if len(detected_faces) <= len(
-                    modules.globals.simple_map["target_embeddings"]
-                ):
-                    for detected_face in detected_faces:
-                        closest_centroid_index, _ = find_closest_centroid(
-                            modules.globals.simple_map["target_embeddings"],
-                            detected_face.normed_embedding,
-                        )
-                        # Assuming simple_map["source_faces"] are Face objects
-                        # And default_source_face() logic might need to be more complex if source_frame_full is always from a single source_path
-                        source_face_obj_from_map = modules.globals.simple_map["source_faces"][closest_centroid_index]
-                        temp_frame = swap_face(
-                            source_face_obj_from_map, # This is source_face_obj
-                            detected_face,           # This is target_face
-                            source_frame_full,       # This is source_frame_full
-                            temp_frame,
-                        )
-                else:
-                    detected_faces_centroids = []
-                    for face in detected_faces:
-                        detected_faces_centroids.append(face.normed_embedding)
-                    i = 0
-                    for target_embedding in modules.globals.simple_map[
-                        "target_embeddings"
-                    ]:
-                        closest_centroid_index, _ = find_closest_centroid(
-                            detected_faces_centroids, target_embedding
-                        )
-                        source_face_obj_from_map = modules.globals.simple_map["source_faces"][i]
-                        temp_frame = swap_face(
-                            source_face_obj_from_map, # source_face_obj
-                            detected_faces[closest_centroid_index], # target_face
-                            source_frame_full, # source_frame_full
-                            temp_frame,
-                        )
-                        i += 1
-    return temp_frame
+        return _process_live_target_v2(source_frame_full, temp_frame)
 
 
 def process_frames(
@@ -353,30 +384,34 @@ def process_image(source_path: str, target_path: str, output_path: str) -> None:
         logging.error(f"Failed to read target image from {target_path}")
         return
 
+    # Read the original target frame once at the beginning
+    original_target_frame = cv2.imread(target_path)
+    if original_target_frame is None:
+        logging.error(f"Failed to read original target image from {target_path}")
+        return
+
+    result = None  # Initialize result
+
     if not modules.globals.map_faces:
         source_face_obj = get_one_face(source_img) # Use source_img here
         if not source_face_obj:
             logging.error(f"No face detected in source image {source_path}")
             return
-        result = process_frame(source_face_obj, source_img, target_frame)
-        cv2.imwrite(output_path, result)
-    else:
-        # map_faces == True for process_image
-        # process_frame_v2 expects source_frame_full as its first argument.
-        # The output_path is often the same as target_path initially for images.
-        # We read the target_frame (which will be modified)
-        target_frame_for_v2 = cv2.imread(output_path) # Or target_path, depending on desired workflow
-        if target_frame_for_v2 is None:
-            logging.error(f"Failed to read image for process_frame_v2 from {output_path}")
-            return
-
+        result = process_frame(source_face_obj, source_img, original_target_frame)
+    else: # map_faces is True
         if modules.globals.many_faces:
             update_status(
                 "Many faces enabled. Using first source image. Progressing...", NAME
             )
-        # Pass source_img (as source_frame_full) to process_frame_v2
-        result = process_frame_v2(source_img, target_frame_for_v2, target_path) # target_path as temp_frame_path hint
+        # process_frame_v2 takes the original target frame for processing.
+        # target_path is passed as temp_frame_path for consistency with process_frame_v2's signature,
+        # used for map lookups in video context but less critical for single images.
+        result = process_frame_v2(source_img, original_target_frame, target_path)
+
+    if result is not None:
         cv2.imwrite(output_path, result)
+    else:
+        logging.error(f"Processing image {target_path} failed, result was None.")
 
 
 def process_video(source_path: str, temp_frame_paths: List[str]) -> None:
@@ -745,113 +780,3 @@ def apply_color_transfer(source, target):
     source = (source - source_mean) * (target_std / source_std) + target_mean
 
     return cv2.cvtColor(np.clip(source, 0, 255).astype("uint8"), cv2.COLOR_LAB2BGR)
-
-
-def create_face_and_hair_mask(source_face: Face, source_frame: Frame) -> np.ndarray:
-    """
-    Creates a combined mask for the face and hair from the source image.
-    """
-    # 1. Generate the basic face mask (adapted from create_face_mask)
-    face_only_mask = np.zeros(source_frame.shape[:2], dtype=np.uint8)
-    landmarks = source_face.landmark_2d_106
-    if landmarks is not None:
-        landmarks = landmarks.astype(np.int32)
-
-        # Extract facial features (same logic as create_face_mask)
-        right_side_face = landmarks[0:16]
-        left_side_face = landmarks[17:32]
-        # right_eye = landmarks[33:42] # Not directly used for outline
-        right_eye_brow = landmarks[43:51]
-        # left_eye = landmarks[87:96] # Not directly used for outline
-        left_eye_brow = landmarks[97:105]
-
-        # Calculate forehead extension (same logic as create_face_mask)
-        right_eyebrow_top = np.min(right_eye_brow[:, 1])
-        left_eyebrow_top = np.min(left_eye_brow[:, 1])
-        eyebrow_top = min(right_eyebrow_top, left_eyebrow_top)
-
-        face_top = np.min([right_side_face[0, 1], left_side_face[-1, 1]])
-        # Ensure forehead_height is not negative if eyebrows are above the topmost landmark of face sides
-        forehead_height = max(0, face_top - eyebrow_top)
-        extended_forehead_height = int(forehead_height * 5.0)
-
-        forehead_left = right_side_face[0].copy()
-        forehead_right = left_side_face[-1].copy()
-        
-        # Ensure extended forehead points do not go into negative y values
-        forehead_left[1] = max(0, forehead_left[1] - extended_forehead_height)
-        forehead_right[1] = max(0, forehead_right[1] - extended_forehead_height)
-
-        face_outline = np.vstack(
-            [
-                [forehead_left],
-                right_side_face,
-                left_side_face[::-1],
-                [forehead_right],
-            ]
-        )
-
-        # Calculate padding (same logic as create_face_mask)
-        # Ensure face_outline has at least one point before calculating norm
-        if face_outline.shape[0] > 1:
-            padding = int(
-                np.linalg.norm(right_side_face[0] - left_side_face[-1]) * 0.05
-            )
-        else:
-            padding = 5 # Default padding if not enough points
-
-        hull = cv2.convexHull(face_outline)
-        hull_padded = []
-        center = np.mean(face_outline, axis=0).squeeze() # Squeeze to handle potential extra dim
-
-        # Ensure center is a 1D array for subtraction
-        if center.ndim > 1:
-            center = np.mean(center, axis=0)
-
-
-        for point_contour in hull:
-            point = point_contour[0] # cv2.convexHull returns points wrapped in an extra array
-            direction = point - center
-            norm_direction = np.linalg.norm(direction)
-            if norm_direction == 0: # Avoid division by zero if point is the center
-                unit_direction = np.array([0,0])
-            else:
-                unit_direction = direction / norm_direction
-            
-            padded_point = point + unit_direction * padding
-            hull_padded.append(padded_point)
-
-        if hull_padded: # Ensure hull_padded is not empty
-            hull_padded = np.array(hull_padded, dtype=np.int32)
-            cv2.fillConvexPoly(face_only_mask, hull_padded, 255)
-        else: # Fallback if hull_padded is empty (e.g. very few landmarks)
-            cv2.fillConvexPoly(face_only_mask, hull, 255) # Use unpadded hull
-
-
-        # Initial blur for face_only_mask is not strictly in the old one before combining,
-        # but can be applied here or after combining. Let's keep it like original for now.
-        # face_only_mask = cv2.GaussianBlur(face_only_mask, (5, 5), 3) # Original blur from create_face_mask
-
-    # 2. Generate the hair mask
-    # Ensure source_frame is contiguous, as some cv2 functions might require it.
-    source_frame_contiguous = np.ascontiguousarray(source_frame, dtype=np.uint8)
-    hair_mask_on_source = segment_hair(source_frame_contiguous)
-
-    # 3. Combine the masks
-    # Ensure masks are binary and of the same type for bitwise operations
-    _, face_only_mask_binary = cv2.threshold(face_only_mask, 127, 255, cv2.THRESH_BINARY)
-    _, hair_mask_on_source_binary = cv2.threshold(hair_mask_on_source, 127, 255, cv2.THRESH_BINARY)
-    
-    # Ensure shapes match. If not, hair_mask might be different. Resize if necessary.
-    # This should ideally not happen if segment_hair preserves dimensions.
-    if face_only_mask_binary.shape != hair_mask_on_source_binary.shape:
-        hair_mask_on_source_binary = cv2.resize(hair_mask_on_source_binary, 
-                                                (face_only_mask_binary.shape[1], face_only_mask_binary.shape[0]), 
-                                                interpolation=cv2.INTER_NEAREST)
-
-    combined_mask = cv2.bitwise_or(face_only_mask_binary, hair_mask_on_source_binary)
-
-    # 4. Apply Gaussian blur to the combined mask
-    combined_mask = cv2.GaussianBlur(combined_mask, (5, 5), 3)
-
-    return combined_mask
