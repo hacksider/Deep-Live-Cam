@@ -134,12 +134,57 @@ Place these files in the "**models**" folder.
 We highly recommend using a `venv` to avoid issues.
 
 
-For Windows:
-```bash
-python -m venv venv
-venv\Scripts\activate
-pip install -r requirements.txt
-```
+**For Windows:**
+
+It is highly recommended to use Python 3.10 for Windows for best compatibility with all features and dependencies.
+
+**Automated Setup (Recommended):**
+
+1.  **Run the setup script:**
+    Double-click `setup_windows.bat` or run it from your command prompt:
+    ```batch
+    setup_windows.bat
+    ```
+    This script will:
+    *   Check if Python is in your PATH.
+    *   Warn if `ffmpeg` is not found (see "Manual Steps / Notes" below for ffmpeg help).
+    *   Create a virtual environment named `.venv` (consistent with macOS setup).
+    *   Activate the virtual environment for the script's session.
+    *   Upgrade pip.
+    *   Install Python packages from `requirements.txt`.
+    Wait for the script to complete. It will pause at the end; press any key to close the window if you double-clicked it.
+
+2.  **Run the application:**
+    After setup, use the provided `.bat` scripts to run the application. These scripts automatically activate the correct virtual environment:
+    *   `run_windows.bat`: Runs the application with the CPU execution provider by default. This is a good starting point if you don't have a dedicated GPU or are unsure.
+    *   `run-cuda.bat`: Runs with the CUDA (NVIDIA GPU) execution provider. Requires an NVIDIA GPU and CUDA Toolkit installed (see GPU Acceleration section).
+    *   `run-directml.bat`: Runs with the DirectML (AMD/Intel GPU on Windows) execution provider.
+
+    Example: Double-click `run_windows.bat` to launch the UI, or run from a command prompt:
+    ```batch
+    run_windows.bat --source path\to\your_face.jpg --target path\to\video.mp4
+    ```
+
+**Manual Steps / Notes:**
+
+*   **Python:** Ensure Python 3.10 is installed and added to your system's PATH. You can download it from [python.org](https://www.python.org/downloads/).
+*   **ffmpeg:**
+    *   `ffmpeg` is required for video processing. The `setup_windows.bat` script will warn if it's not found in your PATH.
+    *   An easy way to install `ffmpeg` on Windows is to open PowerShell as Administrator and run:
+        ```powershell
+        Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1')); choco install ffmpeg -y
+        ```
+        Alternatively, download from [ffmpeg.org](https://ffmpeg.org/download.html), extract the files, and add the `bin` folder (containing `ffmpeg.exe`) to your system's PATH environment variable. The original README also linked to a [YouTube guide](https://www.youtube.com/watch?v=OlNWCpFdVMA) or `iex (irm ffmpeg.tc.ht)` via PowerShell.
+*   **Visual Studio Runtimes:** If you encounter errors during `pip install` for packages that compile C code (e.g., some scientific computing or image processing libraries), you might need the [Visual Studio Build Tools (or Runtimes)](https://visualstudio.microsoft.com/visual-cpp-build-tools/). Ensure "C++ build tools" (or similar workload) are selected during installation.
+*   **Virtual Environment (Manual Alternative):** If you prefer to set up the virtual environment manually instead of using `setup_windows.bat`:
+    ```batch
+    python -m venv .venv 
+    .venv\Scripts\activate.bat
+    python -m pip install --upgrade pip
+    python -m pip install -r requirements.txt
+    ```
+    (The new automated scripts use `.venv` as the folder name for consistency with the macOS setup).
+
 For Linux:
 ```bash
 # Ensure you use the installed Python 3.10
