@@ -369,14 +369,14 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     status_label.place(relx=0.1, rely=0.9, relwidth=0.8)
 
     donate_label = ctk.CTkLabel(
-        root, text="Deep Live Cam", justify="center", cursor="hand2"
+        root, text="D Live Cam", justify="center", cursor="hand2"
     )
     donate_label.place(relx=0.1, rely=0.95, relwidth=0.8)
     donate_label.configure(
         text_color=ctk.ThemeManager.theme.get("URL").get("text_color")
     )
     donate_label.bind(
-        "<Button>", lambda event: webbrowser.open("https://deeplivecam.net")
+        "<Button>", lambda event: webbrowser.open("https://google.com/")
     )
 
     return root
