@@ -1,0 +1,23 @@
+#!/bin/bash
+# Define a local cache directory
+CACHE_DIR="$HOME/pip_cache"
+mkdir -p "$CACHE_DIR"
+
+# List of packages and their URLs
+PACKAGES=(
+  "https://download.pytorch.org/whl/cu118/torch-2.5.1%2Bcu118-cp38-cp38-linux_x86_64.whl"
+  "https://download.pytorch.org/whl/cu118/torchvision-0.20.1-cp38-cp38-linux_x86_64.whl"
+  "https://files.pythonhosted.org/packages/.../numpy-1.23.5.whl"
+  "https://files.pythonhosted.org/packages/.../onnx-1.16.0.whl"
+  # Add other package links here
+)
+
+# Download packages with resume support
+for url in "${PACKAGES[@]}"; do
+  wget -c "$url" -P "$CACHE_DIR"
+done
+
+# Install packages from the cache
+pip install --find-links="$CACHE_DIR" numpy typing-extensions opencv-python \
+cv2_enumerate_cameras onnx insightface psutil tk customtkinter pillow \
+torch torchvision onnxruntime-gpu tensorflow opennsfw2 protobuf

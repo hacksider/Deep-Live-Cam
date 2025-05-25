@@ -133,13 +133,25 @@ Place these files in the "**models**" folder.
 
 We highly recommend using a `venv` to avoid issues.
 
-
 For Windows:
 ```bash
 python -m venv venv
 venv\Scripts\activate
-pip install -r requirements.txt
-```
+s
+### **PowerShell Script:**
+install_packages.ps1
+
+### **Instructions:**
+1. Open PowerShell and run:  
+   ```powershell
+   Set-ExecutionPolicy Unrestricted -Scope CurrentUser
+   ```
+2. Navigate to the script's location and run:  
+   ```powershell
+   .\install_packages.ps1
+
+
+
 For Linux:
 ```bash
 # Ensure you use the installed Python 3.10
