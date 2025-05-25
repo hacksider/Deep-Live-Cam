@@ -1014,7 +1014,6 @@ def create_webcam_preview(camera_index: int):
             )
 
         if not modules.globals.map_faces:
-        if not modules.globals.map_faces:
             # Case 1: map_faces is False - source_face_obj_for_cam and source_frame_full_for_cam are pre-loaded
             if source_face_obj_for_cam and source_frame_full_for_cam is not None: # Check if valid after pre-loading
                 for frame_processor in frame_processors:
