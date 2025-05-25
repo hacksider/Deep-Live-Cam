@@ -1,4 +1,4 @@
-from typing import Any, List
+from typing import Any, List, Optional, Tuple
 import cv2
 import insightface
 import threading
@@ -72,8 +72,8 @@ def _prepare_warped_source_material_and_mask(
     source_face_obj: Face, 
     source_frame_full: Frame, 
     matrix: np.ndarray, 
-    dsize: tuple
-) -> tuple[Frame | None, Frame | None]:
+    dsize: tuple # Built-in tuple is fine here for parameter type
+) -> Tuple[Optional[Frame], Optional[Frame]]:
     """
     Prepares warped source material (full image) and a combined (face+hair) mask for blending.
     Returns (None, None) if essential masks cannot be generated.
