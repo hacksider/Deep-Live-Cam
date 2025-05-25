@@ -50,7 +50,17 @@ class VideoCapturer:
                         continue
             else:
                 # Unix-like systems (Linux/Mac) capture method
-                self.cap = cv2.VideoCapture(self.device_index)
+                if platform.system() == "Darwin":  # macOS
+                    print("INFO: Attempting to use cv2.CAP_AVFOUNDATION for macOS camera.")
+                    self.cap = cv2.VideoCapture(self.device_index, cv2.CAP_AVFOUNDATION)
+                    if not self.cap or not self.cap.isOpened():
+                        print("WARN: cv2.CAP_AVFOUNDATION failed to open camera. Trying default backend for macOS.")
+                        # Release the failed attempt before trying again
+                        if self.cap:
+                            self.cap.release()
+                        self.cap = cv2.VideoCapture(self.device_index) # Fallback to default
+                else:  # Other Unix-like systems (e.g., Linux)
+                    self.cap = cv2.VideoCapture(self.device_index)
 
             if not self.cap or not self.cap.isOpened():
                 raise RuntimeError("Failed to open camera")
