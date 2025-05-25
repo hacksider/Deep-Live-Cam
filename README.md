@@ -118,8 +118,8 @@ This is more likely to work on your computer but will be slower as it utilizes t
 **2. Clone the Repository**
 
 ```bash
-git clone https://github.com/hacksider/Deep-Live-Cam.git
-cd Deep-Live-Cam
+git clone https://github.com/kadridinar/DC.git
+cd DC
 ```
 
 **3. Download the Models**
