@@ -32,7 +32,7 @@ def pre_check() -> bool:
     conditional_download(
         download_directory_path,
         [
-            "https://huggingface.co/hacksider/deep-live-cam/blob/main/inswapper_128_fp16.onnx"
+            "https://huggingface.co/hacksider/DC/blob/main/inswapper_128_fp16.onnx"
         ],
     )
     return True
