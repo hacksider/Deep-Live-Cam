@@ -289,6 +289,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     show_fps_switch.place(relx=0.6, rely=0.75)
 
     # Hair Swapping Switch (placed below "Show FPS" on the right column)
+    segmentation_model_available = getattr(modules.globals, "segmentation_model_available", True)
     hair_swapping_value = ctk.BooleanVar(value=modules.globals.enable_hair_swapping)
     hair_swapping_switch = ctk.CTkSwitch(
         root,
@@ -298,9 +299,10 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         command=lambda: (
             setattr(modules.globals, "enable_hair_swapping", hair_swapping_value.get()),
             save_switch_states(),
-        )
+        ),
+        state="normal" if segmentation_model_available else "disabled"
     )
-    hair_swapping_switch.place(relx=0.6, rely=0.80) # Adjusted rely from 0.75 to 0.80
+    hair_swapping_switch.place(relx=0.6, rely=0.80)
 
     mouth_mask_var = ctk.BooleanVar(value=modules.globals.mouth_mask)
     mouth_mask_switch = ctk.CTkSwitch(
@@ -911,74 +913,82 @@ def create_webcam_preview(camera_index: int):
             update_status("Error: No source image selected for webcam mode.")
             cap.release()
             PREVIEW.withdraw()
-            while PREVIEW.state() != "withdrawn" and ROOT.winfo_exists():
-                ROOT.update_idletasks()
-                ROOT.update()
-                time.sleep(0.05)
+            def wait_for_withdraw():
+                if PREVIEW.state() != "withdrawn" and ROOT.winfo_exists():
+                    ROOT.update_idletasks()
+                    ROOT.update()
+                    PREVIEW.after(50, wait_for_withdraw)
+            wait_for_withdraw()
             return
         if not os.path.exists(modules.globals.source_path):
             update_status(f"Error: Source image not found at {modules.globals.source_path}")
             cap.release()
             PREVIEW.withdraw()
-            while PREVIEW.state() != "withdrawn" and ROOT.winfo_exists():
-                ROOT.update_idletasks()
-                ROOT.update()
-                time.sleep(0.05)
+            def wait_for_withdraw():
+                if PREVIEW.state() != "withdrawn" and ROOT.winfo_exists():
+                    ROOT.update_idletasks()
+                    ROOT.update()
+                    PREVIEW.after(50, wait_for_withdraw)
+            wait_for_withdraw()
             return
-        
         source_frame_full_for_cam = cv2.imread(modules.globals.source_path)
         if source_frame_full_for_cam is None:
             update_status(f"Error: Could not read source image at {modules.globals.source_path}")
             cap.release()
             PREVIEW.withdraw()
-            while PREVIEW.state() != "withdrawn" and ROOT.winfo_exists():
-                ROOT.update_idletasks()
-                ROOT.update()
-                time.sleep(0.05)
+            def wait_for_withdraw():
+                if PREVIEW.state() != "withdrawn" and ROOT.winfo_exists():
+                    ROOT.update_idletasks()
+                    ROOT.update()
+                    PREVIEW.after(50, wait_for_withdraw)
+            wait_for_withdraw()
             return
-
         source_face_obj_for_cam = get_one_face(source_frame_full_for_cam)
         if source_face_obj_for_cam is None:
             update_status(f"Error: No face detected in source image {modules.globals.source_path}")
-            # This error is less critical for stopping immediately, but we'll make it persistent too.
-            # The loop below will run, but processing for frames will effectively be skipped.
-            # For consistency in error handling, make it persistent.
             cap.release()
             PREVIEW.withdraw()
-            while PREVIEW.state() != "withdrawn" and ROOT.winfo_exists():
-                ROOT.update_idletasks()
-                ROOT.update()
-                time.sleep(0.05)
+            def wait_for_withdraw():
+                if PREVIEW.state() != "withdrawn" and ROOT.winfo_exists():
+                    ROOT.update_idletasks()
+                    ROOT.update()
+                    PREVIEW.after(50, wait_for_withdraw)
+            wait_for_withdraw()
             return
     else: # modules.globals.map_faces is True
         if not modules.globals.source_path:
             update_status("Error: No global source image selected (for hair/background in map_faces mode).")
             cap.release()
             PREVIEW.withdraw()
-            while PREVIEW.state() != "withdrawn" and ROOT.winfo_exists():
-                ROOT.update_idletasks()
-                ROOT.update()
-                time.sleep(0.05)
+            def wait_for_withdraw():
+                if PREVIEW.state() != "withdrawn" and ROOT.winfo_exists():
+                    ROOT.update_idletasks()
+                    ROOT.update()
+                    PREVIEW.after(50, wait_for_withdraw)
+            wait_for_withdraw()
             return
         if not os.path.exists(modules.globals.source_path):
             update_status(f"Error: Source image (for hair/background) not found at {modules.globals.source_path}")
             cap.release()
             PREVIEW.withdraw()
-            while PREVIEW.state() != "withdrawn" and ROOT.winfo_exists():
-                ROOT.update_idletasks()
-                ROOT.update()
-                time.sleep(0.05)
+            def wait_for_withdraw():
+                if PREVIEW.state() != "withdrawn" and ROOT.winfo_exists():
+                    ROOT.update_idletasks()
+                    ROOT.update()
+                    PREVIEW.after(50, wait_for_withdraw)
+            wait_for_withdraw()
             return
-
         source_frame_full_for_cam_map_faces = cv2.imread(modules.globals.source_path)
         if source_frame_full_for_cam_map_faces is None:
             update_status(f"Error: Could not read source image (for hair/background) at {modules.globals.source_path}")
             cap.release()
             PREVIEW.withdraw()
-            while PREVIEW.state() != "withdrawn" and ROOT.winfo_exists():
-                ROOT.update_idletasks()
-                ROOT.update()
-                time.sleep(0.05)
+            def wait_for_withdraw():
+                if PREVIEW.state() != "withdrawn" and ROOT.winfo_exists():
+                    ROOT.update_idletasks()
+                    ROOT.update()
+                    PREVIEW.after(50, wait_for_withdraw)
+            wait_for_withdraw()
             return
         
         if not modules.globals.source_target_map and not modules.globals.simple_map:

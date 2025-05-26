@@ -9,12 +9,14 @@ HAIR_SEGMENTER_PROCESSOR = None
 HAIR_SEGMENTER_MODEL = None
 MODEL_NAME = "isjackwild/segformer-b0-finetuned-segments-skin-hair-clothing"
 
-def segment_hair(image_np: np.ndarray) -> np.ndarray:
+def segment_hair(image_np: np.ndarray, device: str = "cpu", hair_label_index: int = None) -> np.ndarray:
     """
     Segments hair from an image.
 
     Args:
         image_np: NumPy array representing the image (BGR format from OpenCV).
+        device: Device to run the model on ("cpu" or "cuda").
+        hair_label_index: Optional; index of the hair label in the segmentation map. If not provided, will use model config or default to 2.
 
     Returns:
         NumPy array representing the binary hair mask.
@@ -26,48 +28,38 @@ def segment_hair(image_np: np.ndarray) -> np.ndarray:
         try:
             HAIR_SEGMENTER_PROCESSOR = SegformerImageProcessor.from_pretrained(MODEL_NAME)
             HAIR_SEGMENTER_MODEL = SegformerForSemanticSegmentation.from_pretrained(MODEL_NAME)
-            # Optional: Move model to GPU if available and if other models use GPU
-            # if torch.cuda.is_available():
-            #     HAIR_SEGMENTER_MODEL = HAIR_SEGMENTER_MODEL.to('cuda')
-            #     print("Hair segmentation model moved to GPU.")
-            print("Hair segmentation model and processor loaded successfully.")
+            HAIR_SEGMENTER_MODEL = HAIR_SEGMENTER_MODEL.to(device)
+            print(f"Hair segmentation model and processor loaded successfully. Model moved to device: {device}")
         except Exception as e:
             print(f"Failed to load hair segmentation model/processor: {e}")
-            # Return an empty mask compatible with expected output shape (H, W)
             return np.zeros((image_np.shape[0], image_np.shape[1]), dtype=np.uint8)
 
-    # Ensure processor and model are loaded before proceeding
     if HAIR_SEGMENTER_PROCESSOR is None or HAIR_SEGMENTER_MODEL is None:
         print("Error: Hair segmentation models are not available.")
         return np.zeros((image_np.shape[0], image_np.shape[1]), dtype=np.uint8)
 
-    # Convert BGR (OpenCV) to RGB (PIL)
     image_rgb = cv2.cvtColor(image_np, cv2.COLOR_BGR2RGB)
     image_pil = Image.fromarray(image_rgb)
 
     inputs = HAIR_SEGMENTER_PROCESSOR(images=image_pil, return_tensors="pt")
-    
-    # Optional: Move inputs to GPU if model is on GPU
-    # if HAIR_SEGMENTER_MODEL.device.type == 'cuda':
-    #     inputs = inputs.to(HAIR_SEGMENTER_MODEL.device)
+    if device == "cuda" and hasattr(HAIR_SEGMENTER_MODEL, "device") and HAIR_SEGMENTER_MODEL.device.type == "cuda":
+        inputs = {k: v.to("cuda") for k, v in inputs.items()}
 
-    with torch.no_grad(): # Important for inference
+    with torch.no_grad():
         outputs = HAIR_SEGMENTER_MODEL(**inputs)
-    
-    logits = outputs.logits  # Shape: batch_size, num_labels, height, width
 
-    # Upsample logits to original image size
+    logits = outputs.logits
     upsampled_logits = torch.nn.functional.interpolate(
         logits,
-        size=(image_np.shape[0], image_np.shape[1]), # H, W
+        size=(image_np.shape[0], image_np.shape[1]),
         mode='bilinear',
         align_corners=False
     )
-
     segmentation_map = upsampled_logits.argmax(dim=1).squeeze().cpu().numpy().astype(np.uint8)
 
-    # Label 2 is for hair in this model
-    return np.where(segmentation_map == 2, 255, 0).astype(np.uint8)
+    if hair_label_index is None:
+        hair_label_index = getattr(HAIR_SEGMENTER_MODEL, "hair_label_index", 2)
+    return np.where(segmentation_map == hair_label_index, 255, 0).astype(np.uint8)
 
 if __name__ == '__main__':
     # This is a conceptual test.

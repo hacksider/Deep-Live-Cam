@@ -162,67 +162,44 @@ def swap_face(source_face_obj: Face, target_face: Face, source_frame_full: Frame
     swapped_frame = face_swapper.get(temp_frame, target_face, source_face_obj, paste_back=True)
     final_swapped_frame = swapped_frame
 
-    if modules.globals.enable_hair_swapping:
-        if not (source_face_obj.kps is not None and \
-                target_face.kps is not None and \
-                source_face_obj.kps.shape[0] >= 3 and \
-                target_face.kps.shape[0] >= 3):
+    def do_hair_blending():
+        if not (source_face_obj.kps is not None and target_face.kps is not None and source_face_obj.kps.shape[0] >= 3 and target_face.kps.shape[0] >= 3):
             logging.warning(
                 f"Skipping hair blending due to insufficient keypoints. "
                 f"Source kps: {source_face_obj.kps.shape if source_face_obj.kps is not None else 'None'}, "
                 f"Target kps: {target_face.kps.shape if target_face.kps is not None else 'None'}."
             )
-        else:
-            source_kps_float = source_face_obj.kps.astype(np.float32)
-            target_kps_float = target_face.kps.astype(np.float32)
-            matrix, _ = cv2.estimateAffinePartial2D(source_kps_float, target_kps_float, method=cv2.LMEDS)
+            return swapped_frame
+        source_kps_float = source_face_obj.kps.astype(np.float32)
+        target_kps_float = target_face.kps.astype(np.float32)
+        matrix, _ = cv2.estimateAffinePartial2D(source_kps_float, target_kps_float, method=cv2.LMEDS)
+        if matrix is None:
+            logging.warning("Failed to estimate affine transformation matrix for hair. Skipping hair blending.")
+            return swapped_frame
+        dsize = (temp_frame.shape[1], temp_frame.shape[0])
+        warped_material, warped_mask = _prepare_warped_source_material_and_mask(
+            source_face_obj, source_frame_full, matrix, dsize
+        )
+        if warped_material is not None and warped_mask is not None:
+            out = swapped_frame.copy()
+            color_corrected_material = apply_color_transfer(warped_material, out)
+            return _blend_material_onto_frame(out, color_corrected_material, warped_mask)
+        return swapped_frame
 
-            if matrix is None:
-                logging.warning("Failed to estimate affine transformation matrix for hair. Skipping hair blending.")
-            else:
-                dsize = (temp_frame.shape[1], temp_frame.shape[0]) # width, height
-                
-                warped_material, warped_mask = _prepare_warped_source_material_and_mask(
-                    source_face_obj, source_frame_full, matrix, dsize
-                )
-
-                if warped_material is not None and warped_mask is not None:
-                    # Make a copy only now that we are sure we will modify it for hair.
-                    final_swapped_frame = swapped_frame.copy() 
-                    
-                    color_corrected_material = apply_color_transfer(warped_material, final_swapped_frame) # Use final_swapped_frame for color context
-                    
-                    final_swapped_frame = _blend_material_onto_frame(
-                        final_swapped_frame, 
-                        color_corrected_material, 
-                        warped_mask
-                    )
-    
-    # Mouth Mask Logic (operates on final_swapped_frame)
-    if modules.globals.mouth_mask:
-        # If final_swapped_frame wasn't copied for hair, it needs to be copied now before mouth mask modification.
-        if final_swapped_frame is swapped_frame: # Check if it's still the same object
-            final_swapped_frame = swapped_frame.copy()
-
-        # Create a mask for the target face
+    def do_mouth_mask(frame):
+        out = frame.copy() if frame is swapped_frame else frame
         face_mask = create_face_mask(target_face, temp_frame)
-
-        # Create the mouth mask
-        mouth_mask, mouth_cutout, mouth_box, lower_lip_polygon = (
-            create_lower_mouth_mask(target_face, temp_frame)
-        )
-
-        # Apply the mouth area
-        # Apply to final_swapped_frame if hair blending happened, otherwise to swapped_frame
-        final_swapped_frame = apply_mouth_area(
-            final_swapped_frame, mouth_cutout, mouth_box, face_mask, lower_lip_polygon
-        )
-
+        mouth_mask, mouth_cutout, mouth_box, lower_lip_polygon = create_lower_mouth_mask(target_face, temp_frame)
+        out = apply_mouth_area(out, mouth_cutout, mouth_box, face_mask, lower_lip_polygon)
         if modules.globals.show_mouth_mask_box:
             mouth_mask_data = (mouth_mask, mouth_cutout, mouth_box, lower_lip_polygon)
-            final_swapped_frame = draw_mouth_mask_visualization(
-                final_swapped_frame, target_face, mouth_mask_data
-            )
+            out = draw_mouth_mask_visualization(out, target_face, mouth_mask_data)
+        return out
+
+    if modules.globals.enable_hair_swapping:
+        final_swapped_frame = do_hair_blending()
+    if modules.globals.mouth_mask:
+        final_swapped_frame = do_mouth_mask(final_swapped_frame)
 
     if PROFILE_FACE_SWAP:
         elapsed = time.time() - start_time
@@ -293,10 +270,14 @@ def _process_live_target_v2(source_frame_full: Frame, temp_frame: Frame) -> Fram
         return temp_frame
 
     if modules.globals.many_faces:
-        source_face_obj = default_source_face()
-        if source_face_obj:
+        if source_face_obj := default_source_face():
+            swapped_faces = set()
             for target_face in detected_faces:
+                face_id = id(target_face)
+                if face_id in swapped_faces:
+                    continue
                 temp_frame = swap_face(source_face_obj, target_face, source_frame_full, temp_frame)
+                swapped_faces.add(face_id)
     else: # not many_faces (apply simple_map logic)
         if not modules.globals.simple_map or \
            not modules.globals.simple_map.get("target_embeddings") or \

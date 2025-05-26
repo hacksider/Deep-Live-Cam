@@ -50,17 +50,48 @@ class VideoCapturer:
                         continue
             else:
                 # Unix-like systems (Linux/Mac) capture method
+                backend = getattr(self, "camera_backend", None)
+                if backend is None:
+                    import os
+                    backend_env = os.environ.get("VIDEO_CAPTURE_BACKEND")
+                    if backend_env is not None:
+                        try:
+                            backend = int(backend_env)
+                        except ValueError:
+                            backend = getattr(cv2, backend_env, None)
                 if platform.system() == "Darwin":  # macOS
-                    print("INFO: Attempting to use cv2.CAP_AVFOUNDATION for macOS camera.")
-                    self.cap = cv2.VideoCapture(self.device_index, cv2.CAP_AVFOUNDATION)
+                    tried_backends = []
+                    if backend is not None:
+                        print(f"INFO: Attempting to use user-specified backend {backend} for macOS camera.")
+                        self.cap = cv2.VideoCapture(self.device_index, backend)
+                        tried_backends.append(backend)
+                    else:
+                        print("INFO: Attempting to use cv2.CAP_AVFOUNDATION for macOS camera.")
+                        self.cap = cv2.VideoCapture(self.device_index, cv2.CAP_AVFOUNDATION)
+                        tried_backends.append(cv2.CAP_AVFOUNDATION)
                     if not self.cap or not self.cap.isOpened():
-                        print("WARN: cv2.CAP_AVFOUNDATION failed to open camera. Trying default backend for macOS.")
-                        # Release the failed attempt before trying again
+                        print("WARN: First backend failed to open camera. Trying cv2.CAP_QT for macOS.")
+                        if self.cap:
+                            self.cap.release()
+                        if cv2.CAP_QT not in tried_backends:
+                            self.cap = cv2.VideoCapture(self.device_index, cv2.CAP_QT)
+                            tried_backends.append(cv2.CAP_QT)
+                    if not self.cap or not self.cap.isOpened():
+                        print("WARN: cv2.CAP_QT failed to open camera. Trying default backend for macOS.")
                         if self.cap:
                             self.cap.release()
                         self.cap = cv2.VideoCapture(self.device_index) # Fallback to default
                 else:  # Other Unix-like systems (e.g., Linux)
-                    self.cap = cv2.VideoCapture(self.device_index)
+                    if backend is not None:
+                        print(f"INFO: Attempting to use user-specified backend {backend} for camera.")
+                        self.cap = cv2.VideoCapture(self.device_index, backend)
+                        if not self.cap or not self.cap.isOpened():
+                            print("WARN: User-specified backend failed. Trying default backend.")
+                            if self.cap:
+                                self.cap.release()
+                            self.cap = cv2.VideoCapture(self.device_index)
+                    else:
+                        self.cap = cv2.VideoCapture(self.device_index)
 
             if not self.cap or not self.cap.isOpened():
                 raise RuntimeError("Failed to open camera")
