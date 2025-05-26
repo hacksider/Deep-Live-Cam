@@ -18,6 +18,12 @@ from modules.utilities import (
 from modules.cluster_analysis import find_closest_centroid
 import os
 
+# --- CONFIGURABLE PARAMETERS FOR PERFORMANCE & BLENDING ---
+BLEND_MASK_BLUR_KERNEL = (9, 9)  # Larger kernel for smoother mask edges
+BLEND_MASK_BLUR_SIGMA = 5        # Higher sigma for more feathering
+SEAMLESS_CLONE_MODE = cv2.NORMAL_CLONE  # Try cv2.MIXED_CLONE for different effect
+PROFILE_FACE_SWAP = True         # Set to True to enable timing logs
+
 FACE_SWAPPER = None
 THREAD_LOCK = threading.Lock()
 NAME = "DLC.FACE-SWAPPER"
@@ -62,8 +68,14 @@ def get_face_swapper() -> Any:
     with THREAD_LOCK:
         if FACE_SWAPPER is None:
             model_path = os.path.join(models_dir, "inswapper_128_fp16.onnx")
+            # Prefer GPU if available
+            providers = modules.globals.execution_providers
+            if 'CUDAExecutionProvider' in providers:
+                chosen_providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
+            else:
+                chosen_providers = providers
             FACE_SWAPPER = insightface.model_zoo.get_model(
-                model_path, providers=modules.globals.execution_providers
+                model_path, providers=chosen_providers
             )
     return FACE_SWAPPER
 
@@ -118,20 +130,18 @@ def _blend_material_onto_frame(
     Uses seamlessClone if possible, otherwise falls back to simple masking.
     """
     x, y, w, h = cv2.boundingRect(mask_for_blending)
-    output_frame = base_frame # Start with base, will be modified by blending
+    output_frame = base_frame
 
     if w > 0 and h > 0:
         center = (x + w // 2, y + h // 2)
-        
         if material_to_blend.shape == base_frame.shape and \
            material_to_blend.dtype == base_frame.dtype and \
            mask_for_blending.dtype == np.uint8:
             try:
-                # Important: seamlessClone modifies the first argument (dst) if it's the same as the output var
-                # So, if base_frame is final_swapped_frame, it will be modified in place.
-                # If we want to keep base_frame pristine, it should be base_frame.copy() if it's also final_swapped_frame.
-                # Given final_swapped_frame is already a copy of swapped_frame at this point, this is fine.
-                output_frame = cv2.seamlessClone(material_to_blend, base_frame, mask_for_blending, center, cv2.NORMAL_CLONE)
+                # Use configurable blur for mask
+                blurred_mask = cv2.GaussianBlur(mask_for_blending, BLEND_MASK_BLUR_KERNEL, BLEND_MASK_BLUR_SIGMA)
+                _, mask_bin = cv2.threshold(blurred_mask, 127, 255, cv2.THRESH_BINARY)
+                output_frame = cv2.seamlessClone(material_to_blend, base_frame, mask_bin, center, SEAMLESS_CLONE_MODE)
             except cv2.error as e:
                 logging.warning(f"cv2.seamlessClone failed: {e}. Falling back to simple blending.")
                 boolean_mask = mask_for_blending > 127 
@@ -142,16 +152,15 @@ def _blend_material_onto_frame(
             output_frame[boolean_mask] = material_to_blend[boolean_mask]
     else:
         logging.info("Warped mask for blending is empty. Skipping blending.")
-    
     return output_frame
 
 
 def swap_face(source_face_obj: Face, target_face: Face, source_frame_full: Frame, temp_frame: Frame) -> Frame:
+    import time
     face_swapper = get_face_swapper()
-
-    # Apply the base face swap
+    start_time = time.time() if PROFILE_FACE_SWAP else None
     swapped_frame = face_swapper.get(temp_frame, target_face, source_face_obj, paste_back=True)
-    final_swapped_frame = swapped_frame # Initialize with the base swap. Copy is made only if needed.
+    final_swapped_frame = swapped_frame
 
     if modules.globals.enable_hair_swapping:
         if not (source_face_obj.kps is not None and \
@@ -215,6 +224,9 @@ def swap_face(source_face_obj: Face, target_face: Face, source_frame_full: Frame
                 final_swapped_frame, target_face, mouth_mask_data
             )
 
+    if PROFILE_FACE_SWAP:
+        elapsed = time.time() - start_time
+        logging.info(f"Face swap+blend time: {elapsed:.3f}s")
     return final_swapped_frame
 
 
