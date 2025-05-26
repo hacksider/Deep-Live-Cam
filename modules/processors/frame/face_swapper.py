@@ -28,6 +28,10 @@ FACE_SWAPPER = None
 THREAD_LOCK = threading.Lock()
 NAME = "DLC.FACE-SWAPPER"
 
+# Add a face similarity threshold (90%) for live webcam swaps.
+# Only swap if the cosine similarity between source and detected face is above threshold.
+FACE_SIMILARITY_THRESHOLD = 0.90  # Only swap if similarity > 90%
+
 abs_dir = os.path.dirname(os.path.abspath(__file__))
 models_dir = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(abs_dir))), "models"
@@ -276,6 +280,11 @@ def _process_live_target_v2(source_frame_full: Frame, temp_frame: Frame) -> Fram
                 face_id = id(target_face)
                 if face_id in swapped_faces:
                     continue
+                # Similarity check for many_faces mode
+                if hasattr(source_face_obj, 'normed_embedding') and hasattr(target_face, 'normed_embedding'):
+                    similarity = float(np.dot(source_face_obj.normed_embedding, target_face.normed_embedding))
+                    if similarity < FACE_SIMILARITY_THRESHOLD:
+                        continue  # Skip if not similar enough
                 temp_frame = swap_face(source_face_obj, target_face, source_frame_full, temp_frame)
                 swapped_faces.add(face_id)
     else: # not many_faces (apply simple_map logic)
@@ -293,6 +302,11 @@ def _process_live_target_v2(source_frame_full: Frame, temp_frame: Frame) -> Fram
                 closest_centroid_index, _ = find_closest_centroid(target_embeddings, detected_face.normed_embedding)
                 if closest_centroid_index < len(source_faces_from_map):
                     source_face_obj_from_map = source_faces_from_map[closest_centroid_index]
+                    # Similarity check for mapped faces
+                    if hasattr(source_face_obj_from_map, 'normed_embedding') and hasattr(detected_face, 'normed_embedding'):
+                        similarity = float(np.dot(source_face_obj_from_map.normed_embedding, detected_face.normed_embedding))
+                        if similarity < FACE_SIMILARITY_THRESHOLD:
+                            continue  # Skip if not similar enough
                     temp_frame = swap_face(source_face_obj_from_map, detected_face, source_frame_full, temp_frame)
                 else:
                     logging.warning(f"Centroid index {closest_centroid_index} out of bounds for source_faces_from_map.")
@@ -303,6 +317,11 @@ def _process_live_target_v2(source_frame_full: Frame, temp_frame: Frame) -> Fram
                     closest_detected_face_index, _ = find_closest_centroid(detected_faces_embeddings, target_embedding)
                     source_face_obj_from_map = source_faces_from_map[i]
                     target_face_to_swap = detected_faces[closest_detected_face_index]
+                    # Similarity check for mapped faces
+                    if hasattr(source_face_obj_from_map, 'normed_embedding') and hasattr(target_face_to_swap, 'normed_embedding'):
+                        similarity = float(np.dot(source_face_obj_from_map.normed_embedding, target_face_to_swap.normed_embedding))
+                        if similarity < FACE_SIMILARITY_THRESHOLD:
+                            continue  # Skip if not similar enough
                     temp_frame = swap_face(source_face_obj_from_map, target_face_to_swap, source_frame_full, temp_frame)
                     # Optionally, remove the swapped detected face to prevent re-swapping if one source maps to multiple targets.
                     # This depends on desired behavior. For now, simple independent mapping.
