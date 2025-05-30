@@ -1,0 +1,4 @@
+.git
+models
+*.pth
+*.onnx
