@@ -188,7 +188,10 @@ pip install -r requirements.txt
 **CUDA Execution Provider (Nvidia)**
 
 1. Install [CUDA Toolkit 11.8.0](https://developer.nvidia.com/cuda-11-8-0-download-archive)
-2. Install dependencies:
+2. Install [cuDNN v8.9.7 for CUDA 11.x](https://developer.nvidia.com/rdp/cudnn-archive) (required for onnxruntime-gpu):
+   - Download cuDNN v8.9.7 for CUDA 11.x
+   - Make sure the cuDNN bin directory is in your system PATH
+3. Install dependencies:
 
 ```bash
 pip uninstall onnxruntime onnxruntime-gpu
