@@ -15,8 +15,9 @@ if errorlevel 1 (
 :: Optional: Check Python version (e.g., >= 3.9 or >=3.10).
 :: This is a bit more complex in pure batch. For now, rely on user having a modern Python 3.
 :: The README will recommend 3.10.
-echo Found Python:
-python --version
+:: If we reach here, Python is found.
+echo Python was found. Attempting to display version:
+for /f "delims=" %%i in ('python --version 2^>^&1') do echo %%i
 
 :: 2. Check for ffmpeg (informational)
 echo Checking for ffmpeg...

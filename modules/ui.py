@@ -900,7 +900,7 @@ def create_webcam_preview(camera_index: int):
     PREVIEW.deiconify()
 
     frame_processors = get_frame_processors_modules(modules.globals.frame_processors)
-    
+
     # --- Source Image Loading and Validation (Moved before the loop) ---
     source_face_obj_for_cam = None
     source_frame_full_for_cam = None
@@ -925,7 +925,7 @@ def create_webcam_preview(camera_index: int):
                 ROOT.update()
                 time.sleep(0.05)
             return
-        
+
         source_frame_full_for_cam = cv2.imread(modules.globals.source_path)
         if source_frame_full_for_cam is None:
             update_status(f"Error: Could not read source image at {modules.globals.source_path}")
@@ -980,7 +980,7 @@ def create_webcam_preview(camera_index: int):
                 ROOT.update()
                 time.sleep(0.05)
             return
-        
+
         if not modules.globals.source_target_map and not modules.globals.simple_map:
             update_status("Warning: No face map defined for map_faces mode. Swapper may not work as expected.")
             # This is a warning, not a fatal error for the preview window itself. Processing will continue.
@@ -1015,11 +1015,11 @@ def create_webcam_preview(camera_index: int):
 
         if not modules.globals.map_faces:
             # Case 1: map_faces is False - source_face_obj_for_cam and source_frame_full_for_cam are pre-loaded
-            if source_face_obj_for_cam and source_frame_full_for_cam is not None: # Check if valid after pre-loading
+            if source_face_obj_for_cam is not None and source_frame_full_for_cam is not None: # Check if valid after pre-loading
                 for frame_processor in frame_processors:
                     if frame_processor.NAME == "DLC.FACE-ENHANCER":
                         if modules.globals.fp_ui["face_enhancer"]:
-                            temp_frame = frame_processor.process_frame(None, temp_frame) 
+                            temp_frame = frame_processor.process_frame(None, temp_frame)
                     else:
                         temp_frame = frame_processor.process_frame(source_face_obj_for_cam, source_frame_full_for_cam, temp_frame)
             # If source image was invalid (e.g. no face), source_face_obj_for_cam might be None.
@@ -1032,8 +1032,10 @@ def create_webcam_preview(camera_index: int):
                 for frame_processor in frame_processors:
                     if frame_processor.NAME == "DLC.FACE-ENHANCER":
                         if modules.globals.fp_ui["face_enhancer"]:
-                            temp_frame = frame_processor.process_frame_v2(source_frame_full_for_cam_map_faces, temp_frame)
+                            # Corrected: face_enhancer.process_frame_v2 is expected to take only temp_frame
+                            temp_frame = frame_processor.process_frame_v2(temp_frame)
                     else:
+                        # This is for other processors when map_faces is True
                         temp_frame = frame_processor.process_frame_v2(source_frame_full_for_cam_map_faces, temp_frame)
             # If source_frame_full_for_cam_map_faces was invalid, error is persistent from pre-loop check.
 

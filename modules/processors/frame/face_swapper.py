@@ -69,34 +69,70 @@ def get_face_swapper() -> Any:
 
 
 def _prepare_warped_source_material_and_mask(
-    source_face_obj: Face, 
-    source_frame_full: Frame, 
-    matrix: np.ndarray, 
+    source_face_obj: Face,
+    source_frame_full: Frame,
+    matrix: np.ndarray,
     dsize: tuple # Built-in tuple is fine here for parameter type
 ) -> Tuple[Optional[Frame], Optional[Frame]]:
     """
     Prepares warped source material (full image) and a combined (face+hair) mask for blending.
     Returns (None, None) if essential masks cannot be generated.
     """
-    # Generate Hair Mask
-    hair_only_mask_source_raw = segment_hair(source_frame_full)
-    if hair_only_mask_source_raw.ndim == 3 and hair_only_mask_source_raw.shape[2] == 3:
-        hair_only_mask_source_raw = cv2.cvtColor(hair_only_mask_source_raw, cv2.COLOR_BGR2GRAY)
-    _, hair_only_mask_source_binary = cv2.threshold(hair_only_mask_source_raw, 127, 255, cv2.THRESH_BINARY)
+    try:
+        # Generate Hair Mask
+        hair_only_mask_source_raw = segment_hair(source_frame_full)
+        if hair_only_mask_source_raw is None:
+            logging.error("segment_hair returned None, which is unexpected.")
+            return None, None
+        if hair_only_mask_source_raw.ndim == 3 and hair_only_mask_source_raw.shape[2] == 3:
+            hair_only_mask_source_raw = cv2.cvtColor(hair_only_mask_source_raw, cv2.COLOR_BGR2GRAY)
+        _, hair_only_mask_source_binary = cv2.threshold(hair_only_mask_source_raw, 127, 255, cv2.THRESH_BINARY)
+    except Exception as e:
+        logging.error(f"Hair segmentation failed: {e}", exc_info=True)
+        return None, None
 
-    # Generate Face Mask
-    face_only_mask_source_raw = create_face_mask(source_face_obj, source_frame_full)
-    _, face_only_mask_source_binary = cv2.threshold(face_only_mask_source_raw, 127, 255, cv2.THRESH_BINARY)
+    try:
+        # Generate Face Mask
+        face_only_mask_source_raw = create_face_mask(source_face_obj, source_frame_full)
+        if face_only_mask_source_raw is None:
+            logging.error("create_face_mask returned None, which is unexpected.")
+            return None, None
+        _, face_only_mask_source_binary = cv2.threshold(face_only_mask_source_raw, 127, 255, cv2.THRESH_BINARY)
+    except Exception as e:
+        logging.error(f"Face mask creation failed for source: {e}", exc_info=True)
+        return None, None
 
-    # Combine Face and Hair Masks
-    if face_only_mask_source_binary.shape != hair_only_mask_source_binary.shape:
+    # Combine Face and Hair Masks and Warp
+    try:
+        if face_only_mask_source_binary.shape != hair_only_mask_source_binary.shape:
+            logging.warning("Resizing hair mask to match face mask for source during preparation.")
+            hair_only_mask_source_binary = cv2.resize(
+                hair_only_mask_source_binary,
+                (face_only_mask_source_binary.shape[1], face_only_mask_source_binary.shape[0]),
+                interpolation=cv2.INTER_NEAREST
+            )
+
+        actual_combined_source_mask = cv2.bitwise_or(face_only_mask_source_binary, hair_only_mask_source_binary)
+        actual_combined_source_mask_blurred = cv2.GaussianBlur(actual_combined_source_mask, (5, 5), 3)
+
+        warped_full_source_material = cv2.warpAffine(source_frame_full, matrix, dsize)
+        warped_combined_mask_temp = cv2.warpAffine(actual_combined_source_mask_blurred, matrix, dsize)
+        _, warped_combined_mask_binary_for_clone = cv2.threshold(warped_combined_mask_temp, 127, 255, cv2.THRESH_BINARY)
+    except Exception as e:
+        logging.error(f"Mask combination or warping failed: {e}", exc_info=True)
+        return None, None
+
+    return warped_full_source_material, warped_combined_mask_binary_for_clone
+
+
+def _blend_material_onto_frame(
         logging.warning("Resizing hair mask to match face mask for source during preparation.")
         hair_only_mask_source_binary = cv2.resize(
-            hair_only_mask_source_binary, 
-            (face_only_mask_source_binary.shape[1], face_only_mask_source_binary.shape[0]), 
+            hair_only_mask_source_binary,
+            (face_only_mask_source_binary.shape[1], face_only_mask_source_binary.shape[0]),
             interpolation=cv2.INTER_NEAREST
         )
-    
+
     actual_combined_source_mask = cv2.bitwise_or(face_only_mask_source_binary, hair_only_mask_source_binary)
     actual_combined_source_mask_blurred = cv2.GaussianBlur(actual_combined_source_mask, (5, 5), 3)
 
@@ -104,13 +140,13 @@ def _prepare_warped_source_material_and_mask(
     warped_full_source_material = cv2.warpAffine(source_frame_full, matrix, dsize)
     warped_combined_mask_temp = cv2.warpAffine(actual_combined_source_mask_blurred, matrix, dsize)
     _, warped_combined_mask_binary_for_clone = cv2.threshold(warped_combined_mask_temp, 127, 255, cv2.THRESH_BINARY)
-    
+
     return warped_full_source_material, warped_combined_mask_binary_for_clone
 
 
 def _blend_material_onto_frame(
-    base_frame: Frame, 
-    material_to_blend: Frame, 
+    base_frame: Frame,
+    material_to_blend: Frame,
     mask_for_blending: Frame
 ) -> Frame:
     """
@@ -122,7 +158,7 @@ def _blend_material_onto_frame(
 
     if w > 0 and h > 0:
         center = (x + w // 2, y + h // 2)
-        
+
         if material_to_blend.shape == base_frame.shape and \
            material_to_blend.dtype == base_frame.dtype and \
            mask_for_blending.dtype == np.uint8:
@@ -134,7 +170,7 @@ def _blend_material_onto_frame(
                 output_frame = cv2.seamlessClone(material_to_blend, base_frame, mask_for_blending, center, cv2.NORMAL_CLONE)
             except cv2.error as e:
                 logging.warning(f"cv2.seamlessClone failed: {e}. Falling back to simple blending.")
-                boolean_mask = mask_for_blending > 127 
+                boolean_mask = mask_for_blending > 127
                 output_frame[boolean_mask] = material_to_blend[boolean_mask]
         else:
             logging.warning("Mismatch in shape/type for seamlessClone. Falling back to simple blending.")
@@ -142,7 +178,7 @@ def _blend_material_onto_frame(
             output_frame[boolean_mask] = material_to_blend[boolean_mask]
     else:
         logging.info("Warped mask for blending is empty. Skipping blending.")
-    
+
     return output_frame
 
 
@@ -153,7 +189,7 @@ def swap_face(source_face_obj: Face, target_face: Face, source_frame_full: Frame
     swapped_frame = face_swapper.get(temp_frame, target_face, source_face_obj, paste_back=True)
     final_swapped_frame = swapped_frame # Initialize with the base swap. Copy is made only if needed.
 
-    if modules.globals.enable_hair_swapping:
+    if getattr(modules.globals, 'enable_hair_swapping', True): # Default to True if attribute is missing
         if not (source_face_obj.kps is not None and \
                 target_face.kps is not None and \
                 source_face_obj.kps.shape[0] >= 3 and \
@@ -172,23 +208,27 @@ def swap_face(source_face_obj: Face, target_face: Face, source_frame_full: Frame
                 logging.warning("Failed to estimate affine transformation matrix for hair. Skipping hair blending.")
             else:
                 dsize = (temp_frame.shape[1], temp_frame.shape[0]) # width, height
-                
+
                 warped_material, warped_mask = _prepare_warped_source_material_and_mask(
                     source_face_obj, source_frame_full, matrix, dsize
                 )
 
                 if warped_material is not None and warped_mask is not None:
                     # Make a copy only now that we are sure we will modify it for hair.
-                    final_swapped_frame = swapped_frame.copy() 
-                    
-                    color_corrected_material = apply_color_transfer(warped_material, final_swapped_frame) # Use final_swapped_frame for color context
-                    
+                    final_swapped_frame = swapped_frame.copy()
+
+                    try:
+                        color_corrected_material = apply_color_transfer(warped_material, final_swapped_frame)
+                    except Exception as e:
+                        logging.warning(f"Color transfer failed: {e}. Proceeding with uncorrected material for hair blending.", exc_info=True)
+                        color_corrected_material = warped_material # Use uncorrected material as fallback
+
                     final_swapped_frame = _blend_material_onto_frame(
-                        final_swapped_frame, 
-                        color_corrected_material, 
+                        final_swapped_frame,
+                        color_corrected_material,
                         warped_mask
                     )
-    
+
     # Mouth Mask Logic (operates on final_swapped_frame)
     if modules.globals.mouth_mask:
         # If final_swapped_frame wasn't copied for hair, it needs to be copied now before mouth mask modification.

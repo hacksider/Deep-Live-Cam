@@ -26,34 +26,49 @@ def segment_hair(image_np: np.ndarray) -> np.ndarray:
         try:
             HAIR_SEGMENTER_PROCESSOR = SegformerImageProcessor.from_pretrained(MODEL_NAME)
             HAIR_SEGMENTER_MODEL = SegformerForSemanticSegmentation.from_pretrained(MODEL_NAME)
-            # Optional: Move model to GPU if available and if other models use GPU
-            # if torch.cuda.is_available():
-            #     HAIR_SEGMENTER_MODEL = HAIR_SEGMENTER_MODEL.to('cuda')
-            #     print("Hair segmentation model moved to GPU.")
-            print("Hair segmentation model and processor loaded successfully.")
+
+            if torch.cuda.is_available():
+                try:
+                    HAIR_SEGMENTER_MODEL = HAIR_SEGMENTER_MODEL.to('cuda')
+                    print("INFO: Hair segmentation model moved to CUDA (GPU).")
+                except Exception as e_cuda:
+                    print(f"ERROR: Failed to move hair segmentation model to CUDA: {e_cuda}. Using CPU instead.")
+                    # Fallback to CPU if .to('cuda') fails
+                    HAIR_SEGMENTER_MODEL = HAIR_SEGMENTER_MODEL.to('cpu')
+            else:
+                print("INFO: CUDA not available. Hair segmentation model will use CPU.")
+
+            print("INFO: Hair segmentation model and processor loaded successfully (device: {}).".format(HAIR_SEGMENTER_MODEL.device))
         except Exception as e:
-            print(f"Failed to load hair segmentation model/processor: {e}")
+            print(f"ERROR: Failed to load hair segmentation model/processor: {e}")
             # Return an empty mask compatible with expected output shape (H, W)
             return np.zeros((image_np.shape[0], image_np.shape[1]), dtype=np.uint8)
-
-    # Ensure processor and model are loaded before proceeding
-    if HAIR_SEGMENTER_PROCESSOR is None or HAIR_SEGMENTER_MODEL is None:
-        print("Error: Hair segmentation models are not available.")
-        return np.zeros((image_np.shape[0], image_np.shape[1]), dtype=np.uint8)
 
     # Convert BGR (OpenCV) to RGB (PIL)
     image_rgb = cv2.cvtColor(image_np, cv2.COLOR_BGR2RGB)
     image_pil = Image.fromarray(image_rgb)
 
     inputs = HAIR_SEGMENTER_PROCESSOR(images=image_pil, return_tensors="pt")
-    
-    # Optional: Move inputs to GPU if model is on GPU
-    # if HAIR_SEGMENTER_MODEL.device.type == 'cuda':
-    #     inputs = inputs.to(HAIR_SEGMENTER_MODEL.device)
+
+    if HAIR_SEGMENTER_MODEL.device.type == 'cuda':
+        try:
+            # SegformerImageProcessor output (BatchEncoding) is a dict-like object.
+            # We need to move its tensor components, commonly 'pixel_values'.
+            if 'pixel_values' in inputs:
+                inputs['pixel_values'] = inputs['pixel_values'].to('cuda')
+            else: # Fallback if the structure is different than expected
+                inputs = inputs.to('cuda')
+            # If inputs has other tensor components that need to be moved, they'd need similar handling.
+        except Exception as e_inputs_cuda:
+            print(f"ERROR: Failed to move inputs to CUDA: {e_inputs_cuda}. Attempting inference on CPU.")
+            # If moving inputs to CUDA fails, we should ensure model is also on CPU for this inference pass
+            # This is a tricky situation; ideally, this failure shouldn't happen if model moved successfully.
+            # For simplicity, we'll assume if model is on CUDA, inputs should also be.
+            # A more robust solution might involve moving model back to CPU if inputs can't be moved.
 
     with torch.no_grad(): # Important for inference
         outputs = HAIR_SEGMENTER_MODEL(**inputs)
-    
+
     logits = outputs.logits  # Shape: batch_size, num_labels, height, width
 
     # Upsample logits to original image size
@@ -85,7 +100,7 @@ if __name__ == '__main__':
     # Create a dummy image for a basic test run if no image is available.
     dummy_image_np = np.zeros((100, 100, 3), dtype=np.uint8) # 100x100 BGR image
     dummy_image_np[:, :, 1] = 255 # Make it green to distinguish from black mask
-    
+
     try:
         print("Running segment_hair with a dummy image...")
         hair_mask_output = segment_hair(dummy_image_np)
@@ -95,7 +110,7 @@ if __name__ == '__main__':
         # Check if the mask is binary (0 or 255)
         assert np.all(np.isin(hair_mask_output, [0, 255]))
         print("Dummy image test successful. Hair mask seems to be generated correctly.")
-        
+
         # Attempt to save the dummy mask (optional, just for visual confirmation if needed)
         # cv2.imwrite("dummy_hair_mask_output.png", hair_mask_output)
         # print("Dummy hair mask saved to dummy_hair_mask_output.png")

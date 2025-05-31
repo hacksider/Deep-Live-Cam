@@ -178,7 +178,7 @@ It is highly recommended to use Python 3.10 for Windows for best compatibility w
 *   **Visual Studio Runtimes:** If you encounter errors during `pip install` for packages that compile C code (e.g., some scientific computing or image processing libraries), you might need the [Visual Studio Build Tools (or Runtimes)](https://visualstudio.microsoft.com/visual-cpp-build-tools/). Ensure "C++ build tools" (or similar workload) are selected during installation.
 *   **Virtual Environment (Manual Alternative):** If you prefer to set up the virtual environment manually instead of using `setup_windows.bat`:
     ```batch
-    python -m venv .venv 
+    python -m venv .venv
     .venv\Scripts\activate.bat
     python -m pip install --upgrade pip
     python -m pip install -r requirements.txt
@@ -244,10 +244,10 @@ For a streamlined setup on macOS, use the provided shell scripts:
     # Ensure you are using Python 3.10 if required by your chosen onnxruntime-silicon version
     # After running setup_mac.sh and activating .venv:
     # source .venv/bin/activate
-    
+
     pip uninstall onnxruntime onnxruntime-gpu # Uninstall any existing onnxruntime
     pip install onnxruntime-silicon==1.13.1   # Or your desired version
-    
+
     # Then use ./run_mac_coreml.sh
     ```
     Check the ONNX Runtime documentation for the latest recommended packages for Apple Silicon.
