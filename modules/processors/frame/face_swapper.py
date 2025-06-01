@@ -143,7 +143,7 @@ def _blend_material_onto_frame(
 
     return warped_full_source_material, warped_combined_mask_binary_for_clone
 
-
+# Ensure one blank line and correct indentation for the next function definition
 def _blend_material_onto_frame(
     base_frame: Frame,
     material_to_blend: Frame,
