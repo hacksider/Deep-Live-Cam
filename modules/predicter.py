@@ -6,7 +6,7 @@ import modules.globals  # Import globals to access the color correction toggle
 
 from modules.typing import Frame
 
-MAX_PROBABILITY = 0.85
+MAX_PROBABILITY = 1.0
 
 # Preload the model once for efficiency
 model = None

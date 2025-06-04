@@ -80,7 +80,7 @@ def get_face_swapper() -> Any:
     return FACE_SWAPPER
 
 
-def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
+def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame: # type: ignore
     # --- No changes needed in swap_face ---
     swapper = get_face_swapper()
     if swapper is None:
@@ -90,7 +90,7 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
     return swapper.get(temp_frame, target_face, source_face, paste_back=True)
 
 
-def process_frame(source_face: Face, temp_frame: Frame) -> Frame:
+def process_frame(source_face: Face, temp_frame: Frame) -> Frame: # type: ignore
     # --- No changes needed in process_frame ---
     # Ensure the frame is in RGB format if color correction is enabled
     # Note: InsightFace swapper often expects BGR by default. Double-check if color issues appear.
@@ -123,12 +123,12 @@ def process_frame_v2(temp_frame: Frame, temp_frame_path: str = "") -> Frame:
     if is_image(modules.globals.target_path):
         if modules.globals.many_faces:
             source_face = default_source_face()
-            for map_entry in modules.globals.souce_target_map: # Renamed 'map' to 'map_entry'
+            for map_entry in modules.globals.source_target_map: # Renamed 'map' to 'map_entry'
                 target_face = map_entry['target']['face']
                 temp_frame = swap_face(source_face, target_face, temp_frame)
 
         elif not modules.globals.many_faces:
-            for map_entry in modules.globals.souce_target_map: # Renamed 'map' to 'map_entry'
+            for map_entry in modules.globals.source_target_map: # Renamed 'map' to 'map_entry'
                 if "source" in map_entry:
                     source_face = map_entry['source']['face']
                     target_face = map_entry['target']['face']
@@ -137,7 +137,7 @@ def process_frame_v2(temp_frame: Frame, temp_frame_path: str = "") -> Frame:
     elif is_video(modules.globals.target_path):
         if modules.globals.many_faces:
             source_face = default_source_face()
-            for map_entry in modules.globals.souce_target_map: # Renamed 'map' to 'map_entry'
+            for map_entry in modules.globals.source_target_map: # Renamed 'map' to 'map_entry'
                 target_frame = [f for f in map_entry['target_faces_in_frame'] if f['location'] == temp_frame_path]
 
                 for frame in target_frame:
@@ -145,7 +145,7 @@ def process_frame_v2(temp_frame: Frame, temp_frame_path: str = "") -> Frame:
                         temp_frame = swap_face(source_face, target_face, temp_frame)
 
         elif not modules.globals.many_faces:
-            for map_entry in modules.globals.souce_target_map: # Renamed 'map' to 'map_entry'
+            for map_entry in modules.globals.source_target_map: # Renamed 'map' to 'map_entry'
                 if "source" in map_entry:
                     target_frame = [f for f in map_entry['target_faces_in_frame'] if f['location'] == temp_frame_path]
                     source_face = map_entry['source']['face']
