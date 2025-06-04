@@ -19,7 +19,24 @@ import modules.globals
 import modules.metadata
 import modules.ui as ui
 from modules.processors.frame.core import get_frame_processors_modules
-from modules.utilities import has_image_extension, is_image, is_video, detect_fps, create_video, extract_frames, get_temp_frame_paths, restore_audio, create_temp, move_temp, clean_temp, normalize_output_path
+from modules.utilities import (
+    has_image_extension,
+    is_image,
+    is_video,
+    detect_fps,
+    create_video,
+    extract_frames,
+    get_temp_frame_paths,
+    restore_audio,
+    create_temp,
+    move_temp,
+    clean_temp,
+    normalize_output_path,
+    start_ffmpeg_writer,
+    get_temp_output_path,
+)
+import cv2
+from tqdm import tqdm
 
 if 'ROCMExecutionProvider' in modules.globals.execution_providers:
     del torch
@@ -175,6 +192,45 @@ def update_status(message: str, scope: str = 'DLC.CORE') -> None:
     if not modules.globals.headless:
         ui.update_status(message)
 
+
+def stream_video() -> None:
+    capture = cv2.VideoCapture(modules.globals.target_path)
+    if not capture.isOpened():
+        update_status('Failed to open video file.')
+        return
+    fps = capture.get(cv2.CAP_PROP_FPS) if modules.globals.keep_fps else 30.0
+    width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    total = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
+
+    update_status('Creating temp resources...')
+    create_temp(modules.globals.target_path)
+    temp_output_path = get_temp_output_path(modules.globals.target_path)
+    writer = start_ffmpeg_writer(width, height, fps, temp_output_path)
+
+    progress_bar_format = '{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]'
+    with tqdm(total=total, desc='Processing', unit='frame', dynamic_ncols=True, bar_format=progress_bar_format) as progress:
+        progress.set_postfix({'execution_providers': modules.globals.execution_providers, 'execution_threads': modules.globals.execution_threads, 'max_memory': modules.globals.max_memory})
+        while True:
+            ret, frame = capture.read()
+            if not ret:
+                break
+            for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
+                frame = frame_processor.process_frame_stream(modules.globals.source_path, frame)
+            writer.stdin.write(frame.tobytes())
+            progress.update(1)
+
+    capture.release()
+    writer.stdin.close()
+    writer.wait()
+
+    if modules.globals.keep_audio:
+        update_status('Restoring audio...')
+        restore_audio(modules.globals.target_path, modules.globals.output_path)
+    else:
+        move_temp(modules.globals.target_path, modules.globals.output_path)
+    clean_temp(modules.globals.target_path)
+
 def start() -> None:
     for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
         if not frame_processor.pre_start():
@@ -202,10 +258,17 @@ def start() -> None:
         return
 
     if not modules.globals.map_faces:
-        update_status('Creating temp resources...')
-        create_temp(modules.globals.target_path)
-        update_status('Extracting frames...')
-        extract_frames(modules.globals.target_path)
+        stream_video()
+        if is_video(modules.globals.target_path):
+            update_status('Processing to video succeed!')
+        else:
+            update_status('Processing to video failed!')
+        return
+
+    update_status('Creating temp resources...')
+    create_temp(modules.globals.target_path)
+    update_status('Extracting frames...')
+    extract_frames(modules.globals.target_path)
 
     temp_frame_paths = get_temp_frame_paths(modules.globals.target_path)
     for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):

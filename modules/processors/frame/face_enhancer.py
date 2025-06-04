@@ -107,3 +107,8 @@ def process_frame_v2(temp_frame: Frame) -> Frame:
     if target_face:
         temp_frame = enhance_face(temp_frame)
     return temp_frame
+
+
+def process_frame_stream(source_path: str, frame: Frame) -> Frame:
+    return process_frame(None, frame)
+

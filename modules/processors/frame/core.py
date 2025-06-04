@@ -14,7 +14,8 @@ FRAME_PROCESSORS_INTERFACE = [
     'pre_start',
     'process_frame',
     'process_image',
-    'process_video'
+    'process_video',
+    'process_frame_stream'
 ]
 
 

@@ -38,6 +38,38 @@ def run_ffmpeg(args: List[str]) -> bool:
     return False
 
 
+def start_ffmpeg_writer(width: int, height: int, fps: float, output_path: str) -> subprocess.Popen:
+    commands = [
+        "ffmpeg",
+        "-hide_banner",
+        "-hwaccel",
+        "auto",
+        "-loglevel",
+        modules.globals.log_level,
+        "-f",
+        "rawvideo",
+        "-pix_fmt",
+        "bgr24",
+        "-s",
+        f"{width}x{height}",
+        "-r",
+        str(fps),
+        "-i",
+        "-",
+        "-c:v",
+        modules.globals.video_encoder,
+        "-crf",
+        str(modules.globals.video_quality),
+        "-pix_fmt",
+        "yuv420p",
+        "-vf",
+        "colorspace=bt709:iall=bt601-6-625:fast=1",
+        "-y",
+        output_path,
+    ]
+    return subprocess.Popen(commands, stdin=subprocess.PIPE)
+
+
 def detect_fps(target_path: str) -> float:
     command = [
         "ffprobe",

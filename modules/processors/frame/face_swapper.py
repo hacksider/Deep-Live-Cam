@@ -256,3 +256,20 @@ def process_video(source_path: str, temp_frame_paths: List[str]) -> None:
         update_status('Many faces enabled. Using first source image (if applicable in v2). Processing...', NAME)
     # The core processing logic is delegated, which is good.
     modules.processors.frame.core.process_video(source_path, temp_frame_paths, process_frames)
+
+
+STREAM_SOURCE_FACE = None
+
+
+def process_frame_stream(source_path: str, frame: Frame) -> Frame:
+    global STREAM_SOURCE_FACE
+    if not modules.globals.map_faces:
+        if STREAM_SOURCE_FACE is None:
+            source_img = cv2.imread(source_path)
+            if source_img is not None:
+                STREAM_SOURCE_FACE = get_one_face(source_img)
+        if STREAM_SOURCE_FACE is not None:
+            return process_frame(STREAM_SOURCE_FACE, frame)
+        return frame
+    else:
+        return process_frame_v2(frame)
