@@ -124,25 +124,6 @@ def _prepare_warped_source_material_and_mask(
 
     return warped_full_source_material, warped_combined_mask_binary_for_clone
 
-
-def _blend_material_onto_frame(
-        logging.warning("Resizing hair mask to match face mask for source during preparation.")
-        hair_only_mask_source_binary = cv2.resize(
-            hair_only_mask_source_binary,
-            (face_only_mask_source_binary.shape[1], face_only_mask_source_binary.shape[0]),
-            interpolation=cv2.INTER_NEAREST
-        )
-
-    actual_combined_source_mask = cv2.bitwise_or(face_only_mask_source_binary, hair_only_mask_source_binary)
-    actual_combined_source_mask_blurred = cv2.GaussianBlur(actual_combined_source_mask, (5, 5), 3)
-
-    # Warp the Combined Mask and Full Source Material
-    warped_full_source_material = cv2.warpAffine(source_frame_full, matrix, dsize)
-    warped_combined_mask_temp = cv2.warpAffine(actual_combined_source_mask_blurred, matrix, dsize)
-    _, warped_combined_mask_binary_for_clone = cv2.threshold(warped_combined_mask_temp, 127, 255, cv2.THRESH_BINARY)
-
-    return warped_full_source_material, warped_combined_mask_binary_for_clone
-
 # Ensure one blank line and correct indentation for the next function definition
 def _blend_material_onto_frame(
     base_frame: Frame,
