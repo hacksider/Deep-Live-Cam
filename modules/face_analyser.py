@@ -19,8 +19,26 @@ def get_face_analyser() -> Any:
     global FACE_ANALYSER
 
     if FACE_ANALYSER is None:
-        FACE_ANALYSER = insightface.app.FaceAnalysis(name='buffalo_l', providers=modules.globals.execution_providers)
-        FACE_ANALYSER.prepare(ctx_id=0, det_size=(640, 640))
+        try:
+            FACE_ANALYSER = insightface.app.FaceAnalysis(name='buffalo_l', providers=modules.globals.execution_providers)
+            FACE_ANALYSER.prepare(ctx_id=0, det_size=(640, 640))
+        except Exception as e:
+            error_msg = str(e)
+            print(f"[DLC.FACE-ANALYSER] Error initializing face analyser with providers {modules.globals.execution_providers}: {error_msg}")
+            
+            # If error is CUDA-related, try with CPU provider as fallback
+            if "cuda" in error_msg.lower() or "gpu" in error_msg.lower():
+                print("[DLC.FACE-ANALYSER] CUDA error detected. Falling back to CPU provider.")
+                modules.globals.execution_providers = ['CPUExecutionProvider'] 
+                try:
+                    FACE_ANALYSER = insightface.app.FaceAnalysis(name='buffalo_l', providers=modules.globals.execution_providers)
+                    FACE_ANALYSER.prepare(ctx_id=0, det_size=(640, 640))
+                    print("[DLC.FACE-ANALYSER] Successfully initialized with CPU provider as fallback.")
+                except Exception as fallback_error:
+                    print(f"[DLC.FACE-ANALYSER] Failed to initialize even with fallback provider: {str(fallback_error)}")
+                    raise
+            else:
+                raise
     return FACE_ANALYSER
 
 
