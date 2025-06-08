@@ -222,7 +222,9 @@ def stream_video() -> None:
 
     capture.release()
     writer.stdin.close()
-    writer.wait()
+    exit_code = writer.wait()
+    if exit_code != 0:
+        raise RuntimeError(f"ffmpeg writer exited with non-zero status: {exit_code}")
 
     if modules.globals.keep_audio:
         update_status('Restoring audio...')
