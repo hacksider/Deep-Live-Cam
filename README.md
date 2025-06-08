@@ -30,6 +30,13 @@ By using this software, you agree to these terms and commit to using it in a man
 
 Users are expected to use this software responsibly and legally. If using a real person's face, obtain their consent and clearly label any output as a deepfake when sharing online. We are not responsible for end-user actions.
 
+## Exclusive v2.0 Quick Start - Pre-built (Windows)
+
+  <a href="https://deeplivecam.net/index.php/quickstart"> <img src="media/Download.png" width="285" height="77" />
+
+##### This is the fastest build you can get if you have a discrete NVIDIA or AMD GPU.
+ 
+###### These Pre-builts are perfect for non-technical users or those who don't have time to, or can't manually install all the requirements. Just a heads-up: this is an open-source project, so you can also install it manually. This will be 60 days ahead on the open source version.
 
 ## TLDR; Live Deepfake in just 3 Clicks
 ![easysteps](https://github.com/user-attachments/assets/af825228-852c-411b-b787-ffd9aac72fc6)
@@ -126,10 +133,18 @@ Place these files in the "**models**" folder.
 
 We highly recommend using a `venv` to avoid issues.
 
+
 For Windows:
 ```bash
 python -m venv venv
 venv\Scripts\activate
+pip install -r requirements.txt
+```
+For Linux:
+```bash
+# Ensure you use the installed Python 3.10
+python3 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
 ```
 
@@ -172,10 +187,14 @@ pip install -r requirements.txt
 
 **CUDA Execution Provider (Nvidia)**
 
-1. Install [CUDA Toolkit 11.8.0](https://developer.nvidia.com/cuda-11-8-0-download-archive)
-2. Install dependencies:
+1. Install [CUDA Toolkit 12.8.0](https://developer.nvidia.com/cuda-12-8-0-download-archive)
+2. Install [cuDNN v8.9.7 for CUDA 12.x](https://developer.nvidia.com/rdp/cudnn-archive) (required for onnxruntime-gpu):
+   - Download cuDNN v8.9.7 for CUDA 12.x
+   - Make sure the cuDNN bin directory is in your system PATH
+3. Install dependencies:
 
 ```bash
+pip install -U torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
 pip uninstall onnxruntime onnxruntime-gpu
 pip install onnxruntime-gpu==1.16.3
 ```
