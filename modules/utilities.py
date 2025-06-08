@@ -39,13 +39,14 @@ def run_ffmpeg(args: List[str]) -> bool:
 
 
 def start_ffmpeg_writer(width: int, height: int, fps: float, output_path: str) -> subprocess.Popen:
+    # Pass all arguments as a list to avoid shell injection
     commands = [
         "ffmpeg",
         "-hide_banner",
         "-hwaccel",
         "auto",
         "-loglevel",
-        modules.globals.log_level,
+        str(modules.globals.log_level),
         "-f",
         "rawvideo",
         "-pix_fmt",
@@ -57,7 +58,7 @@ def start_ffmpeg_writer(width: int, height: int, fps: float, output_path: str) -
         "-i",
         "-",
         "-c:v",
-        modules.globals.video_encoder,
+        str(modules.globals.video_encoder),
         "-crf",
         str(modules.globals.video_quality),
         "-pix_fmt",
@@ -65,7 +66,7 @@ def start_ffmpeg_writer(width: int, height: int, fps: float, output_path: str) -
         "-vf",
         "colorspace=bt709:iall=bt601-6-625:fast=1",
         "-y",
-        output_path,
+        str(output_path),
     ]
     return subprocess.Popen(commands, stdin=subprocess.PIPE)
 

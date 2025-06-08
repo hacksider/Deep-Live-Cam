@@ -263,13 +263,16 @@ STREAM_SOURCE_FACE = None
 
 def process_frame_stream(source_path: str, frame: Frame) -> Frame:
     global STREAM_SOURCE_FACE
-    if not modules.globals.map_faces:
-        if STREAM_SOURCE_FACE is None:
-            source_img = cv2.imread(source_path)
-            if source_img is not None:
-                STREAM_SOURCE_FACE = get_one_face(source_img)
-        if STREAM_SOURCE_FACE is not None:
-            return process_frame(STREAM_SOURCE_FACE, frame)
-        return frame
-    else:
-        return process_frame_v2(frame)
+    if modules.globals.map_faces:
+        result = process_frame_v2(frame)
+        if result is not None:
+            return result
+        else:
+            return frame  # Fallback to original frame if process_frame_v2 returns None
+    if STREAM_SOURCE_FACE is None:
+        source_img = cv2.imread(source_path)
+        if source_img is not None:
+            STREAM_SOURCE_FACE = get_one_face(source_img)
+    if STREAM_SOURCE_FACE is not None:
+        return process_frame(STREAM_SOURCE_FACE, frame)
+    return frame
