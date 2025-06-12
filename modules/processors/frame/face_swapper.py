@@ -124,7 +124,6 @@ def _prepare_warped_source_material_and_mask(
 
     return warped_full_source_material, warped_combined_mask_binary_for_clone
 
-# Ensure one blank line and correct indentation for the next function definition
 def _blend_material_onto_frame(
     base_frame: Frame,
     material_to_blend: Frame,
@@ -144,10 +143,6 @@ def _blend_material_onto_frame(
            material_to_blend.dtype == base_frame.dtype and \
            mask_for_blending.dtype == np.uint8:
             try:
-                # Important: seamlessClone modifies the first argument (dst) if it's the same as the output var
-                # So, if base_frame is final_swapped_frame, it will be modified in place.
-                # If we want to keep base_frame pristine, it should be base_frame.copy() if it's also final_swapped_frame.
-                # Given final_swapped_frame is already a copy of swapped_frame at this point, this is fine.
                 output_frame = cv2.seamlessClone(material_to_blend, base_frame, mask_for_blending, center, cv2.NORMAL_CLONE)
             except cv2.error as e:
                 logging.warning(f"cv2.seamlessClone failed: {e}. Falling back to simple blending.")
@@ -801,3 +796,5 @@ def apply_color_transfer(source, target):
     source = (source - source_mean) * (target_std / source_std) + target_mean
 
     return cv2.cvtColor(np.clip(source, 0, 255).astype("uint8"), cv2.COLOR_LAB2BGR)
+
+[end of modules/processors/frame/face_swapper.py]
