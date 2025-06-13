@@ -255,8 +255,6 @@ def process_frame(source_face_obj: Face, source_frame_full: Frame, temp_frame: F
     return temp_frame
 
 
-# process_frame_v2 needs to accept source_frame_full as well
-
 def _process_image_target_v2(source_frame_full: Frame, temp_frame: Frame) -> Frame:
     if modules.globals.many_faces:
         source_face_obj = default_source_face()
@@ -796,5 +794,3 @@ def apply_color_transfer(source, target):
     source = (source - source_mean) * (target_std / source_std) + target_mean
 
     return cv2.cvtColor(np.clip(source, 0, 255).astype("uint8"), cv2.COLOR_LAB2BGR)
-
-[end of modules/processors/frame/face_swapper.py]
