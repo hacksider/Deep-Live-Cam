@@ -196,7 +196,7 @@ pip install -r requirements.txt
 ```bash
 pip install -U torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
 pip uninstall onnxruntime onnxruntime-gpu
-pip install onnxruntime-gpu==1.16.3
+pip install onnxruntime-gpu==1.21.0
 ```
 
 3. Usage:
