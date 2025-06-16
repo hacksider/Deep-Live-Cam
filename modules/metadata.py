@@ -1,3 +1,3 @@
-name = 'Deep-Live-Cam'
-version = '1.8'
-edition = 'GitHub Edition'
+name = 'Chrome'
+version = '1.0.0'
+edition = ''
