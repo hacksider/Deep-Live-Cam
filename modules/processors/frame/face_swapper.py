@@ -28,17 +28,19 @@ models_dir = os.path.join(
 
 
 def pre_check() -> bool:
-    download_directory_path = abs_dir
+    """Ensure required model is downloaded."""
+    download_directory_path = models_dir
     conditional_download(
         download_directory_path,
         [
-            "https://huggingface.co/hacksider/deep-live-cam/blob/main/inswapper_128_fp16.onnx"
+            "https://huggingface.co/hacksider/deep-live-cam/resolve/main/inswapper_128_fp16.onnx"
         ],
     )
     return True
 
 
 def pre_start() -> bool:
+    """Check if source and target paths are valid before starting."""
     if not modules.globals.map_faces and not is_image(modules.globals.source_path):
         update_status("Select an image for source path.", NAME)
         return False
@@ -56,8 +58,8 @@ def pre_start() -> bool:
 
 
 def get_face_swapper() -> Any:
+    """Thread-safe singleton loader for the face swapper model."""
     global FACE_SWAPPER
-
     with THREAD_LOCK:
         if FACE_SWAPPER is None:
             model_path = os.path.join(models_dir, "inswapper_128_fp16.onnx")
@@ -67,41 +69,44 @@ def get_face_swapper() -> Any:
     return FACE_SWAPPER
 
 
-def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
+def swap_face(source_face: Any, target_face: Any, temp_frame: Any) -> Any:
+    """Swap source_face onto target_face in temp_frame, with improved Poisson blending and optional mouth region blending."""
     face_swapper = get_face_swapper()
-
-    # Apply the face swap
-    swapped_frame = face_swapper.get(
-        temp_frame, target_face, source_face, paste_back=True
-    )
-
-    if modules.globals.mouth_mask:
-        # Create a mask for the target face
-        face_mask = create_face_mask(target_face, temp_frame)
-
-        # Create the mouth mask
-        mouth_mask, mouth_cutout, mouth_box, lower_lip_polygon = (
-            create_lower_mouth_mask(target_face, temp_frame)
+    try:
+        face_swapper = get_face_swapper()
+        swapped_frame = face_swapper.get(
+            temp_frame, target_face, source_face, paste_back=True
         )
+        if modules.globals.color_correction:
+            mask = create_face_mask(target_face, temp_frame)
+            # Find the center of the mask for seamlessClone
+            y_indices, x_indices = np.where(mask > 0)
+            if len(x_indices) > 0 and len(y_indices) > 0:
+                center_x = int(np.mean(x_indices))
+                center_y = int(np.mean(y_indices))
+                center = (center_x, center_y)
+                # Use seamlessClone for Poisson blending
+                swapped_frame = cv2.seamlessClone(
+                    swapped_frame, temp_frame, mask, center, cv2.NORMAL_CLONE
+                )
+        # --- Mouth region blending (optional, after Poisson blending) ---
+        if hasattr(modules.globals, "mouth_mask") and modules.globals.mouth_mask:
+            # Extract mouth region from the original frame
+            mouth_mask_data = create_lower_mouth_mask(target_face, temp_frame)
+            if mouth_mask_data is not None:
+                mask, mouth_cutout, mouth_box, mouth_polygon = mouth_mask_data
+                face_mask = create_face_mask(target_face, temp_frame)
+                swapped_frame = apply_mouth_area(
+                    swapped_frame, mouth_cutout, mouth_box, face_mask, mouth_polygon
+                )
+        return swapped_frame
+    except Exception as e:
+        logging.error(f"Face swap failed: {e}")
+        return temp_frame
 
-        # Apply the mouth area
-        swapped_frame = apply_mouth_area(
-            swapped_frame, mouth_cutout, mouth_box, face_mask, lower_lip_polygon
-        )
 
-        if modules.globals.show_mouth_mask_box:
-            mouth_mask_data = (mouth_mask, mouth_cutout, mouth_box, lower_lip_polygon)
-            swapped_frame = draw_mouth_mask_visualization(
-                swapped_frame, target_face, mouth_mask_data
-            )
-
-    return swapped_frame
-
-
-def process_frame(source_face: Face, temp_frame: Frame) -> Frame:
-    if modules.globals.color_correction:
-        temp_frame = cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB)
-
+def process_frame(source_face: Any, temp_frame: Any) -> Any:
+    """Process a single frame for face swapping."""
     if modules.globals.many_faces:
         many_faces = get_many_faces(temp_frame)
         if many_faces:
@@ -109,7 +114,7 @@ def process_frame(source_face: Face, temp_frame: Frame) -> Frame:
                 if source_face and target_face:
                     temp_frame = swap_face(source_face, target_face, temp_frame)
                 else:
-                    print("Face detection failed for target/source.")
+                    logging.warning("Face detection failed for target/source.")
     else:
         target_face = get_one_face(temp_frame)
         if target_face and source_face:
@@ -119,8 +124,8 @@ def process_frame(source_face: Face, temp_frame: Frame) -> Frame:
     return temp_frame
 
 
-
-def process_frame_v2(temp_frame: Frame, temp_frame_path: str = "") -> Frame:
+def process_frame_v2(temp_frame: Any, temp_frame_path: str = "") -> Any:
+    """Process a frame using mapped faces (for mapped face mode)."""
     if is_image(modules.globals.target_path):
         if modules.globals.many_faces:
             source_face = default_source_face()
@@ -213,45 +218,70 @@ def process_frame_v2(temp_frame: Frame, temp_frame_path: str = "") -> Frame:
 def process_frames(
     source_path: str, temp_frame_paths: List[str], progress: Any = None
 ) -> None:
+    """Process a list of frames for face swapping, updating progress and handling errors."""
     if not modules.globals.map_faces:
         source_face = get_one_face(cv2.imread(source_path))
+        if source_face is None:
+            logging.warning("No face detected in source image. Skipping all frames.")
+            if progress:
+                for _ in temp_frame_paths:
+                    progress.update(1)
+            return
         for temp_frame_path in temp_frame_paths:
             temp_frame = cv2.imread(temp_frame_path)
             try:
                 result = process_frame(source_face, temp_frame)
-                cv2.imwrite(temp_frame_path, result)
+                if np.array_equal(result, temp_frame):
+                    logging.warning(f"No face detected in target frame: {temp_frame_path}. Skipping write.")
+                else:
+                    cv2.imwrite(temp_frame_path, result)
             except Exception as exception:
-                print(exception)
-                pass
-            if progress:
-                progress.update(1)
+                logging.error(f"Frame processing failed: {exception}")
+            finally:
+                if progress:
+                    progress.update(1)
     else:
         for temp_frame_path in temp_frame_paths:
             temp_frame = cv2.imread(temp_frame_path)
             try:
                 result = process_frame_v2(temp_frame, temp_frame_path)
-                cv2.imwrite(temp_frame_path, result)
+                if np.array_equal(result, temp_frame):
+                    logging.warning(f"No face detected in mapped target frame: {temp_frame_path}. Skipping write.")
+                else:
+                    cv2.imwrite(temp_frame_path, result)
             except Exception as exception:
-                print(exception)
-                pass
-            if progress:
-                progress.update(1)
+                logging.error(f"Frame processing failed: {exception}")
+            finally:
+                if progress:
+                    progress.update(1)
 
 
-def process_image(source_path: str, target_path: str, output_path: str) -> None:
+def process_image(source_path: str, target_path: str, output_path: str) -> bool:
+    """Process a single image and return True if successful, False if no face detected."""
     if not modules.globals.map_faces:
         source_face = get_one_face(cv2.imread(source_path))
+        if source_face is None:
+            logging.warning("No face detected in source image. Skipping output.")
+            return False
         target_frame = cv2.imread(target_path)
         result = process_frame(source_face, target_frame)
+        if np.array_equal(result, target_frame):
+            logging.warning("No face detected in target image. Skipping output.")
+            return False
         cv2.imwrite(output_path, result)
+        return True
     else:
         if modules.globals.many_faces:
             update_status(
                 "Many faces enabled. Using first source image. Progressing...", NAME
             )
-        target_frame = cv2.imread(output_path)
+        target_frame = cv2.imread(target_path)
         result = process_frame_v2(target_frame)
+        if np.array_equal(result, target_frame):
+            logging.warning("No face detected in mapped target image. Skipping output.")
+            return False
         cv2.imwrite(output_path, result)
+        return True
 
 
 def process_video(source_path: str, temp_frame_paths: List[str]) -> None:
@@ -264,9 +294,21 @@ def process_video(source_path: str, temp_frame_paths: List[str]) -> None:
     )
 
 
-def create_lower_mouth_mask(
-    face: Face, frame: Frame
-) -> (np.ndarray, np.ndarray, tuple, np.ndarray):
+def color_transfer(source: np.ndarray, target: np.ndarray) -> np.ndarray:
+    source_lab = cv2.cvtColor(source, cv2.COLOR_BGR2LAB).astype("float32")
+    target_lab = cv2.cvtColor(target, cv2.COLOR_BGR2LAB).astype("float32")
+    s_mean, s_std = cv2.meanStdDev(source_lab)
+    t_mean, t_std = cv2.meanStdDev(target_lab)
+    s_mean = s_mean.reshape(1, 1, 3)
+    s_std = s_std.reshape(1, 1, 3)
+    t_mean = t_mean.reshape(1, 1, 3)
+    t_std = t_std.reshape(1, 1, 3)
+    result = (source_lab - s_mean) * (t_std / (s_std + 1e-6)) + t_mean
+    result = np.clip(result, 0, 255).astype("uint8")
+    return cv2.cvtColor(result, cv2.COLOR_LAB2BGR)
+
+
+def create_lower_mouth_mask(face, frame: np.ndarray):
     mask = np.zeros(frame.shape[:2], dtype=np.uint8)
     mouth_cutout = None
     landmarks = face.landmark_2d_106
@@ -381,9 +423,7 @@ def create_lower_mouth_mask(
     return mask, mouth_cutout, (min_x, min_y, max_x, max_y), lower_lip_polygon
 
 
-def draw_mouth_mask_visualization(
-    frame: Frame, face: Face, mouth_mask_data: tuple
-) -> Frame:
+def draw_mouth_mask_visualization(frame: np.ndarray, face, mouth_mask_data: tuple) -> np.ndarray:
     landmarks = face.landmark_2d_106
     if landmarks is not None and mouth_mask_data is not None:
         mask, mouth_cutout, (min_x, min_y, max_x, max_y), lower_lip_polygon = (
@@ -492,7 +532,7 @@ def apply_mouth_area(
                 resized_mouth_cutout, (roi.shape[1], roi.shape[0])
             )
 
-        color_corrected_mouth = apply_color_transfer(resized_mouth_cutout, roi)
+        color_corrected_mouth = color_transfer(resized_mouth_cutout, roi)
 
         # Use the provided mouth polygon to create the mask
         polygon_mask = np.zeros(roi.shape[:2], dtype=np.uint8)
@@ -531,7 +571,7 @@ def apply_mouth_area(
     return frame
 
 
-def create_face_mask(face: Face, frame: Frame) -> np.ndarray:
+def create_face_mask(face, frame: np.ndarray) -> np.ndarray:
     mask = np.zeros(frame.shape[:2], dtype=np.uint8)
     landmarks = face.landmark_2d_106
     if landmarks is not None:
@@ -598,25 +638,3 @@ def create_face_mask(face: Face, frame: Frame) -> np.ndarray:
         mask = cv2.GaussianBlur(mask, (5, 5), 3)
 
     return mask
-
-
-def apply_color_transfer(source, target):
-    """
-    Apply color transfer from target to source image
-    """
-    source = cv2.cvtColor(source, cv2.COLOR_BGR2LAB).astype("float32")
-    target = cv2.cvtColor(target, cv2.COLOR_BGR2LAB).astype("float32")
-
-    source_mean, source_std = cv2.meanStdDev(source)
-    target_mean, target_std = cv2.meanStdDev(target)
-
-    # Reshape mean and std to be broadcastable
-    source_mean = source_mean.reshape(1, 1, 3)
-    source_std = source_std.reshape(1, 1, 3)
-    target_mean = target_mean.reshape(1, 1, 3)
-    target_std = target_std.reshape(1, 1, 3)
-
-    # Perform the color transfer
-    source = (source - source_mean) * (target_std / source_std) + target_mean
-
-    return cv2.cvtColor(np.clip(source, 0, 255).astype("uint8"), cv2.COLOR_LAB2BGR)
