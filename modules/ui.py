@@ -988,6 +988,9 @@ def create_webcam_preview(camera_index: int):
 
     # --- End Source Image Loading ---
 
+    detection_frame_counter = 0
+    DETECTION_INTERVAL = 3 # Process every 3rd frame
+
     prev_time = time.time()
     fps_update_interval = 0.5
     frame_count = 0
@@ -1013,31 +1016,30 @@ def create_webcam_preview(camera_index: int):
                 temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
             )
 
-        if not modules.globals.map_faces:
-            # Case 1: map_faces is False - source_face_obj_for_cam and source_frame_full_for_cam are pre-loaded
-            if source_face_obj_for_cam is not None and source_frame_full_for_cam is not None: # Check if valid after pre-loading
-                for frame_processor in frame_processors:
-                    if frame_processor.NAME == "DLC.FACE-ENHANCER":
-                        if modules.globals.fp_ui["face_enhancer"]:
-                            temp_frame = frame_processor.process_frame(None, temp_frame)
-                    else:
-                        temp_frame = frame_processor.process_frame(source_face_obj_for_cam, source_frame_full_for_cam, temp_frame)
-            # If source image was invalid (e.g. no face), source_face_obj_for_cam might be None.
-            # In this case, the frame processors that need it will be skipped, effectively just showing the raw webcam frame.
-            # The error message is already persistent due to the pre-loop check.
-        else:
-            # Case 2: map_faces is True - source_frame_full_for_cam_map_faces is pre-loaded
-            if source_frame_full_for_cam_map_faces is not None: # Check if valid after pre-loading
-                modules.globals.target_path = None # Standard for live mode
-                for frame_processor in frame_processors:
-                    if frame_processor.NAME == "DLC.FACE-ENHANCER":
-                        if modules.globals.fp_ui["face_enhancer"]:
-                            # Corrected: face_enhancer.process_frame_v2 is expected to take only temp_frame
-                            temp_frame = frame_processor.process_frame_v2(temp_frame)
-                    else:
-                        # This is for other processors when map_faces is True
-                        temp_frame = frame_processor.process_frame_v2(source_frame_full_for_cam_map_faces, temp_frame)
-            # If source_frame_full_for_cam_map_faces was invalid, error is persistent from pre-loop check.
+        detection_frame_counter += 1
+        if detection_frame_counter % DETECTION_INTERVAL == 0:
+            if not modules.globals.map_faces:
+                # Case 1: map_faces is False - source_face_obj_for_cam and source_frame_full_for_cam are pre-loaded
+                if source_face_obj_for_cam is not None and source_frame_full_for_cam is not None: # Check if valid after pre-loading
+                    for frame_processor in frame_processors:
+                        if frame_processor.NAME == "DLC.FACE-ENHANCER":
+                            if modules.globals.fp_ui["face_enhancer"]:
+                                temp_frame = frame_processor.process_frame(None, temp_frame)
+                        else:
+                            temp_frame = frame_processor.process_frame(source_face_obj_for_cam, source_frame_full_for_cam, temp_frame)
+                # If source image was invalid, processors are skipped; temp_frame remains raw (but mirrored/resized).
+            else:
+                # Case 2: map_faces is True - source_frame_full_for_cam_map_faces is pre-loaded
+                if source_frame_full_for_cam_map_faces is not None: # Check if valid after pre-loading
+                    modules.globals.target_path = None # Standard for live mode
+                    for frame_processor in frame_processors:
+                        if frame_processor.NAME == "DLC.FACE-ENHANCER":
+                            if modules.globals.fp_ui["face_enhancer"]:
+                                temp_frame = frame_processor.process_frame_v2(temp_frame)
+                        else:
+                            temp_frame = frame_processor.process_frame_v2(source_frame_full_for_cam_map_faces, temp_frame)
+                # If source_frame_full_for_cam_map_faces was invalid, processors are skipped.
+        # On non-detection frames, temp_frame (already mirrored/resized) is used directly.
 
         # Calculate and display FPS
         current_time = time.time()
