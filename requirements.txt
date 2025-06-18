@@ -2,7 +2,7 @@
 
 numpy>=1.23.5,<2
 typing-extensions>=4.8.0
-opencv-python==4.10.0.84
+opencv-contrib-python==4.10.0.84
 cv2_enumerate_cameras==1.1.15
 onnx==1.16.0
 insightface==0.7.3

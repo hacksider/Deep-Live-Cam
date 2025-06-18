@@ -53,7 +53,8 @@ def reset_tracker_state():
 
 
 def pre_check() -> bool:
-    download_directory_path = abs_dir
+    # download_directory_path = abs_dir # Old line
+    download_directory_path = models_dir # New line
     conditional_download(
         download_directory_path,
         [
@@ -621,6 +622,7 @@ def create_lower_mouth_mask(
 ) -> Tuple[np.ndarray, Optional[np.ndarray], Tuple[int, int, int, int], Optional[np.ndarray]]:
     mask = np.zeros(frame.shape[:2], dtype=np.uint8)
     mouth_cutout = None
+    lower_lip_polygon_details = None # Initialize to ensure it's always defined
 
     if face.landmark_2d_106 is None:
         logging.debug("Skipping lower_mouth_mask due to missing landmark_2d_106 (likely a tracked face).")
@@ -628,21 +630,20 @@ def create_lower_mouth_mask(
 
     landmarks = face.landmark_2d_106
 
-    # Corrected indentation for the block below
     lower_lip_order = [
         65, 66, 62, 70, 69, 18, 19, 20, 21, 22,
         23, 24, 0,  8,  7,  6,  5,  4,  3,  2, 65,
     ]
-    try: # Add try-except for safety if landmarks array is malformed
+    try:
         lower_lip_landmarks = landmarks[lower_lip_order].astype(np.float32)
     except IndexError:
         logging.warning("Failed to get lower_lip_landmarks due to landmark indexing issue.")
         return mask, None, (0,0,0,0), None
-    # End of corrected indentation block
 
     center = np.mean(lower_lip_landmarks, axis=0)
     expansion_factor = (1 + modules.globals.mask_down_size)
     expanded_landmarks = (lower_lip_landmarks - center) * expansion_factor + center
+
     toplip_indices = [20, 0, 1, 2, 3, 4, 5]
     toplip_extension = (modules.globals.mask_size * 0.5)
     for idx in toplip_indices:
@@ -657,31 +658,45 @@ def create_lower_mouth_mask(
         expanded_landmarks[idx][1] += (expanded_landmarks[idx][1] - center[1]) * chin_extension
 
     expanded_landmarks = expanded_landmarks.astype(np.int32)
+
     min_x, min_y = np.min(expanded_landmarks, axis=0)
     max_x, max_y = np.max(expanded_landmarks, axis=0)
+
     padding = int((max_x - min_x) * 0.1)
     min_x = max(0, min_x - padding)
     min_y = max(0, min_y - padding)
-    max_x = min(frame.shape[1], max_x + padding)
-    max_y = min(frame.shape[0], max_y + padding)
+    max_x = min(frame.shape[1] - 1, max_x + padding) # Ensure max_x is within bounds
+    max_y = min(frame.shape[0] - 1, max_y + padding) # Ensure max_y is within bounds
 
-    if max_x <= min_x or max_y <= min_y:
-        if (max_x - min_x) <= 1: max_x = min_x + 1
-        if (max_y - min_y) <= 1: max_y = min_y + 1
+    # Ensure min is less than max after adjustments
+    if max_x <= min_x: max_x = min_x + 1
+    if max_y <= min_y: max_y = min_y + 1
 
-    # Ensure ROI is valid before creating mask_roi
-    if max_y - min_y <=0 or max_x - min_x <=0:
-        logging.warning("Invalid ROI for mouth mask creation.")
-        return mask, None, (min_x, min_y, max_x, max_y), None
+    # Ensure ROI dimensions are positive
+    if max_y - min_y <= 0 or max_x - min_x <= 0:
+        logging.warning(f"Invalid ROI for mouth mask creation: min_x={min_x}, max_x={max_x}, min_y={min_y}, max_y={max_y}")
+        return mask, None, (min_x, min_y, max_x, max_y), None # Return current min/max for bbox
 
     mask_roi = np.zeros((max_y - min_y, max_x - min_x), dtype=np.uint8)
-    cv2.fillPoly(mask_roi, [expanded_landmarks - [min_x, min_y]], 255)
-    mask_roi = cv2.GaussianBlur(mask_roi, (15, 15), 5)
+    # Adjust landmarks to be relative to the ROI
+    adjusted_landmarks = expanded_landmarks - [min_x, min_y]
+    cv2.fillPoly(mask_roi, [adjusted_landmarks], 255)
+
+    # Apply Gaussian blur to soften the mask edges
+    # Ensure kernel size is odd and positive
+    blur_kernel_size = (15, 15) # Make sure this is appropriate
+    if blur_kernel_size[0] % 2 == 0: blur_kernel_size = (blur_kernel_size[0]+1, blur_kernel_size[1])
+    if blur_kernel_size[1] % 2 == 0: blur_kernel_size = (blur_kernel_size[0], blur_kernel_size[1]+1)
+    if blur_kernel_size[0] <=0 : blur_kernel_size = (1, blur_kernel_size[1])
+    if blur_kernel_size[1] <=0 : blur_kernel_size = (blur_kernel_size[0], 1)
+
+    mask_roi = cv2.GaussianBlur(mask_roi, blur_kernel_size, 5) # Sigma might also need tuning
+
     mask[min_y:max_y, min_x:max_x] = mask_roi
     mouth_cutout = frame[min_y:max_y, min_x:max_x].copy()
-    lower_lip_polygon = expanded_landmarks
+    lower_lip_polygon_details = expanded_landmarks
 
-    return mask, mouth_cutout, (min_x, min_y, max_x, max_y), lower_lip_polygon
+    return mask, mouth_cutout, (min_x, min_y, max_x, max_y), lower_lip_polygon_details
 
 
 def draw_mouth_mask_visualization(
@@ -704,25 +719,51 @@ def draw_mouth_mask_visualization(
     if max_y - min_y <= 0 or max_x - min_x <= 0:
         logging.warning("Invalid ROI for mouth mask visualization.")
         return vis_frame
-    mask_region = mask[0 : max_y - min_y, 0 : max_x - min_x]
+    mask_region = mask[0 : max_y - min_y, 0 : max_x - min_x] # This line might be problematic if mask is full frame
 
-    cv2.polylines(vis_frame, [lower_lip_polygon], True, (0, 255, 0), 2)
+    cv2.polylines(vis_frame, [lower_lip_polygon], True, (0, 255, 0), 2) # This uses original lower_lip_polygon coordinates
 
+    # For displaying the mask itself, it's better to show the ROI where it was applied
+    # or create a version of the mask that is full frame for visualization.
+    # The current `mask_region` is a crop of the full `mask`.
+    # Let's ensure we are visualizing the correct part or the full mask.
+    # If `mask` is the full-frame mask, and `mask_region` was just for feathering calculation,
+    # then we should use `mask` for display or a ROI from `mask`.
+
+    # To make vis_frame part where mask is applied red (for example):
+    # vis_frame_roi = vis_frame[min_y:max_y, min_x:max_x]
+    # boolean_mask_roi = mask[min_y:max_y, min_x:max_x] > 127 # Assuming mask is full frame
+    # if vis_frame_roi.shape[:2] == boolean_mask_roi.shape:
+    #    vis_frame_roi[boolean_mask_roi] = [0,0,255] # Red where mask is active
+
+    # The existing feathering logic for visualization:
     feather_amount = max(1, min(30,
         (max_x - min_x) // modules.globals.mask_feather_ratio if (max_x - min_x) > 0 and modules.globals.mask_feather_ratio > 0 else 1,
         (max_y - min_y) // modules.globals.mask_feather_ratio if (max_y - min_y) > 0 and modules.globals.mask_feather_ratio > 0 else 1
     ))
     kernel_size = 2 * feather_amount + 1
-    if mask_region.size > 0 :
-        feathered_mask = cv2.GaussianBlur(mask_region.astype(float), (kernel_size, kernel_size), 0)
-        max_val = feathered_mask.max()
-        if max_val > 0: feathered_mask = (feathered_mask / max_val * 255).astype(np.uint8)
-        else: feathered_mask = np.zeros_like(mask_region, dtype=np.uint8)
-    else:
-        feathered_mask = np.zeros_like(mask_region, dtype=np.uint8)
 
-    cv2.putText(vis_frame, "Lower Mouth Mask", (min_x, min_y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-    cv2.putText(vis_frame, "Feathered Mask", (min_x, max_y + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+    # Assuming mask_region was correctly extracted for visualization purposes (e.g., a crop of the mask)
+    # If mask_region is intended to be the mask that was applied, its size should match the ROI.
+    if mask_region.size > 0 and mask_region.shape[0] == (max_y-min_y) and mask_region.shape[1] == (max_x-min_x):
+        feathered_mask_vis = cv2.GaussianBlur(mask_region.astype(float), (kernel_size, kernel_size), 0)
+        max_val = feathered_mask_vis.max()
+        if max_val > 0: feathered_mask_vis = (feathered_mask_vis / max_val * 255).astype(np.uint8)
+        else: feathered_mask_vis = np.zeros_like(mask_region, dtype=np.uint8)
+
+        # Create a 3-channel version of the feathered mask for overlay if desired
+        # feathered_mask_vis_3ch = cv2.cvtColor(feathered_mask_vis, cv2.COLOR_GRAY2BGR)
+        # vis_frame_roi = vis_frame[min_y:max_y, min_x:max_x]
+        # blended_roi = cv2.addWeighted(vis_frame_roi, 0.7, feathered_mask_vis_3ch, 0.3, 0)
+        # vis_frame[min_y:max_y, min_x:max_x] = blended_roi
+    else:
+        # If mask_region is not what we expect, log or handle.
+        # For now, we'll skip drawing the feathered_mask part if dimensions mismatch.
+        logging.debug("Skipping feathered mask visualization part due to mask_region issues.")
+
+
+    cv2.putText(vis_frame, "Lower Mouth Mask (Polygon)", (min_x, min_y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+    # cv2.putText(vis_frame, "Feathered Mask (Visualization)", (min_x, max_y + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1) # Optional text
 
     return vis_frame
 
@@ -743,42 +784,59 @@ def apply_mouth_area(
     box_height = max_y - min_y
 
     if box_width <= 0 or box_height <= 0 or face_mask is None:
+        logging.debug(f"Skipping apply_mouth_area due to invalid box dimensions or missing face_mask. W:{box_width} H:{box_height}")
         return frame
 
     try:
-        resized_mouth_cutout = cv2.resize(mouth_cutout, (box_width, box_height))
+        # Ensure ROI is valid before attempting to access frame data
         if min_y >= max_y or min_x >= max_x:
-             logging.warning("Invalid ROI for applying mouth area.")
+             logging.warning(f"Invalid ROI for applying mouth area: min_x={min_x}, max_x={max_x}, min_y={min_y}, max_y={max_y}")
              return frame
+
         roi = frame[min_y:max_y, min_x:max_x]
 
-        if roi.shape != resized_mouth_cutout.shape:
-            resized_mouth_cutout = cv2.resize(resized_mouth_cutout, (roi.shape[1], roi.shape[0]))
+        # Resize mouth_cutout to match the ROI dimensions if they differ
+        if roi.shape[:2] != mouth_cutout.shape[:2]:
+            resized_mouth_cutout = cv2.resize(mouth_cutout, (roi.shape[1], roi.shape[0]))
+        else:
+            resized_mouth_cutout = mouth_cutout
 
         color_corrected_mouth = apply_color_transfer(resized_mouth_cutout, roi)
+
+        # Create polygon_mask for the ROI
         polygon_mask = np.zeros(roi.shape[:2], dtype=np.uint8)
         adjusted_polygon = mouth_polygon - [min_x, min_y]
-        cv2.fillPoly(polygon_mask, [adjusted_polygon], 255)
+        cv2.fillPoly(polygon_mask, [adjusted_polygon.astype(np.int32)], 255) # Ensure polygon points are int32
 
+        # Calculate feathering based on ROI dimensions
         feather_amount = max(1, min(30,
-            box_width // modules.globals.mask_feather_ratio if modules.globals.mask_feather_ratio > 0 else 30,
-            box_height // modules.globals.mask_feather_ratio if modules.globals.mask_feather_ratio > 0 else 30
+            roi.shape[1] // modules.globals.mask_feather_ratio if modules.globals.mask_feather_ratio > 0 else 30,
+            roi.shape[0] // modules.globals.mask_feather_ratio if modules.globals.mask_feather_ratio > 0 else 30
         ))
-        kernel_size_blur = 2 * feather_amount + 1
+        kernel_size_blur = 2 * feather_amount + 1 # Ensure it's odd
+        if kernel_size_blur <= 0: kernel_size_blur = 1 # Ensure positive
 
         feathered_mask_float = cv2.GaussianBlur(polygon_mask.astype(float), (kernel_size_blur, kernel_size_blur), 0)
 
         max_val = feathered_mask_float.max()
         feathered_mask_normalized = feathered_mask_float / max_val if max_val > 0 else feathered_mask_float
 
+        # Ensure face_mask_roi matches dimensions of feathered_mask_normalized
         face_mask_roi = face_mask[min_y:max_y, min_x:max_x]
-        combined_mask_float = feathered_mask_normalized * (face_mask_roi / 255.0)
-        combined_mask_3ch = combined_mask_float[:, :, np.newaxis]
+        if face_mask_roi.shape != feathered_mask_normalized.shape:
+            face_mask_roi = cv2.resize(face_mask_roi, (feathered_mask_normalized.shape[1], feathered_mask_normalized.shape[0]))
+            logging.warning("Resized face_mask_roi to match feathered_mask_normalized in apply_mouth_area.")
 
-        blended = (
+
+        combined_mask_float = feathered_mask_normalized * (face_mask_roi / 255.0)
+        combined_mask_3ch = combined_mask_float[:, :, np.newaxis] # Ensure broadcasting for 3 channels
+
+        # Ensure all inputs to blending are float32 for precision, then convert back to uint8
+        blended_float = (
             color_corrected_mouth.astype(np.float32) * combined_mask_3ch +
-            roi.astype(np.float32) * (1 - combined_mask_3ch)
-        ).astype(np.uint8)
+            roi.astype(np.float32) * (1.0 - combined_mask_3ch) # Ensure 1.0 for float subtraction
+        )
+        blended = np.clip(blended_float, 0, 255).astype(np.uint8)
 
         frame[min_y:max_y, min_x:max_x] = blended
     except Exception as e:
@@ -805,7 +863,13 @@ def create_face_mask(face: Face, frame: Frame) -> np.ndarray:
                 width = x2 - x1
                 height = y2 - y1
                 cv2.ellipse(mask, (center_x, center_y), (int(width * 0.6), int(height * 0.7)), 0, 0, 360, 255, -1)
-                mask = cv2.GaussianBlur(mask, (15, 15), 5)
+                # Ensure kernel size is odd and positive for GaussianBlur
+                blur_kernel_size_face = (15,15) # Example, can be tuned
+                if blur_kernel_size_face[0] % 2 == 0: blur_kernel_size_face = (blur_kernel_size_face[0]+1, blur_kernel_size_face[1])
+                if blur_kernel_size_face[1] % 2 == 0: blur_kernel_size_face = (blur_kernel_size_face[0], blur_kernel_size_face[1]+1)
+                if blur_kernel_size_face[0] <=0 : blur_kernel_size_face = (1, blur_kernel_size_face[1])
+                if blur_kernel_size_face[1] <=0 : blur_kernel_size_face = (blur_kernel_size_face[0], 1)
+                mask = cv2.GaussianBlur(mask, blur_kernel_size_face, 5)
         return mask
 
     landmarks = landmarks.astype(np.int32)
@@ -819,7 +883,13 @@ def create_face_mask(face: Face, frame: Frame) -> np.ndarray:
         if face.bbox is not None:
             x1, y1, x2, y2 = face.bbox.astype(int)
             cv2.rectangle(mask, (x1,y1), (x2,y2), 255, -1)
-            mask = cv2.GaussianBlur(mask, (15,15), 5)
+            # Ensure kernel size is odd and positive for GaussianBlur
+            blur_kernel_size_face_fallback = (15,15)
+            if blur_kernel_size_face_fallback[0] % 2 == 0: blur_kernel_size_face_fallback = (blur_kernel_size_face_fallback[0]+1, blur_kernel_size_face_fallback[1])
+            if blur_kernel_size_face_fallback[1] % 2 == 0: blur_kernel_size_face_fallback = (blur_kernel_size_face_fallback[0], blur_kernel_size_face_fallback[1]+1)
+            if blur_kernel_size_face_fallback[0] <=0 : blur_kernel_size_face_fallback = (1, blur_kernel_size_face_fallback[1])
+            if blur_kernel_size_face_fallback[1] <=0 : blur_kernel_size_face_fallback = (blur_kernel_size_face_fallback[0], 1)
+            mask = cv2.GaussianBlur(mask, blur_kernel_size_face_fallback, 5)
         return mask
 
     right_eyebrow_top = np.min(right_eye_brow[:, 1])
@@ -847,7 +917,13 @@ def create_face_mask(face: Face, frame: Frame) -> np.ndarray:
         if face.bbox is not None:
             x1, y1, x2, y2 = face.bbox.astype(int)
             cv2.rectangle(mask, (x1,y1), (x2,y2), 255, -1)
-            mask = cv2.GaussianBlur(mask, (15,15), 5)
+            # Ensure kernel size is odd and positive for GaussianBlur
+            blur_kernel_size_face_hull_fallback = (15,15)
+            if blur_kernel_size_face_hull_fallback[0] % 2 == 0: blur_kernel_size_face_hull_fallback = (blur_kernel_size_face_hull_fallback[0]+1, blur_kernel_size_face_hull_fallback[1])
+            if blur_kernel_size_face_hull_fallback[1] % 2 == 0: blur_kernel_size_face_hull_fallback = (blur_kernel_size_face_hull_fallback[0], blur_kernel_size_face_hull_fallback[1]+1)
+            if blur_kernel_size_face_hull_fallback[0] <=0 : blur_kernel_size_face_hull_fallback = (1, blur_kernel_size_face_hull_fallback[1])
+            if blur_kernel_size_face_hull_fallback[1] <=0 : blur_kernel_size_face_hull_fallback = (blur_kernel_size_face_hull_fallback[0], 1)
+            mask = cv2.GaussianBlur(mask, blur_kernel_size_face_hull_fallback, 5)
         return mask
 
     padding = int(np.linalg.norm(right_side_face[0] - left_side_face[-1]) * 0.05)
@@ -856,43 +932,74 @@ def create_face_mask(face: Face, frame: Frame) -> np.ndarray:
 
     center_of_outline = np.mean(face_outline, axis=0).squeeze()
     if center_of_outline.ndim > 1:
-        center_of_outline = np.mean(center_of_outline, axis=0)
+        center_of_outline = np.mean(center_of_outline, axis=0) # Ensure center_of_outline is 1D
 
     for point_contour in hull:
         point = point_contour[0]
         direction = point - center_of_outline
         norm_direction = np.linalg.norm(direction)
-        if norm_direction == 0: unit_direction = np.array([0,0])
+        if norm_direction == 0: unit_direction = np.array([0,0], dtype=float) # Ensure float for multiplication
         else: unit_direction = direction / norm_direction
 
         padded_point = point + unit_direction * padding
         hull_padded.append(padded_point)
 
     if hull_padded:
-        hull_padded = np.array(hull_padded, dtype=np.int32)
-        if hull_padded.ndim == 2:
-            hull_padded = hull_padded[:, np.newaxis, :]
-        cv2.fillConvexPoly(mask, hull_padded, 255)
+        hull_padded_np = np.array(hull_padded, dtype=np.int32)
+        # cv2.fillConvexPoly expects a 2D array for points, or 3D with shape (N,1,2)
+        if hull_padded_np.ndim == 3 and hull_padded_np.shape[1] == 1: # Already (N,1,2)
+             cv2.fillConvexPoly(mask, hull_padded_np, 255)
+        elif hull_padded_np.ndim == 2: # Shape (N,2)
+             cv2.fillConvexPoly(mask, hull_padded_np[:, np.newaxis, :], 255) # Reshape to (N,1,2)
+        else: # Fallback if shape is unexpected
+            logging.warning("Unexpected shape for hull_padded in create_face_mask. Using raw hull.")
+            if hull.ndim == 2: hull = hull[:,np.newaxis,:] # Ensure hull is (N,1,2)
+            cv2.fillConvexPoly(mask, hull, 255)
     else:
-        if hull.ndim == 2:
-            hull = hull[:, np.newaxis, :]
+        # Fallback to raw hull if hull_padded is empty for some reason
+        if hull.ndim == 2: hull = hull[:,np.newaxis,:] # Ensure hull is (N,1,2)
         cv2.fillConvexPoly(mask, hull, 255)
 
-    mask = cv2.GaussianBlur(mask, (5, 5), 3)
+    # Ensure kernel size is odd and positive for GaussianBlur
+    blur_kernel_size_face_final = (5,5)
+    if blur_kernel_size_face_final[0] % 2 == 0: blur_kernel_size_face_final = (blur_kernel_size_face_final[0]+1, blur_kernel_size_face_final[1])
+    if blur_kernel_size_face_final[1] % 2 == 0: blur_kernel_size_face_final = (blur_kernel_size_face_final[0], blur_kernel_size_face_final[1]+1)
+    if blur_kernel_size_face_final[0] <=0 : blur_kernel_size_face_final = (1, blur_kernel_size_face_final[1])
+    if blur_kernel_size_face_final[1] <=0 : blur_kernel_size_face_final = (blur_kernel_size_face_final[0], 1)
+    mask = cv2.GaussianBlur(mask, blur_kernel_size_face_final, 3)
     return mask
 
 
 def apply_color_transfer(source, target):
-    source = cv2.cvtColor(source, cv2.COLOR_BGR2LAB).astype("float32")
-    target = cv2.cvtColor(target, cv2.COLOR_BGR2LAB).astype("float32")
+    # Ensure inputs are not empty
+    if source is None or source.size == 0 or target is None or target.size == 0:
+        logging.warning("Color transfer skipped due to empty source or target image.")
+        return source # Or target, depending on desired behavior for empty inputs
 
-    source_mean, source_std = cv2.meanStdDev(source)
-    target_mean, target_std = cv2.meanStdDev(target)
+    try:
+        source_lab = cv2.cvtColor(source, cv2.COLOR_BGR2LAB).astype("float32")
+        target_lab = cv2.cvtColor(target, cv2.COLOR_BGR2LAB).astype("float32")
 
-    source_mean = source_mean.reshape(1, 1, 3)
-    source_std = source_std.reshape(1, 1, 3)
-    target_mean = target_mean.reshape(1, 1, 3)
-    target_std = target_std.reshape(1, 1, 3)
-    source_std[source_std == 0] = 1
-    source = (source - source_mean) * (target_std / source_std) + target_mean
-    return cv2.cvtColor(np.clip(source, 0, 255).astype("uint8"), cv2.COLOR_LAB2BGR)
+        source_mean, source_std = cv2.meanStdDev(source_lab)
+        target_mean, target_std = cv2.meanStdDev(target_lab)
+
+        source_mean = source_mean.reshape((1, 1, 3))
+        source_std = source_std.reshape((1, 1, 3))
+        target_mean = target_mean.reshape((1, 1, 3))
+        target_std = target_std.reshape((1, 1, 3))
+
+        # Avoid division by zero if source_std is zero
+        source_std[source_std == 0] = 1e-6 # A small epsilon instead of 1 to avoid large scaling if target_std is also small
+
+        adjusted_lab = (source_lab - source_mean) * (target_std / source_std) + target_mean
+        adjusted_lab = np.clip(adjusted_lab, 0, 255) # Clip values to be within valid range for LAB
+
+        result_bgr = cv2.cvtColor(adjusted_lab.astype("uint8"), cv2.COLOR_LAB2BGR)
+    except cv2.error as e:
+        logging.error(f"OpenCV error in apply_color_transfer: {e}", exc_info=True)
+        return source # Return original source on error
+    except Exception as e:
+        logging.error(f"Unexpected error in apply_color_transfer: {e}", exc_info=True)
+        return source # Return original source on error
+
+    return result_bgr
