@@ -19,6 +19,7 @@ from modules.face_analyser import (
 )
 from modules.capturer import get_video_frame, get_video_frame_total
 from modules.processors.frame.core import get_frame_processors_modules
+from modules.processors.frame.face_swapper import reset_tracker_state # Added import
 from modules.utilities import (
     is_image,
     is_video,
@@ -240,6 +241,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         command=lambda: (
             setattr(modules.globals, "many_faces", many_faces_value.get()),
             save_switch_states(),
+            reset_tracker_state() # Added reset call
         ),
     )
     many_faces_switch.place(relx=0.6, rely=0.65)
@@ -266,7 +268,8 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         command=lambda: (
             setattr(modules.globals, "map_faces", map_faces.get()),
             save_switch_states(),
-            close_mapper_window() if not map_faces.get() else None
+            close_mapper_window() if not map_faces.get() else None,
+            reset_tracker_state() # Added reset call
         ),
     )
     map_faces_switch.place(relx=0.1, rely=0.75)
@@ -604,9 +607,11 @@ def select_source_path() -> None:
         RECENT_DIRECTORY_SOURCE = os.path.dirname(modules.globals.source_path)
         image = render_image_preview(modules.globals.source_path, (200, 200))
         source_label.configure(image=image)
+        reset_tracker_state() # Added reset call
     else:
         modules.globals.source_path = None
         source_label.configure(image=None)
+        reset_tracker_state() # Added reset call even if source is cleared
 
 
 def swap_faces_paths() -> None:
@@ -978,6 +983,8 @@ def create_webcam_preview(camera_index: int):
     fps_update_interval = 0.5
     frame_count = 0
     fps = 0
+
+    reset_tracker_state() # Ensure tracker is reset before starting webcam loop
 
     while True:
         ret, frame = cap.read()
