@@ -988,9 +988,6 @@ def create_webcam_preview(camera_index: int):
 
     # --- End Source Image Loading ---
 
-    detection_frame_counter = 0
-    DETECTION_INTERVAL = 3 # Process every 3rd frame
-
     prev_time = time.time()
     fps_update_interval = 0.5
     frame_count = 0
