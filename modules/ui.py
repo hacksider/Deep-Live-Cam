@@ -257,10 +257,6 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     )
     color_correction_switch.place(relx=0.6, rely=0.70)
 
-    #    nsfw_value = ctk.BooleanVar(value=modules.globals.nsfw_filter)
-    #    nsfw_switch = ctk.CTkSwitch(root, text='NSFW filter', variable=nsfw_value, cursor='hand2', command=lambda: setattr(modules.globals, 'nsfw_filter', nsfw_value.get()))
-    #    nsfw_switch.place(relx=0.6, rely=0.7)
-
     map_faces = ctk.BooleanVar(value=modules.globals.map_faces)
     map_faces_switch = ctk.CTkSwitch(
         root,
@@ -288,7 +284,6 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     )
     show_fps_switch.place(relx=0.6, rely=0.75)
 
-    # Hair Swapping Switch (placed below "Show FPS" on the right column)
     hair_swapping_value = ctk.BooleanVar(value=modules.globals.enable_hair_swapping)
     hair_swapping_switch = ctk.CTkSwitch(
         root,
@@ -300,7 +295,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             save_switch_states(),
         )
     )
-    hair_swapping_switch.place(relx=0.6, rely=0.80) # Adjusted rely from 0.75 to 0.80
+    hair_swapping_switch.place(relx=0.6, rely=0.80)
 
     mouth_mask_var = ctk.BooleanVar(value=modules.globals.mouth_mask)
     mouth_mask_switch = ctk.CTkSwitch(
@@ -324,26 +319,23 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     )
     show_mouth_mask_box_switch.place(relx=0.6, rely=0.55)
 
-    # Adjusting placement of Start, Stop, Preview buttons due to new switch
     start_button = ctk.CTkButton(
         root, text=_("Start"), cursor="hand2", command=lambda: analyze_target(start, root)
     )
-    start_button.place(relx=0.15, rely=0.85, relwidth=0.2, relheight=0.05) # rely from 0.80 to 0.85
+    start_button.place(relx=0.15, rely=0.85, relwidth=0.2, relheight=0.05)
 
     stop_button = ctk.CTkButton(
         root, text=_("Destroy"), cursor="hand2", command=lambda: destroy()
     )
-    stop_button.place(relx=0.4, rely=0.85, relwidth=0.2, relheight=0.05) # rely from 0.80 to 0.85
+    stop_button.place(relx=0.4, rely=0.85, relwidth=0.2, relheight=0.05)
 
     preview_button = ctk.CTkButton(
         root, text=_("Preview"), cursor="hand2", command=lambda: toggle_preview()
     )
-    preview_button.place(relx=0.65, rely=0.85, relwidth=0.2, relheight=0.05) # rely from 0.80 to 0.85
+    preview_button.place(relx=0.65, rely=0.85, relwidth=0.2, relheight=0.05)
 
-    # --- Camera Selection ---
-    # Adjusting placement of Camera selection due to new switch
     camera_label = ctk.CTkLabel(root, text=_("Select Camera:"))
-    camera_label.place(relx=0.1, rely=0.91, relwidth=0.2, relheight=0.05) # rely from 0.86 to 0.91
+    camera_label.place(relx=0.1, rely=0.91, relwidth=0.2, relheight=0.05)
 
     available_cameras = get_available_cameras()
     camera_indices, camera_names = available_cameras
@@ -362,7 +354,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             root, variable=camera_variable, values=camera_names
         )
 
-    camera_optionmenu.place(relx=0.35, rely=0.91, relwidth=0.25, relheight=0.05) # rely from 0.86 to 0.91
+    camera_optionmenu.place(relx=0.35, rely=0.91, relwidth=0.25, relheight=0.05)
 
     live_button = ctk.CTkButton(
         root,
@@ -382,16 +374,15 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             else "disabled"
         ),
     )
-    live_button.place(relx=0.65, rely=0.91, relwidth=0.2, relheight=0.05) # rely from 0.86 to 0.91
-    # --- End Camera Selection ---
+    live_button.place(relx=0.65, rely=0.91, relwidth=0.2, relheight=0.05)
 
     status_label = ctk.CTkLabel(root, text=None, justify="center")
-    status_label.place(relx=0.1, rely=0.96, relwidth=0.8) # rely from 0.9 to 0.96
+    status_label.place(relx=0.1, rely=0.96, relwidth=0.8)
 
     donate_label = ctk.CTkLabel(
         root, text="Deep Live Cam", justify="center", cursor="hand2"
     )
-    donate_label.place(relx=0.1, rely=0.99, relwidth=0.8) # rely from 0.95 to 0.99
+    donate_label.place(relx=0.1, rely=0.99, relwidth=0.8)
     donate_label.configure(
         text_color=ctk.ThemeManager.theme.get("URL").get("text_color")
     )
@@ -1013,30 +1004,30 @@ def create_webcam_preview(camera_index: int):
                 temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
             )
 
-        detection_frame_counter += 1
-        if detection_frame_counter % DETECTION_INTERVAL == 0:
-            if not modules.globals.map_faces:
-                # Case 1: map_faces is False - source_face_obj_for_cam and source_frame_full_for_cam are pre-loaded
-                if source_face_obj_for_cam is not None and source_frame_full_for_cam is not None: # Check if valid after pre-loading
-                    for frame_processor in frame_processors:
-                        if frame_processor.NAME == "DLC.FACE-ENHANCER":
-                            if modules.globals.fp_ui["face_enhancer"]:
-                                temp_frame = frame_processor.process_frame(None, temp_frame)
-                        else:
-                            temp_frame = frame_processor.process_frame(source_face_obj_for_cam, source_frame_full_for_cam, temp_frame)
-                # If source image was invalid, processors are skipped; temp_frame remains raw (but mirrored/resized).
-            else:
-                # Case 2: map_faces is True - source_frame_full_for_cam_map_faces is pre-loaded
-                if source_frame_full_for_cam_map_faces is not None: # Check if valid after pre-loading
-                    modules.globals.target_path = None # Standard for live mode
-                    for frame_processor in frame_processors:
-                        if frame_processor.NAME == "DLC.FACE-ENHANCER":
-                            if modules.globals.fp_ui["face_enhancer"]:
-                                temp_frame = frame_processor.process_frame_v2(temp_frame)
-                        else:
-                            temp_frame = frame_processor.process_frame_v2(source_frame_full_for_cam_map_faces, temp_frame)
-                # If source_frame_full_for_cam_map_faces was invalid, processors are skipped.
-        # On non-detection frames, temp_frame (already mirrored/resized) is used directly.
+        # Processing logic now runs every frame
+        if not modules.globals.map_faces:
+            # Case 1: map_faces is False - source_face_obj_for_cam and source_frame_full_for_cam are pre-loaded
+            if source_face_obj_for_cam is not None and source_frame_full_for_cam is not None: # Check if valid after pre-loading
+                for frame_processor in frame_processors:
+                    if frame_processor.NAME == "DLC.FACE-ENHANCER":
+                        if modules.globals.fp_ui["face_enhancer"]:
+                            temp_frame = frame_processor.process_frame(None, temp_frame)
+                    else:
+                        temp_frame = frame_processor.process_frame(source_face_obj_for_cam, source_frame_full_for_cam, temp_frame)
+            # If source image was invalid, processors are skipped; temp_frame remains raw (but mirrored/resized).
+        else:
+            # Case 2: map_faces is True - source_frame_full_for_cam_map_faces is pre-loaded
+            if source_frame_full_for_cam_map_faces is not None: # Check if valid after pre-loading
+                modules.globals.target_path = None # Standard for live mode
+                for frame_processor in frame_processors:
+                    if frame_processor.NAME == "DLC.FACE-ENHANCER":
+                        if modules.globals.fp_ui["face_enhancer"]:
+                            # Corrected: face_enhancer.process_frame_v2 is expected to take only temp_frame
+                            temp_frame = frame_processor.process_frame_v2(temp_frame)
+                    else:
+                        # This is for other processors when map_faces is True
+                        temp_frame = frame_processor.process_frame_v2(source_frame_full_for_cam_map_faces, temp_frame)
+            # If source_frame_full_for_cam_map_faces was invalid, processors are skipped.
 
         # Calculate and display FPS
         current_time = time.time()
@@ -1317,3 +1308,5 @@ def update_webcam_target(
         else:
             update_pop_live_status("Face could not be detected in last upload!")
         return map
+
+[end of modules/ui.py]
