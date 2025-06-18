@@ -618,7 +618,7 @@ def process_video(source_path: str, temp_frame_paths: List[str]) -> None:
 
 def create_lower_mouth_mask(
     face: Face, frame: Frame
-) -> (np.ndarray, np.ndarray, tuple, np.ndarray):
+) -> Tuple[np.ndarray, Optional[np.ndarray], Tuple[int, int, int, int], Optional[np.ndarray]]:
     mask = np.zeros(frame.shape[:2], dtype=np.uint8)
     mouth_cutout = None
 
@@ -627,16 +627,18 @@ def create_lower_mouth_mask(
         return mask, None, (0,0,0,0), None
 
     landmarks = face.landmark_2d_106
+
+    # Corrected indentation for the block below
     lower_lip_order = [
-            65, 66, 62, 70, 69, 18, 19, 20, 21, 22,
-            23, 24, 0,  8,  7,  6,  5,  4,  3,  2, 65,
+        65, 66, 62, 70, 69, 18, 19, 20, 21, 22,
+        23, 24, 0,  8,  7,  6,  5,  4,  3,  2, 65,
     ]
     try: # Add try-except for safety if landmarks array is malformed
         lower_lip_landmarks = landmarks[lower_lip_order].astype(np.float32)
     except IndexError:
         logging.warning("Failed to get lower_lip_landmarks due to landmark indexing issue.")
         return mask, None, (0,0,0,0), None
-
+    # End of corrected indentation block
 
     center = np.mean(lower_lip_landmarks, axis=0)
     expansion_factor = (1 + modules.globals.mask_down_size)
