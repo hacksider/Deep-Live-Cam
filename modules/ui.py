@@ -931,9 +931,6 @@ def create_webcam_preview(camera_index: int):
         source_face_obj_for_cam = get_one_face(source_frame_full_for_cam)
         if source_face_obj_for_cam is None:
             update_status(f"Error: No face detected in source image {modules.globals.source_path}")
-            # This error is less critical for stopping immediately, but we'll make it persistent too.
-            # The loop below will run, but processing for frames will effectively be skipped.
-            # For consistency in error handling, make it persistent.
             cap.release()
             PREVIEW.withdraw()
             while PREVIEW.state() != "withdrawn" and ROOT.winfo_exists():
@@ -974,8 +971,6 @@ def create_webcam_preview(camera_index: int):
 
         if not modules.globals.source_target_map and not modules.globals.simple_map:
             update_status("Warning: No face map defined for map_faces mode. Swapper may not work as expected.")
-            # This is a warning, not a fatal error for the preview window itself. Processing will continue.
-            # No persistent loop here, as it's a warning about functionality, not a critical load error.
 
     # --- End Source Image Loading ---
 
@@ -998,38 +993,32 @@ def create_webcam_preview(camera_index: int):
             temp_frame = fit_image_to_size(
                 temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
             )
-
         else:
             temp_frame = fit_image_to_size(
                 temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
             )
 
-        # Processing logic now runs every frame
+        # REMOVED: detection_frame_counter += 1
+        # REMOVED: if detection_frame_counter % DETECTION_INTERVAL == 0:
+        # The following block is now unindented to run every frame
         if not modules.globals.map_faces:
-            # Case 1: map_faces is False - source_face_obj_for_cam and source_frame_full_for_cam are pre-loaded
-            if source_face_obj_for_cam is not None and source_frame_full_for_cam is not None: # Check if valid after pre-loading
+            if source_face_obj_for_cam is not None and source_frame_full_for_cam is not None:
                 for frame_processor in frame_processors:
                     if frame_processor.NAME == "DLC.FACE-ENHANCER":
                         if modules.globals.fp_ui["face_enhancer"]:
                             temp_frame = frame_processor.process_frame(None, temp_frame)
                     else:
                         temp_frame = frame_processor.process_frame(source_face_obj_for_cam, source_frame_full_for_cam, temp_frame)
-            # If source image was invalid, processors are skipped; temp_frame remains raw (but mirrored/resized).
         else:
-            # Case 2: map_faces is True - source_frame_full_for_cam_map_faces is pre-loaded
-            if source_frame_full_for_cam_map_faces is not None: # Check if valid after pre-loading
-                modules.globals.target_path = None # Standard for live mode
+            if source_frame_full_for_cam_map_faces is not None:
+                modules.globals.target_path = None
                 for frame_processor in frame_processors:
                     if frame_processor.NAME == "DLC.FACE-ENHANCER":
                         if modules.globals.fp_ui["face_enhancer"]:
-                            # Corrected: face_enhancer.process_frame_v2 is expected to take only temp_frame
                             temp_frame = frame_processor.process_frame_v2(temp_frame)
                     else:
-                        # This is for other processors when map_faces is True
                         temp_frame = frame_processor.process_frame_v2(source_frame_full_for_cam_map_faces, temp_frame)
-            # If source_frame_full_for_cam_map_faces was invalid, processors are skipped.
 
-        # Calculate and display FPS
         current_time = time.time()
         frame_count += 1
         if current_time - prev_time >= fps_update_interval:
@@ -1308,5 +1297,3 @@ def update_webcam_target(
         else:
             update_pop_live_status("Face could not be detected in last upload!")
         return map
-
-[end of modules/ui.py]
