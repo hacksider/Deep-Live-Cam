@@ -19,6 +19,7 @@ from modules.face_analyser import (
 )
 from modules.capturer import get_video_frame, get_video_frame_total
 from modules.processors.frame.core import get_frame_processors_modules
+from modules.processors.frame.face_swapper import reset_tracker_state # Added import
 from modules.utilities import (
     is_image,
     is_video,
@@ -105,6 +106,7 @@ def save_switch_states():
         "show_fps": modules.globals.show_fps,
         "mouth_mask": modules.globals.mouth_mask,
         "show_mouth_mask_box": modules.globals.show_mouth_mask_box,
+        "enable_hair_swapping": modules.globals.enable_hair_swapping,
     }
     with open("switch_states.json", "w") as f:
         json.dump(switch_states, f)
@@ -128,6 +130,9 @@ def load_switch_states():
         modules.globals.mouth_mask = switch_states.get("mouth_mask", False)
         modules.globals.show_mouth_mask_box = switch_states.get(
             "show_mouth_mask_box", False
+        )
+        modules.globals.enable_hair_swapping = switch_states.get(
+            "enable_hair_swapping", True # Default to True if not found
         )
     except FileNotFoundError:
         # If the file doesn't exist, use default values
@@ -236,6 +241,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         command=lambda: (
             setattr(modules.globals, "many_faces", many_faces_value.get()),
             save_switch_states(),
+            reset_tracker_state() # Added reset call
         ),
     )
     many_faces_switch.place(relx=0.6, rely=0.65)
@@ -253,10 +259,6 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     )
     color_correction_switch.place(relx=0.6, rely=0.70)
 
-    #    nsfw_value = ctk.BooleanVar(value=modules.globals.nsfw_filter)
-    #    nsfw_switch = ctk.CTkSwitch(root, text='NSFW filter', variable=nsfw_value, cursor='hand2', command=lambda: setattr(modules.globals, 'nsfw_filter', nsfw_value.get()))
-    #    nsfw_switch.place(relx=0.6, rely=0.7)
-
     map_faces = ctk.BooleanVar(value=modules.globals.map_faces)
     map_faces_switch = ctk.CTkSwitch(
         root,
@@ -266,7 +268,8 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         command=lambda: (
             setattr(modules.globals, "map_faces", map_faces.get()),
             save_switch_states(),
-            close_mapper_window() if not map_faces.get() else None
+            close_mapper_window() if not map_faces.get() else None,
+            reset_tracker_state() # Added reset call
         ),
     )
     map_faces_switch.place(relx=0.1, rely=0.75)
@@ -283,6 +286,19 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         ),
     )
     show_fps_switch.place(relx=0.6, rely=0.75)
+
+    hair_swapping_value = ctk.BooleanVar(value=modules.globals.enable_hair_swapping)
+    hair_swapping_switch = ctk.CTkSwitch(
+        root,
+        text=_("Swap Hair"),
+        variable=hair_swapping_value,
+        cursor="hand2",
+        command=lambda: (
+            setattr(modules.globals, "enable_hair_swapping", hair_swapping_value.get()),
+            save_switch_states(),
+        )
+    )
+    hair_swapping_switch.place(relx=0.6, rely=0.80)
 
     mouth_mask_var = ctk.BooleanVar(value=modules.globals.mouth_mask)
     mouth_mask_switch = ctk.CTkSwitch(
@@ -309,21 +325,20 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     start_button = ctk.CTkButton(
         root, text=_("Start"), cursor="hand2", command=lambda: analyze_target(start, root)
     )
-    start_button.place(relx=0.15, rely=0.80, relwidth=0.2, relheight=0.05)
+    start_button.place(relx=0.15, rely=0.85, relwidth=0.2, relheight=0.05)
 
     stop_button = ctk.CTkButton(
         root, text=_("Destroy"), cursor="hand2", command=lambda: destroy()
     )
-    stop_button.place(relx=0.4, rely=0.80, relwidth=0.2, relheight=0.05)
+    stop_button.place(relx=0.4, rely=0.85, relwidth=0.2, relheight=0.05)
 
     preview_button = ctk.CTkButton(
         root, text=_("Preview"), cursor="hand2", command=lambda: toggle_preview()
     )
-    preview_button.place(relx=0.65, rely=0.80, relwidth=0.2, relheight=0.05)
+    preview_button.place(relx=0.65, rely=0.85, relwidth=0.2, relheight=0.05)
 
-    # --- Camera Selection ---
     camera_label = ctk.CTkLabel(root, text=_("Select Camera:"))
-    camera_label.place(relx=0.1, rely=0.86, relwidth=0.2, relheight=0.05)
+    camera_label.place(relx=0.1, rely=0.91, relwidth=0.2, relheight=0.05)
 
     available_cameras = get_available_cameras()
     camera_indices, camera_names = available_cameras
@@ -342,7 +357,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             root, variable=camera_variable, values=camera_names
         )
 
-    camera_optionmenu.place(relx=0.35, rely=0.86, relwidth=0.25, relheight=0.05)
+    camera_optionmenu.place(relx=0.35, rely=0.91, relwidth=0.25, relheight=0.05)
 
     live_button = ctk.CTkButton(
         root,
@@ -362,16 +377,15 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             else "disabled"
         ),
     )
-    live_button.place(relx=0.65, rely=0.86, relwidth=0.2, relheight=0.05)
-    # --- End Camera Selection ---
+    live_button.place(relx=0.65, rely=0.91, relwidth=0.2, relheight=0.05)
 
     status_label = ctk.CTkLabel(root, text=None, justify="center")
-    status_label.place(relx=0.1, rely=0.9, relwidth=0.8)
+    status_label.place(relx=0.1, rely=0.96, relwidth=0.8)
 
     donate_label = ctk.CTkLabel(
         root, text="Deep Live Cam", justify="center", cursor="hand2"
     )
-    donate_label.place(relx=0.1, rely=0.95, relwidth=0.8)
+    donate_label.place(relx=0.1, rely=0.99, relwidth=0.8)
     donate_label.configure(
         text_color=ctk.ThemeManager.theme.get("URL").get("text_color")
     )
@@ -593,9 +607,11 @@ def select_source_path() -> None:
         RECENT_DIRECTORY_SOURCE = os.path.dirname(modules.globals.source_path)
         image = render_image_preview(modules.globals.source_path, (200, 200))
         source_label.configure(image=image)
+        reset_tracker_state() # Added reset call
     else:
         modules.globals.source_path = None
         source_label.configure(image=None)
+        reset_tracker_state() # Added reset call even if source is cleared
 
 
 def swap_faces_paths() -> None:
@@ -880,11 +896,95 @@ def create_webcam_preview(camera_index: int):
     PREVIEW.deiconify()
 
     frame_processors = get_frame_processors_modules(modules.globals.frame_processors)
-    source_image = None
+
+    # --- Source Image Loading and Validation (Moved before the loop) ---
+    source_face_obj_for_cam = None
+    source_frame_full_for_cam = None
+    source_frame_full_for_cam_map_faces = None
+
+    if not modules.globals.map_faces:
+        if not modules.globals.source_path:
+            update_status("Error: No source image selected for webcam mode.")
+            cap.release()
+            PREVIEW.withdraw()
+            while PREVIEW.state() != "withdrawn" and ROOT.winfo_exists():
+                ROOT.update_idletasks()
+                ROOT.update()
+                time.sleep(0.05)
+            return
+        if not os.path.exists(modules.globals.source_path):
+            update_status(f"Error: Source image not found at {modules.globals.source_path}")
+            cap.release()
+            PREVIEW.withdraw()
+            while PREVIEW.state() != "withdrawn" and ROOT.winfo_exists():
+                ROOT.update_idletasks()
+                ROOT.update()
+                time.sleep(0.05)
+            return
+
+        source_frame_full_for_cam = cv2.imread(modules.globals.source_path)
+        if source_frame_full_for_cam is None:
+            update_status(f"Error: Could not read source image at {modules.globals.source_path}")
+            cap.release()
+            PREVIEW.withdraw()
+            while PREVIEW.state() != "withdrawn" and ROOT.winfo_exists():
+                ROOT.update_idletasks()
+                ROOT.update()
+                time.sleep(0.05)
+            return
+
+        source_face_obj_for_cam = get_one_face(source_frame_full_for_cam)
+        if source_face_obj_for_cam is None:
+            update_status(f"Error: No face detected in source image {modules.globals.source_path}")
+            cap.release()
+            PREVIEW.withdraw()
+            while PREVIEW.state() != "withdrawn" and ROOT.winfo_exists():
+                ROOT.update_idletasks()
+                ROOT.update()
+                time.sleep(0.05)
+            return
+    else: # modules.globals.map_faces is True
+        if not modules.globals.source_path:
+            update_status("Error: No global source image selected (for hair/background in map_faces mode).")
+            cap.release()
+            PREVIEW.withdraw()
+            while PREVIEW.state() != "withdrawn" and ROOT.winfo_exists():
+                ROOT.update_idletasks()
+                ROOT.update()
+                time.sleep(0.05)
+            return
+        if not os.path.exists(modules.globals.source_path):
+            update_status(f"Error: Source image (for hair/background) not found at {modules.globals.source_path}")
+            cap.release()
+            PREVIEW.withdraw()
+            while PREVIEW.state() != "withdrawn" and ROOT.winfo_exists():
+                ROOT.update_idletasks()
+                ROOT.update()
+                time.sleep(0.05)
+            return
+
+        source_frame_full_for_cam_map_faces = cv2.imread(modules.globals.source_path)
+        if source_frame_full_for_cam_map_faces is None:
+            update_status(f"Error: Could not read source image (for hair/background) at {modules.globals.source_path}")
+            cap.release()
+            PREVIEW.withdraw()
+            while PREVIEW.state() != "withdrawn" and ROOT.winfo_exists():
+                ROOT.update_idletasks()
+                ROOT.update()
+                time.sleep(0.05)
+            return
+
+        if not modules.globals.source_target_map and not modules.globals.simple_map:
+            update_status("Warning: No face map defined for map_faces mode. Swapper may not work as expected.")
+
+    # --- End Source Image Loading ---
+
     prev_time = time.time()
     fps_update_interval = 0.5
     frame_count = 0
     fps = 0
+
+    reset_tracker_state() # Ensure tracker is reset before starting webcam loop
 
     while True:
         ret, frame = cap.read()
@@ -900,32 +1000,32 @@ def create_webcam_preview(camera_index: int):
             temp_frame = fit_image_to_size(
                 temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
             )
-
         else:
             temp_frame = fit_image_to_size(
                 temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
             )
 
+        # REMOVED: detection_frame_counter += 1
+        # REMOVED: if detection_frame_counter % DETECTION_INTERVAL == 0:
+        # The following block is now unindented to run every frame
         if not modules.globals.map_faces:
-            if source_image is None and modules.globals.source_path:
-                source_image = get_one_face(cv2.imread(modules.globals.source_path))
-
-            for frame_processor in frame_processors:
-                if frame_processor.NAME == "DLC.FACE-ENHANCER":
-                    if modules.globals.fp_ui["face_enhancer"]:
-                        temp_frame = frame_processor.process_frame(None, temp_frame)
-                else:
-                    temp_frame = frame_processor.process_frame(source_image, temp_frame)
+            if source_face_obj_for_cam is not None and source_frame_full_for_cam is not None:
+                for frame_processor in frame_processors:
+                    if frame_processor.NAME == "DLC.FACE-ENHANCER":
+                        if modules.globals.fp_ui["face_enhancer"]:
+                            temp_frame = frame_processor.process_frame(None, temp_frame)
+                    else:
+                        temp_frame = frame_processor.process_frame(source_face_obj_for_cam, source_frame_full_for_cam, temp_frame)
         else:
-            modules.globals.target_path = None
-            for frame_processor in frame_processors:
-                if frame_processor.NAME == "DLC.FACE-ENHANCER":
-                    if modules.globals.fp_ui["face_enhancer"]:
-                        temp_frame = frame_processor.process_frame_v2(temp_frame)
-                else:
-                    temp_frame = frame_processor.process_frame_v2(temp_frame)
+            if source_frame_full_for_cam_map_faces is not None:
+                modules.globals.target_path = None
+                for frame_processor in frame_processors:
+                    if frame_processor.NAME == "DLC.FACE-ENHANCER":
+                        if modules.globals.fp_ui["face_enhancer"]:
+                            temp_frame = frame_processor.process_frame_v2(temp_frame)
+                    else:
+                        temp_frame = frame_processor.process_frame_v2(source_frame_full_for_cam_map_faces, temp_frame)
 
-        # Calculate and display FPS
         current_time = time.time()
         frame_count += 1
         if current_time - prev_time >= fps_update_interval:
