@@ -1,4 +1,4 @@
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple, Callable # Added Callable
 import cv2
 import insightface
 import threading
@@ -6,7 +6,7 @@ import numpy as np
 import modules.globals
 import logging
 import modules.processors.frame.core
-from modules.core import update_status
+# from modules.core import update_status # Removed import
 from modules.face_analyser import get_one_face, get_many_faces, default_source_face
 from modules.typing import Face, Frame
 from modules.hair_segmenter import segment_hair
@@ -63,19 +63,19 @@ def pre_check() -> bool:
     return True
 
 
-def pre_start() -> bool:
+def pre_start(status_fn_callback: Callable[[str, str], None]) -> bool:
     if not modules.globals.map_faces and not is_image(modules.globals.source_path):
-        update_status("Select an image for source path.", NAME)
+        status_fn_callback("Select an image for source path.", NAME)
         return False
     elif not modules.globals.map_faces and not get_one_face(
         cv2.imread(modules.globals.source_path)
     ):
-        update_status("No face in source path detected.", NAME)
+        status_fn_callback("No face in source path detected.", NAME)
         return False
     if not is_image(modules.globals.target_path) and not is_video(
         modules.globals.target_path
     ):
-        update_status("Select an image or video for target path.", NAME)
+        status_fn_callback("Select an image or video for target path.", NAME)
         return False
     return True
 
@@ -569,7 +569,7 @@ def process_frames(
                 progress.update(1)
 
 
-def process_image(source_path: str, target_path: str, output_path: str) -> None:
+def process_image(source_path: str, target_path: str, output_path: str, status_fn_callback: Callable[[str, str], None]) -> None:
     source_img = cv2.imread(source_path)
     if source_img is None:
         logging.error(f"Failed to read source image from {source_path}")
@@ -593,7 +593,7 @@ def process_image(source_path: str, target_path: str, output_path: str) -> None:
         result = process_frame(source_face_obj, source_img, original_target_frame)
     else:
         if modules.globals.many_faces:
-            update_status(
+            status_fn_callback(
                 "Many faces enabled. Using first source image. Progressing...", NAME
             )
         result = process_frame_v2(source_img, original_target_frame, target_path)
@@ -604,11 +604,11 @@ def process_image(source_path: str, target_path: str, output_path: str) -> None:
         logging.error(f"Processing image {target_path} failed, result was None.")
 
 
-def process_video(source_path: str, temp_frame_paths: List[str]) -> None:
+def process_video(source_path: str, temp_frame_paths: List[str], status_fn_callback: Callable[[str, str], None]) -> None:
     reset_tracker_state() # Ensure fresh state for each video processing
 
     if modules.globals.map_faces and modules.globals.many_faces:
-        update_status(
+        status_fn_callback(
             "Many faces enabled. Using first source image. Progressing...", NAME
         )
     modules.processors.frame.core.process_video(
