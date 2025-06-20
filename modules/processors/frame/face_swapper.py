@@ -32,7 +32,7 @@ def pre_check() -> bool:
     conditional_download(
         download_directory_path,
         [
-            "https://huggingface.co/hacksider/deep-live-cam/blob/main/inswapper_128_fp16.onnx"
+            "https://huggingface.co/hacksider/deep-live-cam/blob/main/inswapper_128.onnx"
         ],
     )
     return True
@@ -60,7 +60,7 @@ def get_face_swapper() -> Any:
 
     with THREAD_LOCK:
         if FACE_SWAPPER is None:
-            model_path = os.path.join(models_dir, "inswapper_128_fp16.onnx")
+            model_path = os.path.join(models_dir, "inswapper_128.onnx")
             FACE_SWAPPER = insightface.model_zoo.get_model(
                 model_path, providers=modules.globals.execution_providers
             )
@@ -70,18 +70,34 @@ def get_face_swapper() -> Any:
 def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
     face_swapper = get_face_swapper()
 
-    # Apply the face swap
-    swapped_frame = face_swapper.get(
-        temp_frame, target_face, source_face, paste_back=True
-    )
+    # Statistical color correction
+    if getattr(modules.globals, 'statistical_color_correction', True) and target_face.bbox is not None:
+        x1, y1, x2, y2 = target_face.bbox.astype(int)
+        original_target_face_roi = temp_frame[y1:y2, x1:x2].copy()
+
+        # Apply the face swap
+        swapped_frame = face_swapper.get(
+            temp_frame, target_face, source_face, paste_back=True
+        )
+
+        if original_target_face_roi.size > 0:
+            swapped_face_roi = swapped_frame[y1:y2, x1:x2].copy()
+            if swapped_face_roi.size > 0:
+                corrected_swapped_face_roi = apply_color_transfer(swapped_face_roi, original_target_face_roi)
+                swapped_frame[y1:y2, x1:x2] = corrected_swapped_face_roi
+    else:
+        # Apply the face swap without statistical color correction
+        swapped_frame = face_swapper.get(
+            temp_frame, target_face, source_face, paste_back=True
+        )
 
     if modules.globals.mouth_mask:
         # Create a mask for the target face
-        face_mask = create_face_mask(target_face, temp_frame)
+        face_mask = create_face_mask(target_face, swapped_frame) # Use swapped_frame here
 
         # Create the mouth mask
         mouth_mask, mouth_cutout, mouth_box, lower_lip_polygon = (
-            create_lower_mouth_mask(target_face, temp_frame)
+            create_lower_mouth_mask(target_face, swapped_frame) # Use swapped_frame here
         )
 
         # Apply the mouth area
@@ -367,7 +383,8 @@ def create_lower_mouth_mask(
         cv2.fillPoly(mask_roi, [expanded_landmarks - [min_x, min_y]], 255)
 
         # Apply Gaussian blur to soften the mask edges
-        mask_roi = cv2.GaussianBlur(mask_roi, (15, 15), 5)
+        kernel_size_mouth = getattr(modules.globals, 'mouth_mask_blur_kernel_size', (9, 9))
+        mask_roi = cv2.GaussianBlur(mask_roi, kernel_size_mouth, 0)
 
         # Place the mask ROI in the full-sized mask
         mask[min_y:max_y, min_x:max_x] = mask_roi
@@ -553,7 +570,8 @@ def create_face_mask(face: Face, frame: Frame) -> np.ndarray:
 
         face_top = np.min([right_side_face[0, 1], left_side_face[-1, 1]])
         forehead_height = face_top - eyebrow_top
-        extended_forehead_height = int(forehead_height * 5.0)  # Extend by 50%
+        forehead_factor = getattr(modules.globals, 'forehead_extension_factor', 2.5)
+        extended_forehead_height = int(forehead_height * forehead_factor)
 
         # Create forehead points
         forehead_left = right_side_face[0].copy()
@@ -595,7 +613,8 @@ def create_face_mask(face: Face, frame: Frame) -> np.ndarray:
         cv2.fillConvexPoly(mask, hull_padded, 255)
 
         # Smooth the mask edges
-        mask = cv2.GaussianBlur(mask, (5, 5), 3)
+        kernel_size_face = getattr(modules.globals, 'face_mask_blur_kernel_size', (5, 5))
+        mask = cv2.GaussianBlur(mask, kernel_size_face, 0)
 
     return mask
 
