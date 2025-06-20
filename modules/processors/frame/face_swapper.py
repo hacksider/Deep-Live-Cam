@@ -97,9 +97,41 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
 
     return swapped_frame
 
+# This should be the core function that applies mappings from simple_map to a frame
+def _apply_mapping_to_frame(temp_frame: Frame) -> Frame:
+    if not modules.globals.simple_map or \
+       not modules.globals.simple_map.get('target_embeddings') or \
+       not modules.globals.simple_map.get('source_faces'):
+        # print("FaceSwapper: simple_map not populated for mapped processing. Returning original frame.")
+        return temp_frame
+
+    detected_faces = get_many_faces(temp_frame)
+    if not detected_faces:
+        return temp_frame
+
+    for detected_face in detected_faces:
+        if not hasattr(detected_face, 'normed_embedding') or detected_face.normed_embedding is None:
+            continue # Skip if face has no embedding
+
+        closest_centroid_index, _ = find_closest_centroid(
+            modules.globals.simple_map['target_embeddings'],
+            detected_face.normed_embedding
+        )
+
+        if closest_centroid_index < len(modules.globals.simple_map['source_faces']):
+            source_face_to_use = modules.globals.simple_map['source_faces'][closest_centroid_index]
+            if source_face_to_use: # Ensure a source face is actually there
+                 temp_frame = swap_face(source_face_to_use, detected_face, temp_frame)
+        # else: print(f"Warning: Centroid index {closest_centroid_index} out of bounds for source_faces.")
+
+    return temp_frame
+
 
 def process_frame(source_face: Face, temp_frame: Frame) -> Frame:
-    if modules.globals.color_correction:
+    # This is for single source_face to potentially many target_faces (if many_faces is on)
+    # Or single source to single target (if many_faces is off)
+    # This function should NOT be used if Globals.map_faces is True.
+    if modules.globals.color_correction: # This global might need namespacing if other modules use it
         temp_frame = cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB)
 
     if modules.globals.many_faces:
@@ -120,148 +152,125 @@ def process_frame(source_face: Face, temp_frame: Frame) -> Frame:
 
 
 
-def process_frame_v2(temp_frame: Frame, temp_frame_path: str = "") -> Frame:
-    if is_image(modules.globals.target_path):
-        if modules.globals.many_faces:
-            source_face = default_source_face()
-            for map in modules.globals.source_target_map:
-                target_face = map["target"]["face"]
-                temp_frame = swap_face(source_face, target_face, temp_frame)
+# This is the new V2 for mapped processing of a single frame (used by live feed and process_video_v2)
+# It should not rely on Globals.target_path for context, only on Globals.simple_map
+def process_frame_v2(temp_frame: Frame, temp_frame_path: str = "") -> Frame: # temp_frame_path is mostly for debug here
+    if modules.globals.color_correction: # This global might need namespacing
+        temp_frame = cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB)
 
-        elif not modules.globals.many_faces:
-            for map in modules.globals.source_target_map:
-                if "source" in map:
-                    source_face = map["source"]["face"]
-                    target_face = map["target"]["face"]
-                    temp_frame = swap_face(source_face, target_face, temp_frame)
+    if not modules.globals.map_faces:
+        # This case should ideally not be reached if called from process_video_v2 or live_feed when map_faces is true.
+        # However, if it is, it implies a logic error or fallback.
+        # For now, if map_faces is false, it means use the single Globals.source_path.
+        # This makes process_frame_v2 behave like process_frame if map_faces is off.
+        # This might be confusing. A clearer separation would be better.
+        # print("Warning: process_frame_v2 called when map_faces is False. Using standard process_frame logic.")
+        source_face = None
+        if modules.globals.source_path and os.path.exists(modules.globals.source_path):
+            source_cv2_img = cv2.imread(modules.globals.source_path)
+            if source_cv2_img is not None:
+                source_face = get_one_face(source_cv2_img)
 
-    elif is_video(modules.globals.target_path):
-        if modules.globals.many_faces:
-            source_face = default_source_face()
-            for map in modules.globals.source_target_map:
-                target_frame = [
-                    f
-                    for f in map["target_faces_in_frame"]
-                    if f["location"] == temp_frame_path
-                ]
+        if source_face:
+            return process_frame(source_face, temp_frame) # Fallback to old logic for this scenario
+        else: # No source face, return original frame
+            return temp_frame
 
-                for frame in target_frame:
-                    for target_face in frame["faces"]:
-                        temp_frame = swap_face(source_face, target_face, temp_frame)
-
-        elif not modules.globals.many_faces:
-            for map in modules.globals.source_target_map:
-                if "source" in map:
-                    target_frame = [
-                        f
-                        for f in map["target_faces_in_frame"]
-                        if f["location"] == temp_frame_path
-                    ]
-                    source_face = map["source"]["face"]
-
-                    for frame in target_frame:
-                        for target_face in frame["faces"]:
-                            temp_frame = swap_face(source_face, target_face, temp_frame)
-
-    else:
-        detected_faces = get_many_faces(temp_frame)
-        if modules.globals.many_faces:
-            if detected_faces:
-                source_face = default_source_face()
-                for target_face in detected_faces:
-                    temp_frame = swap_face(source_face, target_face, temp_frame)
-
-        elif not modules.globals.many_faces:
-            if detected_faces:
-                if len(detected_faces) <= len(
-                    modules.globals.simple_map["target_embeddings"]
-                ):
-                    for detected_face in detected_faces:
-                        closest_centroid_index, _ = find_closest_centroid(
-                            modules.globals.simple_map["target_embeddings"],
-                            detected_face.normed_embedding,
-                        )
-
-                        temp_frame = swap_face(
-                            modules.globals.simple_map["source_faces"][
-                                closest_centroid_index
-                            ],
-                            detected_face,
-                            temp_frame,
-                        )
-                else:
-                    detected_faces_centroids = []
-                    for face in detected_faces:
-                        detected_faces_centroids.append(face.normed_embedding)
-                    i = 0
-                    for target_embedding in modules.globals.simple_map[
-                        "target_embeddings"
-                    ]:
-                        closest_centroid_index, _ = find_closest_centroid(
-                            detected_faces_centroids, target_embedding
-                        )
-
-                        temp_frame = swap_face(
-                            modules.globals.simple_map["source_faces"][i],
-                            detected_faces[closest_centroid_index],
-                            temp_frame,
-                        )
-                        i += 1
-    return temp_frame
+    # If map_faces is True, proceed with mapped logic using _apply_mapping_to_frame
+    return _apply_mapping_to_frame(temp_frame)
 
 
+# Old process_frames, used by old process_video. Kept for now if any CLI path uses process_video directly.
+# Should be deprecated in favor of core.py's video loop calling process_frame or process_frame_v2.
 def process_frames(
     source_path: str, temp_frame_paths: List[str], progress: Any = None
 ) -> None:
-    if not modules.globals.map_faces:
-        source_face = get_one_face(cv2.imread(source_path))
-        for temp_frame_path in temp_frame_paths:
-            temp_frame = cv2.imread(temp_frame_path)
-            try:
-                result = process_frame(source_face, temp_frame)
-                cv2.imwrite(temp_frame_path, result)
-            except Exception as exception:
-                print(exception)
-                pass
-            if progress:
-                progress.update(1)
-    else:
-        for temp_frame_path in temp_frame_paths:
-            temp_frame = cv2.imread(temp_frame_path)
-            try:
+    # This function's logic is now largely superseded by core.py's process_media loop.
+    # If map_faces is True, core.py will call process_video_v2 which then calls process_frame_v2.
+    # If map_faces is False, core.py will call process_video which calls this,
+    # and this will use the single source_face.
+
+    source_face = None
+    if not modules.globals.map_faces: # Only get single source if not mapping
+        if source_path and os.path.exists(source_path): # Ensure source_path is valid
+            source_img_content = cv2.imread(source_path)
+            if source_img_content is not None:
+                source_face = get_one_face(source_img_content)
+        if not source_face:
+            update_status("Warning: No source face found for standard video processing. Frames will not be swapped.", NAME)
+            if progress: progress.update(len(temp_frame_paths)) # Mark all as "processed"
+            return
+
+    for temp_frame_path in temp_frame_paths:
+        temp_frame = cv2.imread(temp_frame_path)
+        if temp_frame is None:
+            if progress: progress.update(1)
+            continue
+        try:
+            if modules.globals.map_faces: # Should be handled by process_video_v2 now
                 result = process_frame_v2(temp_frame, temp_frame_path)
-                cv2.imwrite(temp_frame_path, result)
-            except Exception as exception:
-                print(exception)
-                pass
-            if progress:
-                progress.update(1)
+            elif source_face: # Standard single source processing
+                result = process_frame(source_face, temp_frame)
+            else: # No source, no map
+                result = temp_frame
+            cv2.imwrite(temp_frame_path, result)
+        except Exception as e:
+            print(f"Error processing frame {temp_frame_path}: {e}")
+            pass # Keep original frame if error
+        if progress:
+            progress.update(1)
 
 
+# process_image is called by core.py when not map_faces
 def process_image(source_path: str, target_path: str, output_path: str) -> None:
-    if not modules.globals.map_faces:
-        source_face = get_one_face(cv2.imread(source_path))
-        target_frame = cv2.imread(target_path)
-        result = process_frame(source_face, target_frame)
+    # This is for single source_path to target_path.
+    # map_faces=True scenario is handled by process_image_v2.
+    source_face = get_one_face(cv2.imread(source_path))
+    target_frame = cv2.imread(target_path)
+    if source_face and target_frame is not None:
+        result = process_frame(source_face, target_frame) # process_frame handles many_faces internally
         cv2.imwrite(output_path, result)
+    elif target_frame is not None : # No source face, but target exists
+        update_status("No source face for process_image, saving original target.", NAME)
+        cv2.imwrite(output_path, target_frame)
     else:
-        if modules.globals.many_faces:
-            update_status(
-                "Many faces enabled. Using first source image. Progressing...", NAME
-            )
-        target_frame = cv2.imread(output_path)
-        result = process_frame_v2(target_frame)
-        cv2.imwrite(output_path, result)
+        update_status("Failed to read target image in process_image.", NAME)
 
 
+# process_image_v2 is called by core.py when map_faces is True
+def process_image_v2(target_path: str, output_path: str) -> None:
+    target_frame = cv2.imread(target_path)
+    if target_frame is None:
+        update_status(f"Failed to read target image at {target_path}", NAME)
+        return
+
+    if modules.globals.color_correction:
+         target_frame = cv2.cvtColor(target_frame, cv2.COLOR_BGR2RGB)
+
+    result_frame = _apply_mapping_to_frame(target_frame)
+    cv2.imwrite(output_path, result_frame)
+
+
+# process_video is called by core.py when not map_faces
 def process_video(source_path: str, temp_frame_paths: List[str]) -> None:
-    if modules.globals.map_faces and modules.globals.many_faces:
-        update_status(
-            "Many faces enabled. Using first source image. Progressing...", NAME
-        )
-    modules.processors.frame.core.process_video(
-        source_path, temp_frame_paths, process_frames
+    # This function should setup for process_frames which handles single source processing.
+    # core.py's process_media calls this.
+    # process_frames will get the single source face from source_path.
+    modules.processors.frame.core.process_video( # This is a generic utility from core
+        source_path, temp_frame_paths, process_frames # Pass our process_frames
     )
+
+# process_video_v2 is called by core.py when map_faces is True
+def process_video_v2(temp_frame_paths: List[str]) -> None:
+    # This function iterates frames and calls the mapped version of process_frame_v2
+    for frame_path in temp_frame_paths:
+        current_frame = cv2.imread(frame_path)
+        if current_frame is None:
+            print(f"Warning: Could not read frame {frame_path} in process_video_v2. Skipping.")
+            continue
+
+        processed_frame = process_frame_v2(current_frame, frame_path) # process_frame_v2 now uses _apply_mapping_to_frame
+        cv2.imwrite(frame_path, processed_frame)
 
 
 def create_lower_mouth_mask(

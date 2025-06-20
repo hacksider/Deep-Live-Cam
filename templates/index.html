@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deep-Live-Cam Web UI</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <h1>Deep-Live-Cam - Web Interface</h1>
+
+    <div class="container">
+        <div class="column" id="source-column">
+            <h2>Source Face</h2>
+            <input type="file" id="source-file" accept="image/*">
+            <img id="source-preview" src="#" alt="Source Preview" style="display:none; max-width: 200px; max-height: 200px;">
+        </div>
+
+        <div class="column" id="target-column">
+            <h2>Target Media</h2>
+            <input type="file" id="target-file" accept="image/*,video/*">
+            <img id="target-preview-image" src="#" alt="Target Image Preview" style="display:none; max-width: 200px; max-height: 200px;">
+            <video id="target-preview-video" controls style="display:none; max-width: 200px; max-height: 200px;"></video>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="column" id="options-column">
+            <h2>Options</h2>
+            <label><input type="checkbox" id="keep-fps"> Keep FPS</label><br>
+            <label><input type="checkbox" id="keep-audio"> Keep Audio</label><br>
+            <label><input type="checkbox" id="many-faces"> Many Faces</label><br> <!-- This is the general many_faces toggle -->
+            <label><input type="checkbox" id="map-faces-checkbox"> Map Specific Faces (Image Target Only)</label><br> <!-- Specific for face mapping UI -->
+            <label><input type="checkbox" id="mouth-mask"> Mouth Mask</label><br>
+            <!-- Add more switches as needed -->
+        </div>
+
+        <div class="column" id="actions-column">
+            <h2>Actions</h2>
+            <button id="start-processing">Start Processing</button>
+            <button id="live-preview">Live Preview</button>
+        </div>
+    </div>
+
+    <div class="container" id="main-preview-area">
+         <h2>Live/Processed Preview</h2>
+         <img id="processed-preview" src="#" alt="Preview Area" style="max-width: 640px; max-height: 480px; border: 1px solid black; display: block; margin-top: 10px;">
+    </div>
+
+    <div id="status-area">
+        <p>Status: <span id="status-message">Idle</span></p>
+    </div>
+
+    <div id="output-area" style="display:none;">
+        <a id="download-link" href="#">Download Output</a>
+    </div>
+
+    <div id="face-mapper-container" style="display:none; margin-top: 20px; padding: 15px; background-color: #e9e9e9; border-radius: 8px;">
+        <h2>Face Mapper</h2>
+        <p id="face-mapper-status">Upload a target image and check "Map Specific Faces" to begin.</p>
+        <div id="face-mapper-area" style="display: flex; flex-wrap: wrap; gap: 20px; margin-top:10px; margin-bottom:10px;">
+            <!-- Target faces will be dynamically added here -->
+        </div>
+        <button id="submit-face-mappings" style="margin-top: 20px; display:none;">Submit Face Mappings</button>
+    </div>
+
+    <script src="{{ url_for('static', filename='main.js') }}"></script>
+</body>
+</html>

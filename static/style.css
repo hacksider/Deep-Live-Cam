@@ -1,0 +1,10 @@
+body { font-family: sans-serif; margin: 20px; background-color: #f4f4f4; color: #333; }
+h1, h2 { color: #2c3e50; }
+.container { display: flex; margin-bottom: 20px; background-color: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+.column { flex: 1; padding: 10px; }
+#options-column label { display: block; margin-bottom: 8px; }
+button { padding: 10px 15px; background-color: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px; }
+button:hover { background-color: #2980b9; }
+input[type="file"] { margin-bottom: 10px; }
+#status-area { margin-top: 20px; padding: 10px; background-color: #e9ecef; border-radius: 4px; }
+#main-preview-area img { display: block; margin-top: 10px; }
