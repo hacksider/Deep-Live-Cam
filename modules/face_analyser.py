@@ -2,6 +2,7 @@ import os
 import shutil
 from typing import Any
 import insightface
+import logging # Added logging import
 
 import cv2
 import numpy as np
@@ -25,18 +26,27 @@ def get_face_analyser() -> Any:
 
 
 def get_one_face(frame: Frame) -> Any:
-    face = get_face_analyser().get(frame)
+    faces = get_face_analyser().get(frame)
+    if not faces:
+        logging.debug("Face_analyser: get_one_face: No faces found by insightface.")
+        return None
     try:
-        return min(face, key=lambda x: x.bbox[0])
+        return min(faces, key=lambda x: x.bbox[0])
     except ValueError:
+        logging.debug("Face_analyser: get_one_face: ValueError, likely no faces after all.")
         return None
 
 
 def get_many_faces(frame: Frame) -> Any:
-    try:
-        return get_face_analyser().get(frame)
-    except IndexError:
-        return None
+    faces = get_face_analyser().get(frame)
+    if not faces: # Check if faces is None or an empty list
+        logging.debug("Face_analyser: get_many_faces: No faces found by insightface.")
+        # Depending on what insightface returns for no faces,
+        # you might return None or an empty list.
+        # If .get() returns an empty list for no faces, this check is sufficient.
+        # If .get() returns None, this is also fine.
+        return faces # Return original (None or empty list)
+    return faces
 
 def has_valid_map() -> bool:
     for map in modules.globals.source_target_map:

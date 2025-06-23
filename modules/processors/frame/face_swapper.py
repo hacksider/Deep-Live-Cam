@@ -136,16 +136,26 @@ def process_frame(source_face: Face, temp_frame: Frame) -> Frame:
         many_faces = get_many_faces(temp_frame)
         if many_faces:
             for target_face in many_faces:
-                if source_face and target_face:
+                if source_face and target_face: # target_face from many_faces will always be valid here
                     temp_frame = swap_face(source_face, target_face, temp_frame)
-                else:
-                    print("Face detection failed for target/source.")
+                elif not source_face: # Check source_face specifically
+                    logging.error("Source face is not available or no face detected in source image. Skipping swap for this target face.")
+                    # Optionally `continue` or `break` if source_face is essential for all
+        elif not source_face : # if many_faces is empty AND source_face is also an issue
+             logging.error("Source face is not available AND no faces detected in target frame.")
+        else: # many_faces is empty, but source_face is ok
+             logging.info(f"No faces detected in the current target frame for 'many_faces' mode.")
     else:
         target_face = get_one_face(temp_frame)
         if target_face and source_face:
             temp_frame = swap_face(source_face, target_face, temp_frame)
         else:
-            logging.error("Face detection failed for target or source.")
+            if not source_face:
+                logging.error("Source face is not available or no face detected in source image.")
+            elif not target_face:
+                logging.error(f"No face detected in the current target frame.")
+            else: # Should not happen if logic is right, but as a fallback
+                logging.error("Face detection failed for an unknown reason concerning target or source.")
     return temp_frame
 
 
@@ -543,7 +553,11 @@ def apply_mouth_area(
         feathered_mask = cv2.GaussianBlur(
             polygon_mask.astype(float), (0, 0), feather_amount
         )
-        feathered_mask = feathered_mask / feathered_mask.max()
+        if feathered_mask.max() == 0:
+            logging.warning("Mouth mask's feathered_mask is all zeros. Skipping normalization to prevent division by zero.")
+            # feathered_mask remains all zeros, which is safe for subsequent blending
+        else:
+            feathered_mask = (feathered_mask / feathered_mask.max() * 255).astype(np.uint8)
 
         face_mask_roi = face_mask[min_y:max_y, min_x:max_x]
         combined_mask = feathered_mask * (face_mask_roi / 255.0)
