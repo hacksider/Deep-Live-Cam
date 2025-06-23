@@ -82,7 +82,8 @@ def get_face_enhancer() -> Any:
                 selected_device = torch.device("cpu")
                 device_priority.append("CPU")
             
-            FACE_ENHANCER = gfpgan.GFPGANer(model_path=model_path, upscale=2, device=selected_device)
+            upscale_factor = getattr(modules.globals, 'gfpgan_upscale_factor', 2)
+            FACE_ENHANCER = gfpgan.GFPGANer(model_path=model_path, upscale=upscale_factor, device=selected_device)
 
             # for debug:
             print(f"Selected device: {selected_device} and device priority: {device_priority}")

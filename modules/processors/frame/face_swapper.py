@@ -21,6 +21,16 @@ FACE_SWAPPER = None
 THREAD_LOCK = threading.Lock()
 NAME = "DLC.FACE-SWAPPER"
 
+
+def _validate_kernel_size(kernel_tuple, default_kernel_tuple):
+    if isinstance(kernel_tuple, tuple) and len(kernel_tuple) == 2 and \
+       isinstance(kernel_tuple[0], int) and kernel_tuple[0] > 0 and kernel_tuple[0] % 2 == 1 and \
+       isinstance(kernel_tuple[1], int) and kernel_tuple[1] > 0 and kernel_tuple[1] % 2 == 1:
+        return kernel_tuple
+    else:
+        logging.warning(f"Invalid kernel size {kernel_tuple} received. Must be a tuple of two positive odd integers. Falling back to default {default_kernel_tuple}.")
+        return default_kernel_tuple
+
 abs_dir = os.path.dirname(os.path.abspath(__file__))
 models_dir = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(abs_dir))), "models"
@@ -83,8 +93,12 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
         if original_target_face_roi.size > 0:
             swapped_face_roi = swapped_frame[y1:y2, x1:x2].copy()
             if swapped_face_roi.size > 0:
-                corrected_swapped_face_roi = apply_color_transfer(swapped_face_roi, original_target_face_roi)
-                swapped_frame[y1:y2, x1:x2] = corrected_swapped_face_roi
+                try:
+                    corrected_swapped_face_roi = apply_color_transfer(swapped_face_roi, original_target_face_roi)
+                    swapped_frame[y1:y2, x1:x2] = corrected_swapped_face_roi
+                except Exception as e:
+                    logging.error(f"Failed to apply statistical color transfer: {e}. Using original swapped ROI.")
+                    # swapped_frame already contains the uncorrected swapped_face_roi in this region
     else:
         # Apply the face swap without statistical color correction
         swapped_frame = face_swapper.get(
@@ -383,8 +397,12 @@ def create_lower_mouth_mask(
         cv2.fillPoly(mask_roi, [expanded_landmarks - [min_x, min_y]], 255)
 
         # Apply Gaussian blur to soften the mask edges
-        kernel_size_mouth = getattr(modules.globals, 'mouth_mask_blur_kernel_size', (9, 9))
-        mask_roi = cv2.GaussianBlur(mask_roi, kernel_size_mouth, 0)
+        # Default kernel size for mouth mask blur is (9,9) as a balance between performance and smoothing.
+        # Larger values (e.g., (15,15) - the previous hardcoded value) provide more smoothing but are slower.
+        # This is configurable via modules.globals.mouth_mask_blur_kernel_size.
+        kernel_size_mouth_config = getattr(modules.globals, 'mouth_mask_blur_kernel_size', (9, 9))
+        valid_kernel_mouth = _validate_kernel_size(kernel_size_mouth_config, (9, 9))
+        mask_roi = cv2.GaussianBlur(mask_roi, valid_kernel_mouth, 0)
 
         # Place the mask ROI in the full-sized mask
         mask[min_y:max_y, min_x:max_x] = mask_roi
@@ -613,8 +631,9 @@ def create_face_mask(face: Face, frame: Frame) -> np.ndarray:
         cv2.fillConvexPoly(mask, hull_padded, 255)
 
         # Smooth the mask edges
-        kernel_size_face = getattr(modules.globals, 'face_mask_blur_kernel_size', (5, 5))
-        mask = cv2.GaussianBlur(mask, kernel_size_face, 0)
+        kernel_size_face_config = getattr(modules.globals, 'face_mask_blur_kernel_size', (5, 5))
+        valid_kernel_face = _validate_kernel_size(kernel_size_face_config, (5, 5))
+        mask = cv2.GaussianBlur(mask, valid_kernel_face, 0)
 
     return mask
 
