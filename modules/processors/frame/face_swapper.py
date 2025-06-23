@@ -553,11 +553,13 @@ def apply_mouth_area(
         feathered_mask = cv2.GaussianBlur(
             polygon_mask.astype(float), (0, 0), feather_amount
         )
-        if feathered_mask.max() == 0:
-            logging.warning("Mouth mask's feathered_mask is all zeros. Skipping normalization to prevent division by zero.")
-            # feathered_mask remains all zeros, which is safe for subsequent blending
+
+        mask_max_value = feathered_mask.max()
+        if mask_max_value < 1e-6:  # Check if max is effectively zero
+            logging.warning("Mouth mask's feathered_mask is all zeros or near-zeros after blur. Resulting mask will be black.")
+            feathered_mask = np.zeros_like(polygon_mask, dtype=np.uint8)
         else:
-            feathered_mask = (feathered_mask / feathered_mask.max() * 255).astype(np.uint8)
+            feathered_mask = (feathered_mask / mask_max_value * 255).astype(np.uint8)
 
         face_mask_roi = face_mask[min_y:max_y, min_x:max_x]
         combined_mask = feathered_mask * (face_mask_roi / 255.0)
