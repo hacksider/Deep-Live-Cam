@@ -44,6 +44,7 @@ def parse_args() -> None:
     program.add_argument('--map-faces', help='map source target faces', dest='map_faces', action='store_true', default=False)
     program.add_argument('--mouth-mask', help='mask the mouth region', dest='mouth_mask', action='store_true', default=False)
     program.add_argument('--poisson-blending', help='use Poisson blending for smoother face integration', dest='poisson_blending', action='store_true', default=False)
+    program.add_argument('--preserve-ears', help='attempt to preserve target ears by modifying the blend mask', dest='preserve_ears', action='store_true', default=False)
     program.add_argument('--video-encoder', help='adjust output video encoder', dest='video_encoder', default='libx264', choices=['libx264', 'libx265', 'libvpx-vp9'])
     program.add_argument('--video-quality', help='adjust output video quality', dest='video_quality', type=int, default=18, choices=range(52), metavar='[0-51]')
     program.add_argument('-l', '--lang', help='Ui language', default="en")
@@ -74,6 +75,7 @@ def parse_args() -> None:
     modules.globals.color_correction = args.color_correction
     modules.globals.mouth_mask = args.mouth_mask
     modules.globals.use_poisson_blending = args.poisson_blending
+    modules.globals.preserve_target_ears = args.preserve_ears
     modules.globals.nsfw_filter = args.nsfw_filter
     modules.globals.map_faces = args.map_faces
     modules.globals.video_encoder = args.video_encoder

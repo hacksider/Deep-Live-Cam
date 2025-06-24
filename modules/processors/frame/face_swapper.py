@@ -172,12 +172,41 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
             else:
                 logging.error("No bbox or landmarks available for Poisson mask. Blending will be skipped.")
 
+        # Subtract ear regions if preserve_target_ears is enabled
+        if modules.globals.preserve_target_ears and np.any(face_mask_for_blending > 0):
+            mfx1, mfy1, mfx2, mfy2 = target_face.bbox.astype(int)
+            mfw = mfx2 - mfx1
+            mfh = mfy2 - mfy1
+
+            ear_w = int(mfw * modules.globals.ear_width_ratio)
+            ear_h = int(mfh * modules.globals.ear_height_ratio)
+            ear_v_offset = int(mfh * modules.globals.ear_vertical_offset_ratio)
+            ear_overlap = int(mfw * modules.globals.ear_horizontal_overlap_ratio)
+
+            # Person's Right Ear (image left side of face bbox)
+            # This region in face_mask_for_blending will be set to 0
+            rex1 = max(0, mfx1 - ear_w + ear_overlap)
+            rey1 = max(0, mfy1 + ear_v_offset)
+            rex2 = min(temp_frame.shape[1], mfx1 + ear_overlap) # Extends slightly into face bbox for smoother transition
+            rey2 = min(temp_frame.shape[0], rey1 + ear_h)
+            if rex1 < rex2 and rey1 < rey2:
+                cv2.rectangle(face_mask_for_blending, (rex1, rey1), (rex2, rey2), 0, -1)
+
+            # Person's Left Ear (image right side of face bbox)
+            lex1 = max(0, mfx2 - ear_overlap)
+            ley1 = max(0, mfy1 + ear_v_offset)
+            lex2 = min(temp_frame.shape[1], mfx2 + ear_w - ear_overlap)
+            ley2 = min(temp_frame.shape[0], ley1 + ear_h)
+            if lex1 < lex2 and ley1 < ley2:
+                cv2.rectangle(face_mask_for_blending, (lex1, ley1), (lex2, ley2), 0, -1)
+
         # Feather the mask to smooth edges for Poisson blending
-        feather_amount = modules.globals.poisson_blending_feather_amount
-        if feather_amount > 0:
-            # Ensure kernel size is odd
-            kernel_size = 2 * feather_amount + 1
-            face_mask_for_blending = cv2.GaussianBlur(face_mask_for_blending, (kernel_size, kernel_size), 0)
+        if np.any(face_mask_for_blending > 0): # Only feather if there's a mask
+            feather_amount = modules.globals.poisson_blending_feather_amount
+            if feather_amount > 0:
+                # Ensure kernel size is odd
+                kernel_size = 2 * feather_amount + 1
+                face_mask_for_blending = cv2.GaussianBlur(face_mask_for_blending, (kernel_size, kernel_size), 0)
 
         # Calculate the center of the target face bbox for seamlessClone
         if hasattr(target_face, 'bbox'):
