@@ -138,26 +138,39 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
 
         face_mask_for_blending = np.zeros(temp_frame.shape[:2], dtype=np.uint8)
 
-        # Attempt to get landmarks; use bbox if landmarks are not available or suitable
-        landmarks = target_face.landmark_2d_106 if hasattr(target_face, 'landmark_2d_106') else None
-
-        if landmarks is not None and len(landmarks) > 0:
-            try:
-                # Use a convex hull of the landmarks as the mask
-                hull_points = cv2.convexHull(landmarks.astype(np.int32))
-                cv2.fillConvexPoly(face_mask_for_blending, hull_points, 255)
-            except Exception as e:
-                logging.warning(f"Could not form convex hull for Poisson mask: {e}. Falling back to bbox.")
-                # Fallback to bbox if convex hull fails
-                x1, y1, x2, y2 = target_face.bbox.astype(int)
-                x1, y1 = max(0, x1), max(0, y1)
-                x2, y2 = min(temp_frame.shape[1], x2), min(temp_frame.shape[0], y2)
-                face_mask_for_blending[y1:y2, x1:x2] = 255
-        elif hasattr(target_face, 'bbox'): # Fallback to bbox if no landmarks
+        # Prioritize using the bounding box for a tighter mask
+        if hasattr(target_face, 'bbox'):
             x1, y1, x2, y2 = target_face.bbox.astype(int)
-            x1, y1 = max(0, x1), max(0, y1)
-            x2, y2 = min(temp_frame.shape[1], x2), min(temp_frame.shape[0], y2)
-            face_mask_for_blending[y1:y2, x1:x2] = 255
+            # Ensure coordinates are within frame bounds
+            x1_b, y1_b = max(0, x1), max(0, y1) # Use different var names to avoid conflict with center calculation
+            x2_b, y2_b = min(temp_frame.shape[1], x2), min(temp_frame.shape[0], y2)
+
+            # Create a rectangular mask based on the bounding box
+            if x1_b < x2_b and y1_b < y2_b:
+                face_mask_for_blending[y1_b:y2_b, x1_b:x2_b] = 255
+            else:
+                logging.warning("Invalid bounding box for Poisson mask. Attempting landmark-based mask.")
+                # Fallback to landmark-based convex hull if bbox is invalid
+                landmarks = target_face.landmark_2d_106 if hasattr(target_face, 'landmark_2d_106') else None
+                if landmarks is not None and len(landmarks) > 0:
+                    try:
+                        hull_points = cv2.convexHull(landmarks.astype(np.int32))
+                        cv2.fillConvexPoly(face_mask_for_blending, hull_points, 255)
+                    except Exception as e:
+                        logging.error(f"Could not form convex hull for Poisson mask from landmarks: {e}. Blending will be skipped.")
+                else:
+                    logging.error("No valid bbox or landmarks for Poisson mask. Blending will be skipped.")
+        else:
+            # Fallback to landmark-based convex hull if no bbox attribute
+            landmarks = target_face.landmark_2d_106 if hasattr(target_face, 'landmark_2d_106') else None
+            if landmarks is not None and len(landmarks) > 0:
+                try:
+                    hull_points = cv2.convexHull(landmarks.astype(np.int32))
+                    cv2.fillConvexPoly(face_mask_for_blending, hull_points, 255)
+                except Exception as e:
+                    logging.error(f"Could not form convex hull for Poisson mask from landmarks (no bbox): {e}. Blending will be skipped.")
+            else:
+                logging.error("No bbox or landmarks available for Poisson mask. Blending will be skipped.")
 
         # Feather the mask to smooth edges for Poisson blending
         feather_amount = modules.globals.poisson_blending_feather_amount
