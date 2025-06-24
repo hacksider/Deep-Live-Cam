@@ -50,7 +50,16 @@ class VideoCapturer:
                         continue
             else:
                 # Unix-like systems (Linux/Mac) capture method
-                self.cap = cv2.VideoCapture(self.device_index)
+                if platform.system() == "Darwin":  # macOS
+                    print(f"INFO: macOS detected. Attempting to use cv2.CAP_AVFOUNDATION exclusively for camera index {self.device_index}.")
+                    self.cap = cv2.VideoCapture(self.device_index, cv2.CAP_AVFOUNDATION)
+                    # The check 'if not self.cap or not self.cap.isOpened():' later in the function
+                    # will now directly reflect the success or failure of AVFoundation.
+                    if not self.cap or not self.cap.isOpened():
+                         print(f"ERROR: cv2.CAP_AVFOUNDATION failed to open camera index {self.device_index}. Capture will likely fail.")
+                    # No fallback to default cv2.VideoCapture(self.device_index) here for macOS.
+                else:  # Other Unix-like systems (e.g., Linux)
+                    self.cap = cv2.VideoCapture(self.device_index)
 
             if not self.cap or not self.cap.isOpened():
                 raise RuntimeError("Failed to open camera")

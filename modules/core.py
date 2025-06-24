@@ -176,9 +176,12 @@ def update_status(message: str, scope: str = 'DLC.CORE') -> None:
         ui.update_status(message)
 
 def start() -> None:
-    for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
-        if not frame_processor.pre_start():
-            return
+    # Note: pre_start is called in run() before start() now.
+    # If it were to be called here, it would also need the status_fn_callback.
+    # For example:
+    # for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
+    #     if not frame_processor.pre_start(status_fn_callback=update_status): # If pre_start was here
+    #         return
     update_status('Processing...')
     # process image to image
     if has_image_extension(modules.globals.target_path):
@@ -190,7 +193,7 @@ def start() -> None:
             print("Error copying file:", str(e))
         for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
             update_status('Progressing...', frame_processor.NAME)
-            frame_processor.process_image(modules.globals.source_path, modules.globals.output_path, modules.globals.output_path)
+            frame_processor.process_image(modules.globals.source_path, modules.globals.output_path, modules.globals.output_path, status_fn_callback=update_status)
             release_resources()
         if is_image(modules.globals.target_path):
             update_status('Processing to image succeed!')
@@ -210,7 +213,7 @@ def start() -> None:
     temp_frame_paths = get_temp_frame_paths(modules.globals.target_path)
     for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
         update_status('Progressing...', frame_processor.NAME)
-        frame_processor.process_video(modules.globals.source_path, temp_frame_paths)
+        frame_processor.process_video(modules.globals.source_path, temp_frame_paths, status_fn_callback=update_status)
         release_resources()
     # handles fps
     if modules.globals.keep_fps:
@@ -249,7 +252,9 @@ def run() -> None:
     if not pre_check():
         return
     for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
-        if not frame_processor.pre_check():
+        if not frame_processor.pre_check(): # pre_check in face_swapper does not use update_status
+            return
+        if hasattr(frame_processor, 'pre_start') and not frame_processor.pre_start(status_fn_callback=update_status): # Pass callback here
             return
     limit_resources()
     if modules.globals.headless:
