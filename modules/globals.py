@@ -41,3 +41,5 @@ show_mouth_mask_box = False
 mask_feather_ratio = 8
 mask_down_size = 0.50
 mask_size = 1
+use_poisson_blending = False # Added for Poisson blending
+poisson_blending_feather_amount = 5 # Feathering for the mask before Poisson blending
