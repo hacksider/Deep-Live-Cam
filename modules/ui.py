@@ -939,21 +939,18 @@ def update_webcam_frame_after(cap, frame_processors, source_image, fps_data, del
 
 
     if not modules.globals.map_faces:
+        # current_source_image is the source_image passed in from create_webcam_preview
+        # It's determined once before the loop starts. No reloading here.
         current_source_image = source_image
-        if current_source_image is None and modules.globals.source_path:
-             try:
-                current_source_image = get_one_face(cv2.imread(modules.globals.source_path))
-             except:
-                pass
-
 
         for frame_processor in frame_processors:
             if frame_processor.NAME == "DLC.FACE-ENHANCER":
                 if modules.globals.fp_ui["face_enhancer"]:
                     temp_frame = frame_processor.process_frame(None, temp_frame)
-            else:
-                if current_source_image:
+            else: # This is the face_swapper processor or other default
+                if current_source_image: # Only process if source_image (from create_webcam_preview) is valid
                     temp_frame = frame_processor.process_frame(current_source_image, temp_frame)
+                # If current_source_image is None, the frame is not processed by face_swapper, effectively no swap.
     else:
         modules.globals.target_path = None
         for frame_processor in frame_processors:
