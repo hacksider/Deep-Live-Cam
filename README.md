@@ -98,7 +98,7 @@ Users are expected to use this software responsibly and legally. If using a real
 
 ## Installation (Manual)
 
-**Please be aware that the installation requires technical skills and is not for beginners. Consider downloading the prebuilt version.**
+**Please be aware that the installation requires technical skills and is not for beginners. Consider downloading the quickstart version.**
 
 <details>
 <summary>Click to see the process</summary>
@@ -109,7 +109,7 @@ This is more likely to work on your computer but will be slower as it utilizes t
 
 **1. Set up Your Platform**
 
--   Python (3.10 recommended)
+-   Python (3.11 recommended)
 -   pip
 -   git
 -   [ffmpeg](https://www.youtube.com/watch?v=OlNWCpFdVMA) - ```iex (irm ffmpeg.tc.ht)```
@@ -153,14 +153,14 @@ pip install -r requirements.txt
 Apple Silicon (M1/M2/M3) requires specific setup:
 
 ```bash
-# Install Python 3.10 (specific version is important)
-brew install python@3.10
+# Install Python 3.11 (specific version is important)
+brew install python@3.11
 
 # Install tkinter package (required for the GUI)
 brew install python-tk@3.10
 
-# Create and activate virtual environment with Python 3.10
-python3.10 -m venv venv
+# Create and activate virtual environment with Python 3.11
+python3.11 -m venv venv
 source venv/bin/activate
 
 # Install dependencies
@@ -236,7 +236,7 @@ python3.10 run.py --execution-provider coreml
   # Uninstall conflicting versions if needed
   brew uninstall --ignore-dependencies python@3.11 python@3.13
   
-  # Keep only Python 3.10
+  # Keep only Python 3.11
   brew cleanup
   ```
 
@@ -246,7 +246,7 @@ python3.10 run.py --execution-provider coreml
 
 ```bash
 pip uninstall onnxruntime onnxruntime-coreml
-pip install onnxruntime-coreml==1.13.1
+pip install onnxruntime-coreml==1.21.0
 ```
 
 2. Usage:
@@ -261,7 +261,7 @@ python run.py --execution-provider coreml
 
 ```bash
 pip uninstall onnxruntime onnxruntime-directml
-pip install onnxruntime-directml==1.15.1
+pip install onnxruntime-directml==1.21.0
 ```
 
 2. Usage:
@@ -276,7 +276,7 @@ python run.py --execution-provider directml
 
 ```bash
 pip uninstall onnxruntime onnxruntime-openvino
-pip install onnxruntime-openvino==1.15.0
+pip install onnxruntime-openvino==1.21.0
 ```
 
 2. Usage:
