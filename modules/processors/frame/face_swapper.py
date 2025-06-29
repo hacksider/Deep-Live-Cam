@@ -61,9 +61,29 @@ def get_face_swapper() -> Any:
     with THREAD_LOCK:
         if FACE_SWAPPER is None:
             model_path = os.path.join(models_dir, "inswapper_128_fp16.onnx")
-            FACE_SWAPPER = insightface.model_zoo.get_model(
-                model_path, providers=modules.globals.execution_providers
-            )
+            try:
+                FACE_SWAPPER = insightface.model_zoo.get_model(
+                    model_path, providers=modules.globals.execution_providers
+                )
+                update_status(f"Successfully loaded model with providers: {modules.globals.execution_providers}", NAME)
+            except Exception as e:
+                error_msg = str(e)
+                update_status(f"Error loading model with selected providers: {error_msg}", NAME)
+                
+                # If the error is related to CUDA, provide more helpful information
+                if "cuda" in error_msg.lower() or "gpu" in error_msg.lower():
+                    update_status("CUDA error detected. Trying to load with CPU provider instead.", NAME)
+                    modules.globals.execution_providers = ['CPUExecutionProvider']
+                    try:
+                        FACE_SWAPPER = insightface.model_zoo.get_model(
+                            model_path, providers=modules.globals.execution_providers
+                        )
+                        update_status("Successfully loaded model with CPU provider as fallback.", NAME)
+                    except Exception as fallback_error:
+                        update_status(f"Failed to load model even with fallback provider: {str(fallback_error)}", NAME)
+                        raise
+                else:
+                    raise
     return FACE_SWAPPER
 
 
@@ -430,37 +450,24 @@ def draw_mouth_mask_visualization(
         feathered_mask = cv2.GaussianBlur(
             mask_region.astype(float), (kernel_size, kernel_size), 0
         )
-        feathered_mask = (feathered_mask / feathered_mask.max() * 255).astype(np.uint8)
-        # Remove the feathered mask color overlay
-        # color_feathered_mask = cv2.applyColorMap(feathered_mask, cv2.COLORMAP_VIRIDIS)
+        feathered_mask = feathered_mask / feathered_mask.max()
 
-        # Ensure shapes match before blending feathered mask
-        # if vis_region.shape == color_feathered_mask.shape:
-        #     blended_feathered = cv2.addWeighted(vis_region, 0.7, color_feathered_mask, 0.3, 0)
-        #     vis_frame[min_y:max_y, min_x:max_x] = blended_feathered
+        face_mask_roi = face_mask[min_y:max_y, min_x:max_x]
+        combined_mask = feathered_mask * (face_mask_roi / 255.0)
 
-        # Add labels
-        cv2.putText(
-            vis_frame,
-            "Lower Mouth Mask",
-            (min_x, min_y - 10),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.5,
-            (255, 255, 255),
-            1,
+        combined_mask = combined_mask[:, :, np.newaxis]
+        blended = (
+            color_corrected_mouth * combined_mask + vis_region * (1 - combined_mask)
+        ).astype(np.uint8)
+
+        # Apply face mask to blended result
+        face_mask_3channel = (
+            np.repeat(face_mask_roi[:, :, np.newaxis], 3, axis=2) / 255.0
         )
-        cv2.putText(
-            vis_frame,
-            "Feathered Mask",
-            (min_x, max_y + 20),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.5,
-            (255, 255, 255),
-            1,
-        )
+        final_blend = blended * face_mask_3channel + vis_region * (1 - face_mask_3channel)
 
-        return vis_frame
-    return frame
+        vis_frame[min_y:max_y, min_x:max_x] = final_blend.astype(np.uint8)
+    return vis_frame
 
 
 def apply_mouth_area(
