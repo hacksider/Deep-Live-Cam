@@ -1,0 +1,2 @@
+- name: Close Stale Issues
+  uses: actions/stale@v9.1.0
