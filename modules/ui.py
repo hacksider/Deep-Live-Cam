@@ -28,6 +28,12 @@ from modules.utilities import (
 from modules.video_capture import VideoCapturer
 from modules.gettext import LanguageManager
 import platform
+try:
+    import pyvirtualcam
+    PYVIRTUALCAM_AVAILABLE = True
+except ImportError:
+    PYVIRTUALCAM_AVAILABLE = False
+    print("pyvirtualcam is not installed. Virtual camera support will be disabled.")
 
 if platform.system() == "Windows":
     from pygrabber.dshow_graph import FilterGraph
@@ -363,7 +369,17 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         ),
     )
     live_button.place(relx=0.65, rely=0.86, relwidth=0.2, relheight=0.05)
-    # --- End Camera Selection ---
+
+    # --- Virtual Camera Toggle ---
+    virtual_cam_button = ctk.CTkButton(
+        root,
+        text=_("Toggle Virtual Cam"),
+        cursor="hand2",
+        command=toggle_virtual_cam,
+        state=("normal" if PYVIRTUALCAM_AVAILABLE else "disabled"),
+    )
+    virtual_cam_button.place(relx=0.1, rely=0.92, relwidth=0.35, relheight=0.05)
+    # --- End Virtual Camera Toggle ---
 
     status_label = ctk.CTkLabel(root, text=None, justify="center")
     status_label.place(relx=0.1, rely=0.9, relwidth=0.8)
@@ -797,75 +813,61 @@ def webcam_preview(root: ctk.CTk, camera_index: int):
         )
 
 
+virtual_cam_manager = VirtualCamManager()
+virtual_cam_enabled = False  # Use a global variable for clarity
 
-def get_available_cameras():
-    """Returns a list of available camera names and indices."""
-    if platform.system() == "Windows":
-        try:
-            graph = FilterGraph()
-            devices = graph.get_input_devices()
-
-            # Create list of indices and names
-            camera_indices = list(range(len(devices)))
-            camera_names = devices
-
-            # If no cameras found through DirectShow, try OpenCV fallback
-            if not camera_names:
-                # Try to open camera with index -1 and 0
-                test_indices = [-1, 0]
-                working_cameras = []
-
-                for idx in test_indices:
-                    cap = cv2.VideoCapture(idx)
-                    if cap.isOpened():
-                        working_cameras.append(f"Camera {idx}")
-                        cap.release()
-
-                if working_cameras:
-                    return test_indices[: len(working_cameras)], working_cameras
-
-            # If still no cameras found, return empty lists
-            if not camera_names:
-                return [], ["No cameras found"]
-
-            return camera_indices, camera_names
-
-        except Exception as e:
-            print(f"Error detecting cameras: {str(e)}")
-            return [], ["No cameras found"]
+def toggle_virtual_cam():
+    global virtual_cam_enabled
+    if not PYVIRTUALCAM_AVAILABLE:
+        update_status("pyvirtualcam not installed. Cannot enable virtual camera.")
+        return
+    if not virtual_cam_enabled:
+        virtual_cam_manager.start(PREVIEW_DEFAULT_WIDTH, PREVIEW_DEFAULT_HEIGHT, 30)
+        virtual_cam_enabled = True
+        update_status("Virtual camera enabled.")
     else:
-        # Unix-like systems (Linux/Mac) camera detection
-        camera_indices = []
-        camera_names = []
+        virtual_cam_manager.stop()
+        virtual_cam_enabled = False
+        update_status("Virtual camera disabled.")
 
-        if platform.system() == "Darwin":  # macOS specific handling
-            # Try to open the default FaceTime camera first
-            cap = cv2.VideoCapture(0)
-            if cap.isOpened():
-                camera_indices.append(0)
-                camera_names.append("FaceTime Camera")
-                cap.release()
+class VirtualCamManager:
+    """Manages the virtual camera output using pyvirtualcam."""
+    def __init__(self):
+        self.cam = None
+        self.enabled = False
+        self.width = PREVIEW_DEFAULT_WIDTH
+        self.height = PREVIEW_DEFAULT_HEIGHT
+        self.fps = 30
 
-            # On macOS, additional cameras typically use indices 1 and 2
-            for i in [1, 2]:
-                cap = cv2.VideoCapture(i)
-                if cap.isOpened():
-                    camera_indices.append(i)
-                    camera_names.append(f"Camera {i}")
-                    cap.release()
-        else:
-            # Linux camera detection - test first 10 indices
-            for i in range(10):
-                cap = cv2.VideoCapture(i)
-                if cap.isOpened():
-                    camera_indices.append(i)
-                    camera_names.append(f"Camera {i}")
-                    cap.release()
+    def start(self, width: int, height: int, fps: int = 30):
+        if self.cam is None:
+            try:
+                self.cam = pyvirtualcam.Camera(width=width, height=height, fps=fps, print_fps=False)
+                self.enabled = True
+                print("Virtual camera started.")
+            except Exception as e:
+                print(f"Failed to start virtual camera: {e}")
+                self.cam = None
+                self.enabled = False
 
-        if not camera_names:
-            return [], ["No cameras found"]
+    def send(self, frame):
+        if self.cam and self.enabled:
+            try:
+                # pyvirtualcam expects RGB
+                if frame.shape[2] == 3:
+                    self.cam.send(frame)
+                    self.cam.sleep_until_next_frame()
+            except Exception as e:
+                print(f"Error sending frame to virtual camera: {e}")
 
-        return camera_indices, camera_names
+    def stop(self):
+        if self.cam:
+            try:
+                self.cam.close()
+            except Exception as e:
+                print(f"Error closing virtual camera: {e}")
+            self.cam = None
+            self.enabled = False
 
 
 def create_webcam_preview(camera_index: int):
@@ -885,10 +887,23 @@ def create_webcam_preview(camera_index: int):
     fps_update_interval = 0.5
     frame_count = 0
     fps = 0
+    face_swap_enabled = True  # Toggle for live face swap
+    last_face_detected = True
+    no_face_counter = 0
+    NO_FACE_THRESHOLD = 30  # Number of frames to show warning if no face
+
+    def toggle_face_swap():
+        nonlocal face_swap_enabled
+        face_swap_enabled = not face_swap_enabled
+        update_status(f"Face Swap {'Enabled' if face_swap_enabled else 'Disabled'}")
+
+    # Optionally, bind a key or button to toggle_face_swap
+    PREVIEW.bind('<f>', lambda e: toggle_face_swap())
 
     while True:
         ret, frame = cap.read()
         if not ret:
+            update_status("Camera frame read failed.")
             break
 
         temp_frame = frame.copy()
@@ -900,30 +915,56 @@ def create_webcam_preview(camera_index: int):
             temp_frame = fit_image_to_size(
                 temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
             )
-
         else:
             temp_frame = fit_image_to_size(
                 temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
             )
 
-        if not modules.globals.map_faces:
-            if source_image is None and modules.globals.source_path:
-                source_image = get_one_face(cv2.imread(modules.globals.source_path))
+        face_found = True
+        if face_swap_enabled:
+            if not modules.globals.map_faces:
+                if source_image is None and modules.globals.source_path:
+                    source_image = get_one_face(cv2.imread(modules.globals.source_path))
 
-            for frame_processor in frame_processors:
-                if frame_processor.NAME == "DLC.FACE-ENHANCER":
-                    if modules.globals.fp_ui["face_enhancer"]:
-                        temp_frame = frame_processor.process_frame(None, temp_frame)
-                else:
-                    temp_frame = frame_processor.process_frame(source_image, temp_frame)
-        else:
-            modules.globals.target_path = None
-            for frame_processor in frame_processors:
-                if frame_processor.NAME == "DLC.FACE-ENHANCER":
-                    if modules.globals.fp_ui["face_enhancer"]:
+                for frame_processor in frame_processors:
+                    if frame_processor.NAME == "DLC.FACE-ENHANCER":
+                        if modules.globals.fp_ui["face_enhancer"]:
+                            temp_frame = frame_processor.process_frame(None, temp_frame)
+                    else:
+                        # Check if a face is detected before swapping
+                        detected_face = get_one_face(temp_frame)
+                        if detected_face is not None and source_image is not None:
+                            temp_frame = frame_processor.process_frame(source_image, temp_frame)
+                            last_face_detected = True
+                            no_face_counter = 0
+                        else:
+                            face_found = False
+                            no_face_counter += 1
+            else:
+                modules.globals.target_path = None
+                for frame_processor in frame_processors:
+                    if frame_processor.NAME == "DLC.FACE-ENHANCER":
+                        if modules.globals.fp_ui["face_enhancer"]:
+                            temp_frame = frame_processor.process_frame_v2(temp_frame)
+                    else:
                         temp_frame = frame_processor.process_frame_v2(temp_frame)
-                else:
-                    temp_frame = frame_processor.process_frame_v2(temp_frame)
+        else:
+            # Face swap disabled, just show the frame
+            pass
+
+        # Show warning if no face detected for a while
+        if not face_found and no_face_counter > NO_FACE_THRESHOLD:
+            cv2.putText(
+                temp_frame,
+                "No face detected!",
+                (10, 60),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                1.2,
+                (0, 0, 255),
+                3,
+            )
+        elif face_found:
+            no_face_counter = 0
 
         # Calculate and display FPS
         current_time = time.time()
@@ -958,6 +999,7 @@ def create_webcam_preview(camera_index: int):
 
     cap.release()
     PREVIEW.withdraw()
+    update_status("Webcam preview closed.")
 
 
 def create_source_target_popup_for_webcam(
