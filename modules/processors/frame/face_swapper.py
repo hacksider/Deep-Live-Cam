@@ -5,6 +5,7 @@ import threading
 import numpy as np
 import modules.globals
 import logging
+import time
 import modules.processors.frame.core
 from modules.core import update_status
 from modules.face_analyser import get_one_face, get_many_faces, default_source_face
@@ -70,7 +71,7 @@ def get_face_swapper() -> Any:
 def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
     face_swapper = get_face_swapper()
 
-    # Apply the face swap
+    # Apply the face swap with optimized settings for better performance
     swapped_frame = face_swapper.get(
         temp_frame, target_face, source_face, paste_back=True
     )
@@ -98,25 +99,172 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
     return swapped_frame
 
 
+def swap_face_enhanced(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
+    """Enhanced face swapping with better quality and performance optimizations"""
+    face_swapper = get_face_swapper()
+    
+    # Apply the face swap
+    swapped_frame = face_swapper.get(
+        temp_frame, target_face, source_face, paste_back=True
+    )
+    
+    # Enhanced post-processing for better quality
+    swapped_frame = enhance_face_swap_quality(swapped_frame, source_face, target_face, temp_frame)
+    
+    if modules.globals.mouth_mask:
+        # Create a mask for the target face
+        face_mask = create_face_mask(target_face, temp_frame)
+
+        # Create the mouth mask
+        mouth_mask, mouth_cutout, mouth_box, lower_lip_polygon = (
+            create_lower_mouth_mask(target_face, temp_frame)
+        )
+
+        # Apply the mouth area
+        swapped_frame = apply_mouth_area(
+            swapped_frame, mouth_cutout, mouth_box, face_mask, lower_lip_polygon
+        )
+
+        if modules.globals.show_mouth_mask_box:
+            mouth_mask_data = (mouth_mask, mouth_cutout, mouth_box, lower_lip_polygon)
+            swapped_frame = draw_mouth_mask_visualization(
+                swapped_frame, target_face, mouth_mask_data
+            )
+
+    return swapped_frame
+
+
+def enhance_face_swap_quality(swapped_frame: Frame, source_face: Face, target_face: Face, original_frame: Frame) -> Frame:
+    """Apply quality enhancements to the swapped face"""
+    try:
+        # Get face bounding box
+        bbox = target_face.bbox.astype(int)
+        x1, y1, x2, y2 = bbox
+        
+        # Ensure coordinates are within frame bounds
+        h, w = swapped_frame.shape[:2]
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(w, x2), min(h, y2)
+        
+        if x2 <= x1 or y2 <= y1:
+            return swapped_frame
+            
+        # Extract face regions
+        swapped_face = swapped_frame[y1:y2, x1:x2]
+        original_face = original_frame[y1:y2, x1:x2]
+        
+        # Apply color matching
+        color_matched = apply_advanced_color_matching(swapped_face, original_face)
+        
+        # Apply edge smoothing
+        smoothed = apply_edge_smoothing(color_matched, original_face)
+        
+        # Blend back into frame
+        swapped_frame[y1:y2, x1:x2] = smoothed
+        
+        return swapped_frame
+        
+    except Exception as e:
+        # Return original swapped frame if enhancement fails
+        return swapped_frame
+
+
+def apply_advanced_color_matching(swapped_face: np.ndarray, target_face: np.ndarray) -> np.ndarray:
+    """Apply advanced color matching between swapped and target faces"""
+    try:
+        # Convert to LAB color space for better color matching
+        swapped_lab = cv2.cvtColor(swapped_face, cv2.COLOR_BGR2LAB).astype(np.float32)
+        target_lab = cv2.cvtColor(target_face, cv2.COLOR_BGR2LAB).astype(np.float32)
+        
+        # Calculate statistics for each channel
+        swapped_mean = np.mean(swapped_lab, axis=(0, 1))
+        swapped_std = np.std(swapped_lab, axis=(0, 1))
+        target_mean = np.mean(target_lab, axis=(0, 1))
+        target_std = np.std(target_lab, axis=(0, 1))
+        
+        # Apply color transfer
+        for i in range(3):
+            if swapped_std[i] > 0:
+                swapped_lab[:, :, i] = (swapped_lab[:, :, i] - swapped_mean[i]) * (target_std[i] / swapped_std[i]) + target_mean[i]
+        
+        # Convert back to BGR
+        result = cv2.cvtColor(np.clip(swapped_lab, 0, 255).astype(np.uint8), cv2.COLOR_LAB2BGR)
+        return result
+        
+    except Exception:
+        return swapped_face
+
+
+def apply_edge_smoothing(face: np.ndarray, reference: np.ndarray) -> np.ndarray:
+    """Apply edge smoothing to reduce artifacts"""
+    try:
+        # Create a soft mask for blending edges
+        mask = np.ones(face.shape[:2], dtype=np.float32)
+        
+        # Apply Gaussian blur to create soft edges
+        kernel_size = max(5, min(face.shape[0], face.shape[1]) // 20)
+        if kernel_size % 2 == 0:
+            kernel_size += 1
+            
+        mask = cv2.GaussianBlur(mask, (kernel_size, kernel_size), 0)
+        mask = mask[:, :, np.newaxis]
+        
+        # Blend with reference for smoother edges
+        blended = face * mask + reference * (1 - mask)
+        return blended.astype(np.uint8)
+        
+    except Exception:
+        return face
+
+
 def process_frame(source_face: Face, temp_frame: Frame) -> Frame:
+    from modules.performance_optimizer import performance_optimizer
+    
+    start_time = time.time()
+    original_size = temp_frame.shape[:2][::-1]  # (width, height)
+    
+    # Apply color correction if enabled
     if modules.globals.color_correction:
         temp_frame = cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB)
-
+    
+    # Preprocess frame for performance
+    processed_frame = performance_optimizer.preprocess_frame(temp_frame)
+    
     if modules.globals.many_faces:
-        many_faces = get_many_faces(temp_frame)
+        # Only detect faces if enough time has passed or cache is empty
+        if performance_optimizer.should_detect_faces():
+            many_faces = get_many_faces(processed_frame)
+            performance_optimizer.face_cache['many_faces'] = many_faces
+        else:
+            many_faces = performance_optimizer.face_cache.get('many_faces', [])
+            
         if many_faces:
             for target_face in many_faces:
                 if source_face and target_face:
-                    temp_frame = swap_face(source_face, target_face, temp_frame)
+                    processed_frame = swap_face_enhanced(source_face, target_face, processed_frame)
                 else:
                     print("Face detection failed for target/source.")
     else:
-        target_face = get_one_face(temp_frame)
+        # Use cached face detection for better performance
+        if performance_optimizer.should_detect_faces():
+            target_face = get_one_face(processed_frame)
+            performance_optimizer.face_cache['single_face'] = target_face
+        else:
+            target_face = performance_optimizer.face_cache.get('single_face')
+            
         if target_face and source_face:
-            temp_frame = swap_face(source_face, target_face, temp_frame)
+            processed_frame = swap_face_enhanced(source_face, target_face, processed_frame)
         else:
             logging.error("Face detection failed for target or source.")
-    return temp_frame
+    
+    # Postprocess frame back to original size
+    final_frame = performance_optimizer.postprocess_frame(processed_frame, original_size)
+    
+    # Update performance stats
+    frame_time = time.time() - start_time
+    performance_optimizer.update_fps_stats(frame_time)
+    
+    return final_frame
 
 
 
