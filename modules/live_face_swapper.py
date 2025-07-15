@@ -140,7 +140,7 @@ class LiveFaceSwapper:
                 time.sleep(0.01)
     
     def _process_frame(self, frame: np.ndarray) -> np.ndarray:
-        """Process a single frame with face swapping"""
+        """Process a single frame with face swapping, tracking, and occlusion handling"""
         try:
             start_time = time.time()
             
@@ -148,27 +148,53 @@ class LiveFaceSwapper:
             original_size = frame.shape[:2][::-1]
             processed_frame = performance_optimizer.preprocess_frame(frame)
             
-            # Detect faces based on performance settings
+            # Import face tracker
+            from modules.face_tracker import face_tracker
+            
+            # Detect and track faces based on performance settings
             if modules.globals.many_faces:
                 if performance_optimizer.should_detect_faces():
-                    target_faces = get_many_faces(processed_frame)
-                    performance_optimizer.face_cache['many_faces'] = target_faces
+                    detected_faces = get_many_faces(processed_frame)
+                    # Apply tracking to each face
+                    tracked_faces = []
+                    for face in (detected_faces or []):
+                        tracked_face = face_tracker.track_face(face, processed_frame)
+                        if tracked_face:
+                            tracked_faces.append(tracked_face)
+                    performance_optimizer.face_cache['many_faces'] = tracked_faces
                 else:
-                    target_faces = performance_optimizer.face_cache.get('many_faces', [])
+                    tracked_faces = performance_optimizer.face_cache.get('many_faces', [])
                 
-                if target_faces:
-                    for target_face in target_faces:
+                if tracked_faces:
+                    for target_face in tracked_faces:
                         if self.source_face and target_face:
-                            processed_frame = swap_face_enhanced(self.source_face, target_face, processed_frame)
+                            # Use enhanced swap with occlusion handling
+                            from modules.processors.frame.face_swapper import swap_face_enhanced_with_occlusion
+                            processed_frame = swap_face_enhanced_with_occlusion(
+                                self.source_face, target_face, processed_frame, frame
+                            )
             else:
                 if performance_optimizer.should_detect_faces():
-                    target_face = get_one_face(processed_frame)
-                    performance_optimizer.face_cache['single_face'] = target_face
+                    detected_face = get_one_face(processed_frame)
+                    tracked_face = face_tracker.track_face(detected_face, processed_frame)
+                    performance_optimizer.face_cache['single_face'] = tracked_face
                 else:
-                    target_face = performance_optimizer.face_cache.get('single_face')
+                    tracked_face = performance_optimizer.face_cache.get('single_face')
                 
-                if target_face and self.source_face:
-                    processed_frame = swap_face_enhanced(self.source_face, target_face, processed_frame)
+                if tracked_face and self.source_face:
+                    # Use enhanced swap with occlusion handling
+                    from modules.processors.frame.face_swapper import swap_face_enhanced_with_occlusion
+                    processed_frame = swap_face_enhanced_with_occlusion(
+                        self.source_face, tracked_face, processed_frame, frame
+                    )
+                else:
+                    # Try to use tracking even without detection (for occlusion handling)
+                    tracked_face = face_tracker.track_face(None, processed_frame)
+                    if tracked_face and self.source_face:
+                        from modules.processors.frame.face_swapper import swap_face_enhanced_with_occlusion
+                        processed_frame = swap_face_enhanced_with_occlusion(
+                            self.source_face, tracked_face, processed_frame, frame
+                        )
             
             # Post-process back to original size
             final_frame = performance_optimizer.postprocess_frame(processed_frame, original_size)

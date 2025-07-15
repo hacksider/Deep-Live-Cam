@@ -217,8 +217,214 @@ def apply_edge_smoothing(face: np.ndarray, reference: np.ndarray) -> np.ndarray:
         return face
 
 
+def swap_face_enhanced_with_occlusion(source_face: Face, target_face: Face, temp_frame: Frame, original_frame: Frame) -> Frame:
+    """Enhanced face swapping with occlusion handling and stabilization"""
+    face_swapper = get_face_swapper()
+    
+    try:
+        # Get face bounding box
+        bbox = target_face.bbox.astype(int)
+        x1, y1, x2, y2 = bbox
+        
+        # Ensure coordinates are within frame bounds
+        h, w = temp_frame.shape[:2]
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(w, x2), min(h, y2)
+        
+        if x2 <= x1 or y2 <= y1:
+            return temp_frame
+        
+        # Create face mask to handle occlusion
+        face_mask = create_enhanced_face_mask(target_face, temp_frame)
+        
+        # Apply face swap
+        swapped_frame = face_swapper.get(temp_frame, target_face, source_face, paste_back=True)
+        
+        # Apply occlusion-aware blending
+        final_frame = apply_occlusion_aware_blending(
+            swapped_frame, temp_frame, face_mask, bbox
+        )
+        
+        # Enhanced post-processing for better quality
+        final_frame = enhance_face_swap_quality(final_frame, source_face, target_face, original_frame)
+        
+        # Apply mouth mask if enabled
+        if modules.globals.mouth_mask:
+            face_mask_full = create_face_mask(target_face, final_frame)
+            mouth_mask, mouth_cutout, mouth_box, lower_lip_polygon = (
+                create_lower_mouth_mask(target_face, final_frame)
+            )
+            final_frame = apply_mouth_area(
+                final_frame, mouth_cutout, mouth_box, face_mask_full, lower_lip_polygon
+            )
+            
+            if modules.globals.show_mouth_mask_box:
+                mouth_mask_data = (mouth_mask, mouth_cutout, mouth_box, lower_lip_polygon)
+                final_frame = draw_mouth_mask_visualization(
+                    final_frame, target_face, mouth_mask_data
+                )
+        
+        return final_frame
+        
+    except Exception as e:
+        print(f"Error in occlusion-aware face swap: {e}")
+        # Fallback to regular enhanced swap
+        return swap_face_enhanced(source_face, target_face, temp_frame)
+
+
+def create_enhanced_face_mask(face: Face, frame: Frame) -> np.ndarray:
+    """Create an enhanced face mask that better handles occlusion"""
+    mask = np.zeros(frame.shape[:2], dtype=np.uint8)
+    
+    try:
+        # Use landmarks if available for more precise masking
+        if hasattr(face, 'landmark_2d_106') and face.landmark_2d_106 is not None:
+            landmarks = face.landmark_2d_106.astype(np.int32)
+            
+            # Create face contour from landmarks
+            face_contour = []
+            
+            # Face outline (jawline and forehead)
+            face_outline_indices = list(range(0, 33))  # Jawline and face boundary
+            for idx in face_outline_indices:
+                if idx < len(landmarks):
+                    face_contour.append(landmarks[idx])
+            
+            if len(face_contour) > 3:
+                face_contour = np.array(face_contour)
+                
+                # Create convex hull for smoother mask
+                hull = cv2.convexHull(face_contour)
+                
+                # Expand the hull slightly for better coverage
+                center = np.mean(hull, axis=0)
+                expanded_hull = []
+                for point in hull:
+                    direction = point[0] - center
+                    direction = direction / np.linalg.norm(direction) if np.linalg.norm(direction) > 0 else direction
+                    expanded_point = point[0] + direction * 10  # Expand by 10 pixels
+                    expanded_hull.append(expanded_point)
+                
+                expanded_hull = np.array(expanded_hull, dtype=np.int32)
+                cv2.fillConvexPoly(mask, expanded_hull, 255)
+            else:
+                # Fallback to bounding box
+                bbox = face.bbox.astype(int)
+                x1, y1, x2, y2 = bbox
+                cv2.rectangle(mask, (x1, y1), (x2, y2), 255, -1)
+        else:
+            # Fallback to bounding box if no landmarks
+            bbox = face.bbox.astype(int)
+            x1, y1, x2, y2 = bbox
+            cv2.rectangle(mask, (x1, y1), (x2, y2), 255, -1)
+        
+        # Apply Gaussian blur for soft edges
+        mask = cv2.GaussianBlur(mask, (15, 15), 5)
+        
+    except Exception as e:
+        print(f"Error creating enhanced face mask: {e}")
+        # Fallback to simple rectangle mask
+        bbox = face.bbox.astype(int)
+        x1, y1, x2, y2 = bbox
+        cv2.rectangle(mask, (x1, y1), (x2, y2), 255, -1)
+        mask = cv2.GaussianBlur(mask, (15, 15), 5)
+    
+    return mask
+
+
+def apply_occlusion_aware_blending(swapped_frame: Frame, original_frame: Frame, face_mask: np.ndarray, bbox: np.ndarray) -> Frame:
+    """Apply occlusion-aware blending to handle hands/objects covering the face"""
+    try:
+        x1, y1, x2, y2 = bbox
+        
+        # Ensure coordinates are within bounds
+        h, w = swapped_frame.shape[:2]
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(w, x2), min(h, y2)
+        
+        if x2 <= x1 or y2 <= y1:
+            return swapped_frame
+        
+        # Extract face regions
+        swapped_face_region = swapped_frame[y1:y2, x1:x2]
+        original_face_region = original_frame[y1:y2, x1:x2]
+        face_mask_region = face_mask[y1:y2, x1:x2]
+        
+        # Detect potential occlusion using edge detection and color analysis
+        occlusion_mask = detect_occlusion(original_face_region, swapped_face_region)
+        
+        # Combine face mask with occlusion detection
+        combined_mask = face_mask_region.astype(np.float32) / 255.0
+        occlusion_factor = (255 - occlusion_mask).astype(np.float32) / 255.0
+        
+        # Apply occlusion-aware blending
+        final_mask = combined_mask * occlusion_factor
+        final_mask = final_mask[:, :, np.newaxis]
+        
+        # Blend the regions
+        blended_region = (swapped_face_region * final_mask + 
+                         original_face_region * (1 - final_mask)).astype(np.uint8)
+        
+        # Copy back to full frame
+        result_frame = swapped_frame.copy()
+        result_frame[y1:y2, x1:x2] = blended_region
+        
+        return result_frame
+        
+    except Exception as e:
+        print(f"Error in occlusion-aware blending: {e}")
+        return swapped_frame
+
+
+def detect_occlusion(original_region: np.ndarray, swapped_region: np.ndarray) -> np.ndarray:
+    """Detect potential occlusion areas (hands, objects) in the face region"""
+    try:
+        # Convert to different color spaces for analysis
+        original_hsv = cv2.cvtColor(original_region, cv2.COLOR_BGR2HSV)
+        original_lab = cv2.cvtColor(original_region, cv2.COLOR_BGR2LAB)
+        
+        # Detect skin-like regions (potential hands)
+        # HSV ranges for skin detection
+        lower_skin = np.array([0, 20, 70], dtype=np.uint8)
+        upper_skin = np.array([20, 255, 255], dtype=np.uint8)
+        skin_mask1 = cv2.inRange(original_hsv, lower_skin, upper_skin)
+        
+        lower_skin2 = np.array([160, 20, 70], dtype=np.uint8)
+        upper_skin2 = np.array([180, 255, 255], dtype=np.uint8)
+        skin_mask2 = cv2.inRange(original_hsv, lower_skin2, upper_skin2)
+        
+        skin_mask = cv2.bitwise_or(skin_mask1, skin_mask2)
+        
+        # Edge detection to find object boundaries
+        gray = cv2.cvtColor(original_region, cv2.COLOR_BGR2GRAY)
+        edges = cv2.Canny(gray, 50, 150)
+        
+        # Dilate edges to create thicker boundaries
+        kernel = np.ones((3, 3), np.uint8)
+        edges_dilated = cv2.dilate(edges, kernel, iterations=2)
+        
+        # Combine skin detection and edge detection
+        occlusion_mask = cv2.bitwise_or(skin_mask, edges_dilated)
+        
+        # Apply morphological operations to clean up the mask
+        kernel = np.ones((5, 5), np.uint8)
+        occlusion_mask = cv2.morphologyEx(occlusion_mask, cv2.MORPH_CLOSE, kernel)
+        occlusion_mask = cv2.morphologyEx(occlusion_mask, cv2.MORPH_OPEN, kernel)
+        
+        # Apply Gaussian blur for smooth transitions
+        occlusion_mask = cv2.GaussianBlur(occlusion_mask, (11, 11), 3)
+        
+        return occlusion_mask
+        
+    except Exception as e:
+        print(f"Error in occlusion detection: {e}")
+        # Return empty mask if detection fails
+        return np.zeros(original_region.shape[:2], dtype=np.uint8)
+
+
 def process_frame(source_face: Face, temp_frame: Frame) -> Frame:
     from modules.performance_optimizer import performance_optimizer
+    from modules.face_tracker import face_tracker
     
     start_time = time.time()
     original_size = temp_frame.shape[:2][::-1]  # (width, height)
@@ -233,29 +439,42 @@ def process_frame(source_face: Face, temp_frame: Frame) -> Frame:
     if modules.globals.many_faces:
         # Only detect faces if enough time has passed or cache is empty
         if performance_optimizer.should_detect_faces():
-            many_faces = get_many_faces(processed_frame)
-            performance_optimizer.face_cache['many_faces'] = many_faces
+            detected_faces = get_many_faces(processed_frame)
+            # Apply tracking to each face
+            tracked_faces = []
+            for i, face in enumerate(detected_faces or []):
+                # Use separate tracker for each face (simplified for now)
+                tracked_face = face_tracker.track_face(face, processed_frame)
+                if tracked_face:
+                    tracked_faces.append(tracked_face)
+            performance_optimizer.face_cache['many_faces'] = tracked_faces
         else:
-            many_faces = performance_optimizer.face_cache.get('many_faces', [])
+            tracked_faces = performance_optimizer.face_cache.get('many_faces', [])
             
-        if many_faces:
-            for target_face in many_faces:
+        if tracked_faces:
+            for target_face in tracked_faces:
                 if source_face and target_face:
-                    processed_frame = swap_face_enhanced(source_face, target_face, processed_frame)
+                    processed_frame = swap_face_enhanced_with_occlusion(source_face, target_face, processed_frame, temp_frame)
                 else:
                     print("Face detection failed for target/source.")
     else:
-        # Use cached face detection for better performance
+        # Use cached face detection with tracking for better performance
         if performance_optimizer.should_detect_faces():
-            target_face = get_one_face(processed_frame)
-            performance_optimizer.face_cache['single_face'] = target_face
+            detected_face = get_one_face(processed_frame)
+            tracked_face = face_tracker.track_face(detected_face, processed_frame)
+            performance_optimizer.face_cache['single_face'] = tracked_face
         else:
-            target_face = performance_optimizer.face_cache.get('single_face')
+            tracked_face = performance_optimizer.face_cache.get('single_face')
             
-        if target_face and source_face:
-            processed_frame = swap_face_enhanced(source_face, target_face, processed_frame)
+        if tracked_face and source_face:
+            processed_frame = swap_face_enhanced_with_occlusion(source_face, tracked_face, processed_frame, temp_frame)
         else:
-            logging.error("Face detection failed for target or source.")
+            # Try to use tracking even without detection
+            tracked_face = face_tracker.track_face(None, processed_frame)
+            if tracked_face and source_face:
+                processed_frame = swap_face_enhanced_with_occlusion(source_face, tracked_face, processed_frame, temp_frame)
+            else:
+                logging.error("Face detection and tracking failed.")
     
     # Postprocess frame back to original size
     final_frame = performance_optimizer.postprocess_frame(processed_frame, original_size)
