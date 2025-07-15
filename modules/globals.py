@@ -50,3 +50,7 @@ quality_level = 1.0
 face_detection_interval = 0.1
 enable_frame_caching = True
 enable_gpu_acceleration = True
+
+# Occlusion handling settings
+enable_occlusion_detection = False  # Disable by default to keep normal face swap behavior
+occlusion_sensitivity = 0.3  # Lower = less sensitive, higher = more sensitive

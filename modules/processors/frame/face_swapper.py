@@ -218,35 +218,21 @@ def apply_edge_smoothing(face: np.ndarray, reference: np.ndarray) -> np.ndarray:
 
 
 def swap_face_enhanced_with_occlusion(source_face: Face, target_face: Face, temp_frame: Frame, original_frame: Frame) -> Frame:
-    """Enhanced face swapping with occlusion handling and stabilization"""
+    """Enhanced face swapping with optional occlusion handling"""
     face_swapper = get_face_swapper()
     
     try:
-        # Get face bounding box
-        bbox = target_face.bbox.astype(int)
-        x1, y1, x2, y2 = bbox
-        
-        # Ensure coordinates are within frame bounds
-        h, w = temp_frame.shape[:2]
-        x1, y1 = max(0, x1), max(0, y1)
-        x2, y2 = min(w, x2), min(h, y2)
-        
-        if x2 <= x1 or y2 <= y1:
-            return temp_frame
-        
-        # Create face mask to handle occlusion
-        face_mask = create_enhanced_face_mask(target_face, temp_frame)
-        
-        # Apply face swap
+        # First, apply the normal face swap (this should always work)
         swapped_frame = face_swapper.get(temp_frame, target_face, source_face, paste_back=True)
         
-        # Apply occlusion-aware blending
-        final_frame = apply_occlusion_aware_blending(
-            swapped_frame, temp_frame, face_mask, bbox
-        )
-        
         # Enhanced post-processing for better quality
-        final_frame = enhance_face_swap_quality(final_frame, source_face, target_face, original_frame)
+        swapped_frame = enhance_face_swap_quality(swapped_frame, source_face, target_face, original_frame)
+        
+        # Only apply occlusion handling if explicitly enabled
+        if modules.globals.enable_occlusion_detection:
+            final_frame = apply_subtle_occlusion_protection(swapped_frame, temp_frame, target_face)
+        else:
+            final_frame = swapped_frame
         
         # Apply mouth mask if enabled
         if modules.globals.mouth_mask:
@@ -267,7 +253,7 @@ def swap_face_enhanced_with_occlusion(source_face: Face, target_face: Face, temp
         return final_frame
         
     except Exception as e:
-        print(f"Error in occlusion-aware face swap: {e}")
+        print(f"Error in enhanced face swap: {e}")
         # Fallback to regular enhanced swap
         return swap_face_enhanced(source_face, target_face, temp_frame)
 
@@ -420,6 +406,102 @@ def detect_occlusion(original_region: np.ndarray, swapped_region: np.ndarray) ->
         print(f"Error in occlusion detection: {e}")
         # Return empty mask if detection fails
         return np.zeros(original_region.shape[:2], dtype=np.uint8)
+
+
+def apply_subtle_occlusion_protection(swapped_frame: Frame, original_frame: Frame, target_face: Face) -> Frame:
+    """Apply very subtle occlusion protection - only affects obvious hand/object areas"""
+    try:
+        # Get face bounding box
+        bbox = target_face.bbox.astype(int)
+        x1, y1, x2, y2 = bbox
+        
+        # Ensure coordinates are within frame bounds
+        h, w = swapped_frame.shape[:2]
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(w, x2), min(h, y2)
+        
+        if x2 <= x1 or y2 <= y1:
+            return swapped_frame
+        
+        # Extract face regions
+        swapped_region = swapped_frame[y1:y2, x1:x2]
+        original_region = original_frame[y1:y2, x1:x2]
+        
+        # Very conservative occlusion detection - only detect obvious hands/objects
+        occlusion_mask = detect_obvious_occlusion(original_region)
+        
+        # Only apply protection if significant occlusion is detected
+        occlusion_percentage = np.sum(occlusion_mask > 128) / (occlusion_mask.shape[0] * occlusion_mask.shape[1])
+        
+        if occlusion_percentage > 0.15:  # Only if more than 15% of face is occluded
+            # Create a very soft blend mask
+            blend_mask = (255 - occlusion_mask).astype(np.float32) / 255.0
+            blend_mask = cv2.GaussianBlur(blend_mask, (21, 21), 7)  # Very soft edges
+            blend_mask = blend_mask[:, :, np.newaxis]
+            
+            # Very subtle blending - mostly keep the swapped face
+            protected_region = (swapped_region * (0.7 + 0.3 * blend_mask) + 
+                              original_region * (0.3 * (1 - blend_mask))).astype(np.uint8)
+            
+            # Copy back to full frame
+            result_frame = swapped_frame.copy()
+            result_frame[y1:y2, x1:x2] = protected_region
+            return result_frame
+        
+        # If no significant occlusion, return original swapped frame
+        return swapped_frame
+        
+    except Exception as e:
+        # If anything fails, just return the swapped frame
+        return swapped_frame
+
+
+def detect_obvious_occlusion(region: np.ndarray) -> np.ndarray:
+    """Detect only very obvious occlusion (hands, large objects) - much more conservative"""
+    try:
+        # Convert to HSV for better skin detection
+        hsv = cv2.cvtColor(region, cv2.COLOR_BGR2HSV)
+        
+        # More restrictive skin detection for hands
+        lower_skin = np.array([0, 30, 80], dtype=np.uint8)  # More restrictive
+        upper_skin = np.array([15, 255, 255], dtype=np.uint8)
+        skin_mask1 = cv2.inRange(hsv, lower_skin, upper_skin)
+        
+        lower_skin2 = np.array([165, 30, 80], dtype=np.uint8)
+        upper_skin2 = np.array([180, 255, 255], dtype=np.uint8)
+        skin_mask2 = cv2.inRange(hsv, lower_skin2, upper_skin2)
+        
+        skin_mask = cv2.bitwise_or(skin_mask1, skin_mask2)
+        
+        # Very conservative edge detection
+        gray = cv2.cvtColor(region, cv2.COLOR_BGR2GRAY)
+        edges = cv2.Canny(gray, 80, 160)  # Higher thresholds for obvious edges only
+        
+        # Combine but be very conservative
+        occlusion_mask = cv2.bitwise_and(skin_mask, edges)  # Must be both skin-like AND have edges
+        
+        # Clean up with morphological operations
+        kernel = np.ones((7, 7), np.uint8)
+        occlusion_mask = cv2.morphologyEx(occlusion_mask, cv2.MORPH_CLOSE, kernel)
+        occlusion_mask = cv2.morphologyEx(occlusion_mask, cv2.MORPH_OPEN, kernel)
+        
+        # Only keep significant connected components
+        num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(occlusion_mask)
+        filtered_mask = np.zeros_like(occlusion_mask)
+        
+        for i in range(1, num_labels):
+            area = stats[i, cv2.CC_STAT_AREA]
+            if area > 200:  # Only keep larger occlusions
+                filtered_mask[labels == i] = 255
+        
+        # Apply very light Gaussian blur
+        filtered_mask = cv2.GaussianBlur(filtered_mask, (5, 5), 1)
+        
+        return filtered_mask
+        
+    except Exception:
+        # Return empty mask if detection fails
+        return np.zeros(region.shape[:2], dtype=np.uint8)
 
 
 def process_frame(source_face: Face, temp_frame: Frame) -> Frame:
