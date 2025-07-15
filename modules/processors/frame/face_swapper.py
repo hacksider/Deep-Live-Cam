@@ -113,9 +113,32 @@ def swap_face_stable(source_face: Face, target_face: Face, temp_frame: Frame) ->
 
 
 def swap_face_ultra_fast(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
-    """Absolute fastest face swap possible - no extra processing"""
+    """Fast face swap with mouth mask support"""
     face_swapper = get_face_swapper()
-    return face_swapper.get(temp_frame, target_face, source_face, paste_back=True)
+    swapped_frame = face_swapper.get(temp_frame, target_face, source_face, paste_back=True)
+    
+    # Add mouth mask functionality back (only if enabled)
+    if modules.globals.mouth_mask:
+        # Create a mask for the target face
+        face_mask = create_face_mask(target_face, temp_frame)
+
+        # Create the mouth mask
+        mouth_mask, mouth_cutout, mouth_box, lower_lip_polygon = (
+            create_lower_mouth_mask(target_face, temp_frame)
+        )
+
+        # Apply the mouth area
+        swapped_frame = apply_mouth_area(
+            swapped_frame, mouth_cutout, mouth_box, face_mask, lower_lip_polygon
+        )
+
+        if modules.globals.show_mouth_mask_box:
+            mouth_mask_data = (mouth_mask, mouth_cutout, mouth_box, lower_lip_polygon)
+            swapped_frame = draw_mouth_mask_visualization(
+                swapped_frame, target_face, mouth_mask_data
+            )
+    
+    return swapped_frame
 
 
 def improve_forehead_matching(swapped_frame: Frame, source_face: Face, target_face: Face, original_frame: Frame) -> Frame:
