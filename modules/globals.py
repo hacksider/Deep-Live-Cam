@@ -42,15 +42,4 @@ mask_feather_ratio = 8
 mask_down_size = 0.50
 mask_size = 1
 
-# Enhanced performance settings
-performance_mode = "balanced"  # "fast", "balanced", "quality"
-adaptive_quality = True
-target_live_fps = 30
-quality_level = 1.0
-face_detection_interval = 0.1
-enable_frame_caching = True
-enable_gpu_acceleration = True
-
-# Occlusion handling settings
-enable_occlusion_detection = False  # Disable by default to keep normal face swap behavior
-occlusion_sensitivity = 0.3  # Lower = less sensitive, higher = more sensitive
+# Removed all performance optimization variables
