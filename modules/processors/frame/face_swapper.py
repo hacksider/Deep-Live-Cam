@@ -103,58 +103,19 @@ _last_face_position = None
 _position_smoothing = 0.7  # Higher = more stable, lower = more responsive
 
 def swap_face_stable(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
-    """Face swap with simple position smoothing to reduce jitter"""
-    global _last_face_position
-    
-    # Apply simple position smoothing to reduce jitter
-    if _last_face_position is not None:
-        # Smooth the face position
-        current_center = [(target_face.bbox[0] + target_face.bbox[2]) / 2, 
-                         (target_face.bbox[1] + target_face.bbox[3]) / 2]
-        
-        # Apply smoothing
-        smoothed_center = [
-            _last_face_position[0] * _position_smoothing + current_center[0] * (1 - _position_smoothing),
-            _last_face_position[1] * _position_smoothing + current_center[1] * (1 - _position_smoothing)
-        ]
-        
-        # Adjust face bbox based on smoothed position
-        width = target_face.bbox[2] - target_face.bbox[0]
-        height = target_face.bbox[3] - target_face.bbox[1]
-        
-        target_face.bbox[0] = smoothed_center[0] - width / 2
-        target_face.bbox[1] = smoothed_center[1] - height / 2
-        target_face.bbox[2] = smoothed_center[0] + width / 2
-        target_face.bbox[3] = smoothed_center[1] + height / 2
-        
-        _last_face_position = smoothed_center
-    else:
-        _last_face_position = [(target_face.bbox[0] + target_face.bbox[2]) / 2, 
-                              (target_face.bbox[1] + target_face.bbox[3]) / 2]
-    
-    # Use the regular face swap with stabilized position
+    """Ultra-fast face swap - maximum FPS priority"""
+    # Skip all complex processing for maximum FPS
     face_swapper = get_face_swapper()
     swapped_frame = face_swapper.get(temp_frame, target_face, source_face, paste_back=True)
     
-    # Apply better forehead and hair matching
-    swapped_frame = improve_forehead_matching(swapped_frame, source_face, target_face, temp_frame)
-
-    if modules.globals.mouth_mask:
-        face_mask = create_face_mask(target_face, temp_frame)
-        mouth_mask, mouth_cutout, mouth_box, lower_lip_polygon = (
-            create_lower_mouth_mask(target_face, temp_frame)
-        )
-        swapped_frame = apply_mouth_area(
-            swapped_frame, mouth_cutout, mouth_box, face_mask, lower_lip_polygon
-        )
-
-        if modules.globals.show_mouth_mask_box:
-            mouth_mask_data = (mouth_mask, mouth_cutout, mouth_box, lower_lip_polygon)
-            swapped_frame = draw_mouth_mask_visualization(
-                swapped_frame, target_face, mouth_mask_data
-            )
-
+    # Skip all post-processing to maximize FPS
     return swapped_frame
+
+
+def swap_face_ultra_fast(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
+    """Absolute fastest face swap possible - no extra processing"""
+    face_swapper = get_face_swapper()
+    return face_swapper.get(temp_frame, target_face, source_face, paste_back=True)
 
 
 def improve_forehead_matching(swapped_frame: Frame, source_face: Face, target_face: Face, original_frame: Frame) -> Frame:
@@ -256,23 +217,20 @@ def create_precise_face_mask(landmarks: np.ndarray, frame_shape: tuple) -> np.nd
 
 
 def process_frame(source_face: Face, temp_frame: Frame) -> Frame:
-    if modules.globals.color_correction:
-        temp_frame = cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB)
+    # Skip color correction for maximum FPS
+    # if modules.globals.color_correction:
+    #     temp_frame = cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB)
 
     if modules.globals.many_faces:
         many_faces = get_many_faces(temp_frame)
         if many_faces:
             for target_face in many_faces:
                 if source_face and target_face:
-                    temp_frame = swap_face_stable(source_face, target_face, temp_frame)
-                else:
-                    print("Face detection failed for target/source.")
+                    temp_frame = swap_face_ultra_fast(source_face, target_face, temp_frame)
     else:
         target_face = get_one_face(temp_frame)
         if target_face and source_face:
-            temp_frame = swap_face_stable(source_face, target_face, temp_frame)
-        else:
-            logging.error("Face detection failed for target or source.")
+            temp_frame = swap_face_ultra_fast(source_face, target_face, temp_frame)
     return temp_frame
 
 
