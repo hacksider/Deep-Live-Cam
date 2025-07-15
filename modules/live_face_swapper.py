@@ -9,8 +9,8 @@ from typing import Optional, Callable, Any
 from collections import deque
 import modules.globals
 from modules.face_analyser import get_one_face, get_many_faces
-from modules.processors.frame.face_swapper import swap_face_enhanced, get_face_swapper
-from modules.performance_optimizer import performance_optimizer
+from modules.processors.frame.face_swapper import get_face_swapper
+# Removed performance_optimizer import to maximize FPS
 from modules.video_capture import VideoCapturer
 
 
@@ -175,23 +175,14 @@ class LiveFaceSwapper:
     def set_quality_mode(self, mode: str):
         """Set quality mode: 'fast', 'balanced', or 'quality'"""
         self.quality_mode = mode
-        
-        if mode == "fast":
-            performance_optimizer.quality_level = 0.7
-            performance_optimizer.detection_interval = 0.15
-        elif mode == "balanced":
-            performance_optimizer.quality_level = 0.85
-            performance_optimizer.detection_interval = 0.1
-        elif mode == "quality":
-            performance_optimizer.quality_level = 1.0
-            performance_optimizer.detection_interval = 0.05
+        # Removed performance_optimizer references for maximum FPS
     
     def get_performance_stats(self) -> dict:
         """Get current performance statistics"""
         return {
             'fps': self.current_fps,
-            'quality_level': performance_optimizer.quality_level,
-            'detection_interval': performance_optimizer.detection_interval,
+            'quality_level': 1.0,  # Fixed value for maximum FPS
+            'detection_interval': 0.1,  # Fixed value for maximum FPS
             'processed_frames': self.processed_frames
         }
 
