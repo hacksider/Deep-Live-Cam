@@ -113,9 +113,12 @@ def swap_face_stable(source_face: Face, target_face: Face, temp_frame: Frame) ->
 
 
 def swap_face_ultra_fast(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
-    """Fast face swap with mouth mask support"""
+    """Fast face swap with mouth mask support and forehead protection"""
     face_swapper = get_face_swapper()
     swapped_frame = face_swapper.get(temp_frame, target_face, source_face, paste_back=True)
+    
+    # Fix forehead hair issue - blend forehead area back to original
+    swapped_frame = fix_forehead_hair_issue(swapped_frame, target_face, temp_frame)
     
     # Add mouth mask functionality back (only if enabled)
     if modules.globals.mouth_mask:
@@ -139,6 +142,49 @@ def swap_face_ultra_fast(source_face: Face, target_face: Face, temp_frame: Frame
             )
     
     return swapped_frame
+
+
+def fix_forehead_hair_issue(swapped_frame: Frame, target_face: Face, original_frame: Frame) -> Frame:
+    """Fix hair falling on forehead by blending forehead area back to original"""
+    try:
+        # Get face bounding box
+        bbox = target_face.bbox.astype(int)
+        x1, y1, x2, y2 = bbox
+        
+        # Ensure coordinates are within frame bounds
+        h, w = swapped_frame.shape[:2]
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(w, x2), min(h, y2)
+        
+        if x2 <= x1 or y2 <= y1:
+            return swapped_frame
+        
+        # Focus on forehead area (upper 35% of face)
+        forehead_height = int((y2 - y1) * 0.35)
+        forehead_y2 = y1 + forehead_height
+        
+        if forehead_y2 > y1:
+            # Extract forehead regions
+            swapped_forehead = swapped_frame[y1:forehead_y2, x1:x2]
+            original_forehead = original_frame[y1:forehead_y2, x1:x2]
+            
+            # Create a soft blend mask for forehead area
+            mask = np.ones(swapped_forehead.shape[:2], dtype=np.float32)
+            
+            # Apply strong Gaussian blur for very soft blending
+            mask = cv2.GaussianBlur(mask, (31, 31), 10)
+            mask = mask[:, :, np.newaxis]
+            
+            # Blend forehead areas (keep much more of original to preserve hair)
+            blended_forehead = (swapped_forehead * 0.3 + original_forehead * 0.7).astype(np.uint8)
+            
+            # Apply the blended forehead back
+            swapped_frame[y1:forehead_y2, x1:x2] = blended_forehead
+        
+        return swapped_frame
+        
+    except Exception:
+        return swapped_frame
 
 
 def improve_forehead_matching(swapped_frame: Frame, source_face: Face, target_face: Face, original_frame: Frame) -> Frame:
@@ -520,6 +566,9 @@ def apply_mouth_area(frame: np.ndarray, mouth_cutout: np.ndarray, mouth_box: tup
         
         # Additional smoothing pass for extra softness
         feathered_mask = cv2.GaussianBlur(feathered_mask, (7, 7), 2)
+        
+        # Fix black line artifacts by ensuring smooth mask transitions
+        feathered_mask = np.clip(feathered_mask, 0.1, 0.9)  # Avoid pure 0 and 1 values
 
         face_mask_roi = face_mask[min_y:max_y, min_x:max_x]
         combined_mask = feathered_mask * (face_mask_roi / 255.0)
