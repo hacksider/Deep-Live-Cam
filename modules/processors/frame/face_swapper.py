@@ -470,7 +470,8 @@ def create_lower_mouth_mask(
 
         mask_roi = np.zeros((max_y - min_y, max_x - min_x), dtype=np.uint8)
         cv2.fillPoly(mask_roi, [expanded_landmarks - [min_x, min_y]], 255)
-        mask_roi = cv2.GaussianBlur(mask_roi, (15, 15), 5)
+        # Improved smoothing for mouth mask
+        mask_roi = cv2.GaussianBlur(mask_roi, (25, 25), 8)
         mask[min_y:max_y, min_x:max_x] = mask_roi
         mouth_cutout = frame[min_y:max_y, min_x:max_x].copy()
         lower_lip_polygon = expanded_landmarks
@@ -512,9 +513,13 @@ def apply_mouth_area(frame: np.ndarray, mouth_cutout: np.ndarray, mouth_box: tup
         adjusted_polygon = mouth_polygon - [min_x, min_y]
         cv2.fillPoly(polygon_mask, [adjusted_polygon], 255)
 
-        feather_amount = min(30, box_width // modules.globals.mask_feather_ratio, box_height // modules.globals.mask_feather_ratio)
-        feathered_mask = cv2.GaussianBlur(polygon_mask.astype(float), (0, 0), feather_amount)
+        # Improved feathering for smoother mouth mask
+        feather_amount = min(35, box_width // modules.globals.mask_feather_ratio, box_height // modules.globals.mask_feather_ratio)
+        feathered_mask = cv2.GaussianBlur(polygon_mask.astype(float), (0, 0), feather_amount * 1.2)
         feathered_mask = feathered_mask / feathered_mask.max()
+        
+        # Additional smoothing pass for extra softness
+        feathered_mask = cv2.GaussianBlur(feathered_mask, (7, 7), 2)
 
         face_mask_roi = face_mask[min_y:max_y, min_x:max_x]
         combined_mask = feathered_mask * (face_mask_roi / 255.0)
