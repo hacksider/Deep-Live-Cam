@@ -100,17 +100,16 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
 
 
 def swap_face_enhanced(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
-    """Enhanced face swapping with better quality and performance optimizations"""
+    """Fast face swapping - optimized for maximum FPS"""
     face_swapper = get_face_swapper()
     
-    # Apply the face swap
+    # Apply the face swap - this is the core operation
     swapped_frame = face_swapper.get(
         temp_frame, target_face, source_face, paste_back=True
     )
     
-    # Enhanced post-processing for better quality
-    swapped_frame = enhance_face_swap_quality(swapped_frame, source_face, target_face, temp_frame)
-    
+    # Skip expensive post-processing to maintain high FPS
+    # Only apply mouth mask if specifically enabled
     if modules.globals.mouth_mask:
         # Create a mask for the target face
         face_mask = create_face_mask(target_face, temp_frame)
@@ -470,7 +469,7 @@ def detect_obvious_occlusion(region: np.ndarray) -> np.ndarray:
 
 
 def process_frame(source_face: Face, temp_frame: Frame) -> Frame:
-    """Simplified process_frame - back to basics to fix white screen issue"""
+    """Ultra-fast process_frame - maximum FPS priority"""
     
     # Apply color correction if enabled
     if modules.globals.color_correction:
@@ -481,13 +480,13 @@ def process_frame(source_face: Face, temp_frame: Frame) -> Frame:
         if many_faces:
             for target_face in many_faces:
                 if source_face and target_face:
-                    temp_frame = swap_face_enhanced(source_face, target_face, temp_frame)
+                    temp_frame = swap_face(source_face, target_face, temp_frame)
                 else:
                     print("Face detection failed for target/source.")
     else:
         target_face = get_one_face(temp_frame)
         if target_face and source_face:
-            temp_frame = swap_face_enhanced(source_face, target_face, temp_frame)
+            temp_frame = swap_face(source_face, target_face, temp_frame)
         else:
             logging.error("Face detection failed for target or source.")
     

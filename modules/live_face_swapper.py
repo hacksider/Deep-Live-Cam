@@ -140,21 +140,21 @@ class LiveFaceSwapper:
                 time.sleep(0.01)
     
     def _process_frame(self, frame: np.ndarray) -> np.ndarray:
-        """Simplified frame processing - back to basics to fix white screen issue"""
+        """Ultra-fast frame processing - maximum FPS priority"""
         try:
-            # Simple face detection and swapping without complex tracking
+            # Use the fastest face swapping method for maximum FPS
             if modules.globals.many_faces:
                 many_faces = get_many_faces(frame)
                 if many_faces:
                     for target_face in many_faces:
                         if self.source_face and target_face:
-                            from modules.processors.frame.face_swapper import swap_face_enhanced
-                            frame = swap_face_enhanced(self.source_face, target_face, frame)
+                            from modules.processors.frame.face_swapper import swap_face
+                            frame = swap_face(self.source_face, target_face, frame)
             else:
                 target_face = get_one_face(frame)
                 if target_face and self.source_face:
-                    from modules.processors.frame.face_swapper import swap_face_enhanced
-                    frame = swap_face_enhanced(self.source_face, target_face, frame)
+                    from modules.processors.frame.face_swapper import swap_face
+                    frame = swap_face(self.source_face, target_face, frame)
             
             return frame
             
