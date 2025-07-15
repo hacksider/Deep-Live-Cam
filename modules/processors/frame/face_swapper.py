@@ -158,9 +158,24 @@ def swap_face_stable(source_face: Face, target_face: Face, temp_frame: Frame) ->
 
 
 def improve_forehead_matching(swapped_frame: Frame, source_face: Face, target_face: Face, original_frame: Frame) -> Frame:
-    """Improve forehead and hair area matching"""
+    """Create precise face mask - only swap core facial features (eyes, nose, cheeks, chin)"""
     try:
-        # Get face bounding box
+        # Get face landmarks for precise masking
+        if hasattr(target_face, 'landmark_2d_106') and target_face.landmark_2d_106 is not None:
+            landmarks = target_face.landmark_2d_106.astype(np.int32)
+            
+            # Create precise face mask excluding forehead and hair
+            mask = create_precise_face_mask(landmarks, swapped_frame.shape[:2])
+            
+            if mask is not None:
+                # Apply the precise mask
+                mask_3d = mask[:, :, np.newaxis] / 255.0
+                
+                # Blend only the core facial features
+                result = (swapped_frame * mask_3d + original_frame * (1 - mask_3d)).astype(np.uint8)
+                return result
+        
+        # Fallback: use bounding box method but exclude forehead
         bbox = target_face.bbox.astype(int)
         x1, y1, x2, y2 = bbox
         
@@ -172,32 +187,72 @@ def improve_forehead_matching(swapped_frame: Frame, source_face: Face, target_fa
         if x2 <= x1 or y2 <= y1:
             return swapped_frame
         
-        # Focus on forehead area (upper 30% of face)
-        forehead_height = int((y2 - y1) * 0.3)
-        forehead_y2 = y1 + forehead_height
+        # Exclude forehead area (upper 25% of face) to avoid hair swapping
+        forehead_height = int((y2 - y1) * 0.25)
+        face_start_y = y1 + forehead_height
         
-        if forehead_y2 > y1:
-            # Extract forehead regions
-            swapped_forehead = swapped_frame[y1:forehead_y2, x1:x2]
-            original_forehead = original_frame[y1:forehead_y2, x1:x2]
+        if face_start_y < y2:
+            # Only blend the lower face area (eyes, nose, cheeks, chin)
+            swapped_face_area = swapped_frame[face_start_y:y2, x1:x2]
+            original_face_area = original_frame[face_start_y:y2, x1:x2]
             
-            # Create a soft blend mask for forehead area
-            mask = np.ones(swapped_forehead.shape[:2], dtype=np.float32)
-            
-            # Apply Gaussian blur for soft blending
+            # Create soft mask for the face area only
+            mask = np.ones(swapped_face_area.shape[:2], dtype=np.float32)
             mask = cv2.GaussianBlur(mask, (15, 15), 5)
             mask = mask[:, :, np.newaxis]
             
-            # Blend forehead areas (keep more of original for hair/forehead)
-            blended_forehead = (swapped_forehead * 0.6 + original_forehead * 0.4).astype(np.uint8)
-            
-            # Apply the blended forehead back
-            swapped_frame[y1:forehead_y2, x1:x2] = blended_forehead
+            # Apply the face area back (keep original forehead/hair)
+            swapped_frame[face_start_y:y2, x1:x2] = swapped_face_area
         
         return swapped_frame
         
     except Exception:
         return swapped_frame
+
+
+def create_precise_face_mask(landmarks: np.ndarray, frame_shape: tuple) -> np.ndarray:
+    """Create precise mask for core facial features only (exclude forehead and hair)"""
+    try:
+        mask = np.zeros(frame_shape, dtype=np.uint8)
+        
+        # For 106-point landmarks, use correct indices
+        # Face contour (jawline) - points 0-32
+        jaw_line = landmarks[0:33]
+        
+        # Eyes area - approximate indices for 106-point model
+        left_eye_area = landmarks[33:42]   # Left eye region
+        right_eye_area = landmarks[87:96]  # Right eye region
+        
+        # Eyebrows (start from eyebrow level, not forehead)
+        left_eyebrow = landmarks[43:51]    # Left eyebrow
+        right_eyebrow = landmarks[97:105]  # Right eyebrow
+        
+        # Create face contour that excludes forehead
+        # Start from eyebrow level and go around the face
+        face_contour_points = []
+        
+        # Add eyebrow points (this will be our "top" instead of forehead)
+        face_contour_points.extend(left_eyebrow)
+        face_contour_points.extend(right_eyebrow)
+        
+        # Add jawline points (bottom and sides of face)
+        face_contour_points.extend(jaw_line)
+        
+        # Convert to numpy array
+        face_contour_points = np.array(face_contour_points)
+        
+        # Create convex hull for the core face area (excluding forehead)
+        hull = cv2.convexHull(face_contour_points)
+        cv2.fillConvexPoly(mask, hull, 255)
+        
+        # Apply Gaussian blur for soft edges
+        mask = cv2.GaussianBlur(mask, (21, 21), 7)
+        
+        return mask
+        
+    except Exception as e:
+        print(f"Error creating precise face mask: {e}")
+        return None
 
 
 def process_frame(source_face: Face, temp_frame: Frame) -> Frame:
