@@ -140,9 +140,8 @@ class LiveFaceSwapper:
                 time.sleep(0.01)
     
     def _process_frame(self, frame: np.ndarray) -> np.ndarray:
-        """Ultra-fast frame processing - maximum FPS priority"""
+        """Simple frame processing - back to original approach"""
         try:
-            # Use the fastest face swapping method for maximum FPS
             if modules.globals.many_faces:
                 many_faces = get_many_faces(frame)
                 if many_faces:
