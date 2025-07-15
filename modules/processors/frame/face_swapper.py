@@ -218,44 +218,9 @@ def apply_edge_smoothing(face: np.ndarray, reference: np.ndarray) -> np.ndarray:
 
 
 def swap_face_enhanced_with_occlusion(source_face: Face, target_face: Face, temp_frame: Frame, original_frame: Frame) -> Frame:
-    """Enhanced face swapping with optional occlusion handling"""
-    face_swapper = get_face_swapper()
-    
-    try:
-        # First, apply the normal face swap (this should always work)
-        swapped_frame = face_swapper.get(temp_frame, target_face, source_face, paste_back=True)
-        
-        # Enhanced post-processing for better quality
-        swapped_frame = enhance_face_swap_quality(swapped_frame, source_face, target_face, original_frame)
-        
-        # Only apply occlusion handling if explicitly enabled
-        if modules.globals.enable_occlusion_detection:
-            final_frame = apply_subtle_occlusion_protection(swapped_frame, temp_frame, target_face)
-        else:
-            final_frame = swapped_frame
-        
-        # Apply mouth mask if enabled
-        if modules.globals.mouth_mask:
-            face_mask_full = create_face_mask(target_face, final_frame)
-            mouth_mask, mouth_cutout, mouth_box, lower_lip_polygon = (
-                create_lower_mouth_mask(target_face, final_frame)
-            )
-            final_frame = apply_mouth_area(
-                final_frame, mouth_cutout, mouth_box, face_mask_full, lower_lip_polygon
-            )
-            
-            if modules.globals.show_mouth_mask_box:
-                mouth_mask_data = (mouth_mask, mouth_cutout, mouth_box, lower_lip_polygon)
-                final_frame = draw_mouth_mask_visualization(
-                    final_frame, target_face, mouth_mask_data
-                )
-        
-        return final_frame
-        
-    except Exception as e:
-        print(f"Error in enhanced face swap: {e}")
-        # Fallback to regular enhanced swap
-        return swap_face_enhanced(source_face, target_face, temp_frame)
+    """Simplified enhanced face swapping - just use the regular enhanced swap"""
+    # Just use the regular enhanced swap to avoid any issues
+    return swap_face_enhanced(source_face, target_face, temp_frame)
 
 
 def create_enhanced_face_mask(face: Face, frame: Frame) -> np.ndarray:
@@ -505,67 +470,28 @@ def detect_obvious_occlusion(region: np.ndarray) -> np.ndarray:
 
 
 def process_frame(source_face: Face, temp_frame: Frame) -> Frame:
-    from modules.performance_optimizer import performance_optimizer
-    from modules.face_tracker import face_tracker
-    
-    start_time = time.time()
-    original_size = temp_frame.shape[:2][::-1]  # (width, height)
+    """Simplified process_frame - back to basics to fix white screen issue"""
     
     # Apply color correction if enabled
     if modules.globals.color_correction:
         temp_frame = cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB)
-    
-    # Preprocess frame for performance
-    processed_frame = performance_optimizer.preprocess_frame(temp_frame)
-    
+
     if modules.globals.many_faces:
-        # Only detect faces if enough time has passed or cache is empty
-        if performance_optimizer.should_detect_faces():
-            detected_faces = get_many_faces(processed_frame)
-            # Apply tracking to each face
-            tracked_faces = []
-            for i, face in enumerate(detected_faces or []):
-                # Use separate tracker for each face (simplified for now)
-                tracked_face = face_tracker.track_face(face, processed_frame)
-                if tracked_face:
-                    tracked_faces.append(tracked_face)
-            performance_optimizer.face_cache['many_faces'] = tracked_faces
-        else:
-            tracked_faces = performance_optimizer.face_cache.get('many_faces', [])
-            
-        if tracked_faces:
-            for target_face in tracked_faces:
+        many_faces = get_many_faces(temp_frame)
+        if many_faces:
+            for target_face in many_faces:
                 if source_face and target_face:
-                    processed_frame = swap_face_enhanced_with_occlusion(source_face, target_face, processed_frame, temp_frame)
+                    temp_frame = swap_face_enhanced(source_face, target_face, temp_frame)
                 else:
                     print("Face detection failed for target/source.")
     else:
-        # Use cached face detection with tracking for better performance
-        if performance_optimizer.should_detect_faces():
-            detected_face = get_one_face(processed_frame)
-            tracked_face = face_tracker.track_face(detected_face, processed_frame)
-            performance_optimizer.face_cache['single_face'] = tracked_face
+        target_face = get_one_face(temp_frame)
+        if target_face and source_face:
+            temp_frame = swap_face_enhanced(source_face, target_face, temp_frame)
         else:
-            tracked_face = performance_optimizer.face_cache.get('single_face')
-            
-        if tracked_face and source_face:
-            processed_frame = swap_face_enhanced_with_occlusion(source_face, tracked_face, processed_frame, temp_frame)
-        else:
-            # Try to use tracking even without detection
-            tracked_face = face_tracker.track_face(None, processed_frame)
-            if tracked_face and source_face:
-                processed_frame = swap_face_enhanced_with_occlusion(source_face, tracked_face, processed_frame, temp_frame)
-            else:
-                logging.error("Face detection and tracking failed.")
+            logging.error("Face detection failed for target or source.")
     
-    # Postprocess frame back to original size
-    final_frame = performance_optimizer.postprocess_frame(processed_frame, original_size)
-    
-    # Update performance stats
-    frame_time = time.time() - start_time
-    performance_optimizer.update_fps_stats(frame_time)
-    
-    return final_frame
+    return temp_frame
 
 
 
