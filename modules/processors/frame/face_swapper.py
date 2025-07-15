@@ -98,6 +98,108 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
     return swapped_frame
 
 
+# Simple face position smoothing for stability
+_last_face_position = None
+_position_smoothing = 0.7  # Higher = more stable, lower = more responsive
+
+def swap_face_stable(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
+    """Face swap with simple position smoothing to reduce jitter"""
+    global _last_face_position
+    
+    # Apply simple position smoothing to reduce jitter
+    if _last_face_position is not None:
+        # Smooth the face position
+        current_center = [(target_face.bbox[0] + target_face.bbox[2]) / 2, 
+                         (target_face.bbox[1] + target_face.bbox[3]) / 2]
+        
+        # Apply smoothing
+        smoothed_center = [
+            _last_face_position[0] * _position_smoothing + current_center[0] * (1 - _position_smoothing),
+            _last_face_position[1] * _position_smoothing + current_center[1] * (1 - _position_smoothing)
+        ]
+        
+        # Adjust face bbox based on smoothed position
+        width = target_face.bbox[2] - target_face.bbox[0]
+        height = target_face.bbox[3] - target_face.bbox[1]
+        
+        target_face.bbox[0] = smoothed_center[0] - width / 2
+        target_face.bbox[1] = smoothed_center[1] - height / 2
+        target_face.bbox[2] = smoothed_center[0] + width / 2
+        target_face.bbox[3] = smoothed_center[1] + height / 2
+        
+        _last_face_position = smoothed_center
+    else:
+        _last_face_position = [(target_face.bbox[0] + target_face.bbox[2]) / 2, 
+                              (target_face.bbox[1] + target_face.bbox[3]) / 2]
+    
+    # Use the regular face swap with stabilized position
+    face_swapper = get_face_swapper()
+    swapped_frame = face_swapper.get(temp_frame, target_face, source_face, paste_back=True)
+    
+    # Apply better forehead and hair matching
+    swapped_frame = improve_forehead_matching(swapped_frame, source_face, target_face, temp_frame)
+
+    if modules.globals.mouth_mask:
+        face_mask = create_face_mask(target_face, temp_frame)
+        mouth_mask, mouth_cutout, mouth_box, lower_lip_polygon = (
+            create_lower_mouth_mask(target_face, temp_frame)
+        )
+        swapped_frame = apply_mouth_area(
+            swapped_frame, mouth_cutout, mouth_box, face_mask, lower_lip_polygon
+        )
+
+        if modules.globals.show_mouth_mask_box:
+            mouth_mask_data = (mouth_mask, mouth_cutout, mouth_box, lower_lip_polygon)
+            swapped_frame = draw_mouth_mask_visualization(
+                swapped_frame, target_face, mouth_mask_data
+            )
+
+    return swapped_frame
+
+
+def improve_forehead_matching(swapped_frame: Frame, source_face: Face, target_face: Face, original_frame: Frame) -> Frame:
+    """Improve forehead and hair area matching"""
+    try:
+        # Get face bounding box
+        bbox = target_face.bbox.astype(int)
+        x1, y1, x2, y2 = bbox
+        
+        # Ensure coordinates are within frame bounds
+        h, w = swapped_frame.shape[:2]
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(w, x2), min(h, y2)
+        
+        if x2 <= x1 or y2 <= y1:
+            return swapped_frame
+        
+        # Focus on forehead area (upper 30% of face)
+        forehead_height = int((y2 - y1) * 0.3)
+        forehead_y2 = y1 + forehead_height
+        
+        if forehead_y2 > y1:
+            # Extract forehead regions
+            swapped_forehead = swapped_frame[y1:forehead_y2, x1:x2]
+            original_forehead = original_frame[y1:forehead_y2, x1:x2]
+            
+            # Create a soft blend mask for forehead area
+            mask = np.ones(swapped_forehead.shape[:2], dtype=np.float32)
+            
+            # Apply Gaussian blur for soft blending
+            mask = cv2.GaussianBlur(mask, (15, 15), 5)
+            mask = mask[:, :, np.newaxis]
+            
+            # Blend forehead areas (keep more of original for hair/forehead)
+            blended_forehead = (swapped_forehead * 0.6 + original_forehead * 0.4).astype(np.uint8)
+            
+            # Apply the blended forehead back
+            swapped_frame[y1:forehead_y2, x1:x2] = blended_forehead
+        
+        return swapped_frame
+        
+    except Exception:
+        return swapped_frame
+
+
 def process_frame(source_face: Face, temp_frame: Frame) -> Frame:
     if modules.globals.color_correction:
         temp_frame = cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB)
@@ -107,13 +209,13 @@ def process_frame(source_face: Face, temp_frame: Frame) -> Frame:
         if many_faces:
             for target_face in many_faces:
                 if source_face and target_face:
-                    temp_frame = swap_face(source_face, target_face, temp_frame)
+                    temp_frame = swap_face_stable(source_face, target_face, temp_frame)
                 else:
                     print("Face detection failed for target/source.")
     else:
         target_face = get_one_face(temp_frame)
         if target_face and source_face:
-            temp_frame = swap_face(source_face, target_face, temp_frame)
+            temp_frame = swap_face_stable(source_face, target_face, temp_frame)
         else:
             logging.error("Face detection failed for target or source.")
     return temp_frame
