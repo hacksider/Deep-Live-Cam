@@ -73,6 +73,23 @@ def extract_frames(target_path: str) -> None:
     )
 
 
+def copy_frames_from_directory(directory_path: str) -> List[str]:
+    """Copy all images from *directory_path* to its temp folder.
+
+    Returns a list of paths to the copied frames inside the temp directory.
+    """
+    temp_directory_path = get_temp_directory_path(directory_path)
+    Path(temp_directory_path).mkdir(parents=True, exist_ok=True)
+    frame_paths: List[str] = []
+    for file_name in sorted(os.listdir(directory_path)):
+        file_path = os.path.join(directory_path, file_name)
+        if is_image(file_path):
+            destination = os.path.join(temp_directory_path, file_name)
+            shutil.copy2(file_path, destination)
+            frame_paths.append(destination)
+    return frame_paths
+
+
 def create_video(target_path: str, fps: float = 30.0) -> None:
     temp_output_path = get_temp_output_path(target_path)
     temp_directory_path = get_temp_directory_path(target_path)

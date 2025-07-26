@@ -19,7 +19,7 @@ import modules.globals
 import modules.metadata
 import modules.ui as ui
 from modules.processors.frame.core import get_frame_processors_modules
-from modules.utilities import has_image_extension, is_image, is_video, detect_fps, create_video, extract_frames, get_temp_frame_paths, restore_audio, create_temp, move_temp, clean_temp, normalize_output_path
+from modules.utilities import has_image_extension, is_image, is_video, detect_fps, create_video, extract_frames, get_temp_frame_paths, restore_audio, create_temp, move_temp, clean_temp, normalize_output_path, copy_frames_from_directory
 
 if 'ROCMExecutionProvider' in modules.globals.execution_providers:
     del torch
@@ -174,6 +174,19 @@ def update_status(message: str, scope: str = 'DLC.CORE') -> None:
     print(f'[{scope}] {message}')
     if not modules.globals.headless:
         ui.update_status(message)
+
+
+def process_directory(source_path: str, directory_path: str) -> None:
+    """Process all images in *directory_path* the same way video frames are handled."""
+
+    update_status('Creating temp resources...')
+    frame_paths = copy_frames_from_directory(directory_path)
+    for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
+        update_status('Progressing...', frame_processor.NAME)
+        frame_processor.process_video(source_path, frame_paths)
+        release_resources()
+    clean_temp(directory_path)
+    update_status('Processing directory succeed!')
 
 def start() -> None:
     for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
