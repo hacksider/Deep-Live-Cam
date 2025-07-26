@@ -321,6 +321,14 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     )
     preview_button.place(relx=0.65, rely=0.80, relwidth=0.2, relheight=0.05)
 
+    directory_button = ctk.CTkButton(
+        root,
+        text=_("Process Dir"),
+        cursor="hand2",
+        command=lambda: select_directory_and_process(),
+    )
+    directory_button.place(relx=0.85, rely=0.80, relwidth=0.15, relheight=0.05)
+
     # --- Camera Selection ---
     camera_label = ctk.CTkLabel(root, text=_("Select Camera:"))
     camera_label.place(relx=0.1, rely=0.86, relwidth=0.2, relheight=0.05)
@@ -671,6 +679,19 @@ def select_output_path(start: Callable[[], None]) -> None:
         modules.globals.output_path = output_path
         RECENT_DIRECTORY_OUTPUT = os.path.dirname(modules.globals.output_path)
         start()
+
+
+def select_directory_and_process() -> None:
+    global RECENT_DIRECTORY_TARGET
+
+    PREVIEW.withdraw()
+    directory_path = ctk.filedialog.askdirectory(
+        title=_("select directory"), initialdir=RECENT_DIRECTORY_TARGET
+    )
+    if directory_path:
+        RECENT_DIRECTORY_TARGET = directory_path
+        from modules import core
+        core.process_directory(modules.globals.source_path, directory_path)
 
 
 def check_and_ignore_nsfw(target, destroy: Callable = None) -> bool:
