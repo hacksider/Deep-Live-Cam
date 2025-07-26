@@ -329,6 +329,10 @@ options:
   -v, --version                                            show program's version number and exit
 ```
 
+To batch process an entire folder of images, call `modules.core.process_directory`.
+It copies all images to a temporary folder and applies the selected frame processors.
+Use `--keep-frames` if you want to preserve the processed copies.
+
 Looking for a CLI mode? Using the -s/--source argument will make the run program in cli mode.
 
 ## Press
