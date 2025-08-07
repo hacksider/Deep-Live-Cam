@@ -148,6 +148,31 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
+**For Linux (Debian/Ubuntu based):**
+
+```bash
+# Install system dependencies (if needed)
+sudo apt-get update
+sudo apt-get install python3-venv python3-pip ffmpeg git
+
+# Create and activate virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# Install Python dependencies
+# (Important: Ensure you have CPU-only versions if not using GPU)
+pip uninstall -y torch torchvision torchaudio onnxruntime*
+pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
+
+# Install webcam utilities (optional but helpful for troubleshooting)
+sudo apt-get install v4l-utils
+
+# Ensure your user is in the 'video' group for webcam access
+# (You might need to log out and log back in after adding)
+sudo adduser $USER video
+groups
+```
+
 **For macOS:**
 
 Apple Silicon (M1/M2/M3) requires specific setup:
@@ -181,7 +206,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-**Run:** If you don't have a GPU, you can run Deep-Live-Cam using `python run.py`. Note that initial execution will download models (~300MB).
+**Run:** If you don't have a GPU, you can run Deep-Live-Cam using `python run.py` or `python run.py --execution-provider cpu`. Note that initial execution will download models (~300MB). Performance will be very low (potentially < 1 FPS) without a compatible GPU.
 
 ### GPU Acceleration
 
