@@ -32,6 +32,8 @@ import platform
 if platform.system() == "Windows":
     from pygrabber.dshow_graph import FilterGraph
 
+from datetime import datetime
+
 ROOT = None
 POPUP = None
 POPUP_LIVE = None
@@ -654,7 +656,7 @@ def select_output_path(start: Callable[[], None]) -> None:
             title=_("save image output file"),
             filetypes=[img_ft],
             defaultextension=".png",
-            initialfile="output.png",
+            initialfile=datetime.now().strftime("%Y%m%d%H%M%S") + ".png",
             initialdir=RECENT_DIRECTORY_OUTPUT,
         )
     elif is_video(modules.globals.target_path):
@@ -662,7 +664,7 @@ def select_output_path(start: Callable[[], None]) -> None:
             title=_("save video output file"),
             filetypes=[vid_ft],
             defaultextension=".mp4",
-            initialfile="output.mp4",
+            initialfile=datetime.now().strftime("%Y%m%d%H%M%S") + ".mp4",
             initialdir=RECENT_DIRECTORY_OUTPUT,
         )
     else:
