@@ -880,84 +880,119 @@ def create_webcam_preview(camera_index: int):
     PREVIEW.deiconify()
 
     frame_processors = get_frame_processors_modules(modules.globals.frame_processors)
+    # Get initial source image if not mapping faces
     source_image = None
-    prev_time = time.time()
-    fps_update_interval = 0.5
-    frame_count = 0
-    fps = 0
+    if not modules.globals.map_faces and modules.globals.source_path:
+        try:
+            loaded_cv_image = cv2.imread(modules.globals.source_path)
+            if loaded_cv_image is None:
+                update_status(f"Error: Could not read source image at {modules.globals.source_path}")
+                # source_image remains None
+            else:
+                source_image = get_one_face(loaded_cv_image)
+                if source_image is None:
+                    update_status(f"Error: No face detected in source image {os.path.basename(modules.globals.source_path)}")
+        except Exception as e:
+            update_status(f"Exception loading source image: {str(e)[:100]}")
+            source_image = None # Ensure source_image is None on any error
 
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
+    # If source_image is still None AND a source_path was provided (meaning user intended a swap)
+    # AND we are not using map_faces (which handles its own source logic for sources)
+    if source_image is None and modules.globals.source_path and not modules.globals.map_faces:
+        update_status("Warning: Live preview started, but source image is invalid or has no face. No swap will occur.")
+        # The live preview will start, but no swap will occur if source_image is None.
 
-        temp_frame = frame.copy()
+    # Start the update loop
+    fps_data = { # Moved fps_data initialization here to be passed to the loop
+        "prev_time": time.time(),
+        "frame_count": 0,
+        "fps": 0.0,
+        "fps_update_interval": 0.5
+    }
+    update_webcam_frame_after(cap, frame_processors, source_image, fps_data)
 
-        if modules.globals.live_mirror:
-            temp_frame = cv2.flip(temp_frame, 1)
 
-        if modules.globals.live_resizable:
-            temp_frame = fit_image_to_size(
-                temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
-            )
+def update_webcam_frame_after(cap, frame_processors, source_image, fps_data, delay_ms=15): # Approx 66 FPS target for UI updates
+    global preview_label, ROOT, PREVIEW
 
-        else:
-            temp_frame = fit_image_to_size(
-                temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
-            )
+    if PREVIEW.state() == "withdrawn":
+        cap.release()
+        PREVIEW.withdraw() # Ensure it's withdrawn if loop exits
+        return
 
-        if not modules.globals.map_faces:
-            if source_image is None and modules.globals.source_path:
-                source_image = get_one_face(cv2.imread(modules.globals.source_path))
+    ret, frame = cap.read()
+    if not ret:
+        # Handle camera read failure or end of stream (though for webcam, it's usually continuous)
+        ROOT.after(delay_ms, lambda: update_webcam_frame_after(cap, frame_processors, source_image, fps_data, delay_ms))
+        return
 
-            for frame_processor in frame_processors:
-                if frame_processor.NAME == "DLC.FACE-ENHANCER":
-                    if modules.globals.fp_ui["face_enhancer"]:
-                        temp_frame = frame_processor.process_frame(None, temp_frame)
-                else:
-                    temp_frame = frame_processor.process_frame(source_image, temp_frame)
-        else:
-            modules.globals.target_path = None
-            for frame_processor in frame_processors:
-                if frame_processor.NAME == "DLC.FACE-ENHANCER":
-                    if modules.globals.fp_ui["face_enhancer"]:
-                        temp_frame = frame_processor.process_frame_v2(temp_frame)
-                else:
+    temp_frame = frame.copy()
+
+    if modules.globals.live_mirror:
+        temp_frame = cv2.flip(temp_frame, 1)
+
+    # Resizing based on PREVIEW window dimensions.
+    preview_width = PREVIEW.winfo_width()
+    preview_height = PREVIEW.winfo_height()
+    if preview_width > 1 and preview_height > 1: # Ensure valid dimensions
+         temp_frame = fit_image_to_size(temp_frame, preview_width, preview_height)
+
+
+    if not modules.globals.map_faces:
+        # current_source_image is the source_image passed in from create_webcam_preview
+        # It's determined once before the loop starts. No reloading here.
+        current_source_image = source_image
+
+        for frame_processor in frame_processors:
+            if frame_processor.NAME == "DLC.FACE-ENHANCER":
+                if modules.globals.fp_ui["face_enhancer"]:
+                    temp_frame = frame_processor.process_frame(None, temp_frame)
+            else: # This is the face_swapper processor or other default
+                if current_source_image: # Only process if source_image (from create_webcam_preview) is valid
+                    temp_frame = frame_processor.process_frame(current_source_image, temp_frame)
+                # If current_source_image is None, the frame is not processed by face_swapper, effectively no swap.
+    else:
+        modules.globals.target_path = None
+        for frame_processor in frame_processors:
+            if frame_processor.NAME == "DLC.FACE-ENHANCER":
+                if modules.globals.fp_ui["face_enhancer"]:
                     temp_frame = frame_processor.process_frame_v2(temp_frame)
+            else:
+                temp_frame = frame_processor.process_frame_v2(temp_frame)
 
-        # Calculate and display FPS
-        current_time = time.time()
-        frame_count += 1
-        if current_time - prev_time >= fps_update_interval:
-            fps = frame_count / (current_time - prev_time)
-            frame_count = 0
-            prev_time = current_time
+    current_time = time.time()
+    fps_data["frame_count"] += 1
+    time_diff = current_time - fps_data["prev_time"]
 
-        if modules.globals.show_fps:
-            cv2.putText(
-                temp_frame,
-                f"FPS: {fps:.1f}",
-                (10, 30),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                1,
-                (0, 255, 0),
-                2,
-            )
+    if time_diff >= fps_data.get("fps_update_interval", 0.5):
+        fps_data["fps"] = fps_data["frame_count"] / time_diff
+        fps_data["frame_count"] = 0
+        fps_data["prev_time"] = current_time
 
-        image = cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB)
-        image = Image.fromarray(image)
-        image = ImageOps.contain(
-            image, (temp_frame.shape[1], temp_frame.shape[0]), Image.LANCZOS
+    if modules.globals.show_fps:
+        cv2.putText(
+            temp_frame,
+            f"FPS: {fps_data['fps']:.1f}",
+            (10, 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1,
+            (0, 255, 0),
+            2,
         )
-        image = ctk.CTkImage(image, size=image.size)
-        preview_label.configure(image=image)
-        ROOT.update()
 
-        if PREVIEW.state() == "withdrawn":
-            break
+    if temp_frame is not None and temp_frame.size > 0:
+        image = cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB)
+        pil_image = Image.fromarray(image)
 
-    cap.release()
-    PREVIEW.withdraw()
+        contained_image = ImageOps.contain(
+            pil_image, (temp_frame.shape[1], temp_frame.shape[0]), Image.LANCZOS
+        )
+        ctk_image = ctk.CTkImage(contained_image, size=contained_image.size)
+        preview_label.configure(image=ctk_image)
+    else:
+        pass
+
+    ROOT.after(delay_ms, lambda: update_webcam_frame_after(cap, frame_processors, source_image, fps_data, delay_ms))
 
 
 def create_source_target_popup_for_webcam(
