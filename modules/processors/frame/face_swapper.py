@@ -64,7 +64,7 @@ def get_face_swapper() -> Any:
         if FACE_SWAPPER is None:
             model_name = "inswapper_128.onnx"
             if "CUDAExecutionProvider" in modules.globals.execution_providers:
-                model_name = "inswapper_128_fp16.onnx"
+                model_name = "inswapper_128.onnx"
             model_path = os.path.join(models_dir, model_name)
             FACE_SWAPPER = insightface.model_zoo.get_model(
                 model_path, providers=modules.globals.execution_providers
