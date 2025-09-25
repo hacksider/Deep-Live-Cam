@@ -9,6 +9,7 @@ import time
 import json
 import modules.globals
 import modules.metadata
+from modules import core
 from modules.face_analyser import (
     get_one_face,
     get_unique_faces_from_target_image,
@@ -108,7 +109,24 @@ def save_switch_states():
     }
     with open("switch_states.json", "w") as f:
         json.dump(switch_states, f)
+        
 
+VALID_EXTENSIONS = (".png", ".jpg", ".jpeg", ".bmp", ".mp4", ".avi", ".mov", ".mkv")
+
+def start_directory(start_func, directory_path):
+    output_dir = os.path.join(directory_path, "output")
+    os.makedirs(output_dir, exist_ok=True)
+
+    for file in os.listdir(directory_path):
+        file_path = os.path.join(directory_path, file)
+
+        if os.path.isfile(file_path) and file.lower().endswith(VALID_EXTENSIONS):
+            g.source_path = file_path
+            g.target_path = file_path
+            g.output_path = os.path.join(output_dir, os.path.basename(file))
+
+            print(f"[DLC] Starting processing for: {file_path}")
+            start_func()
 
 def load_switch_states():
     try:
