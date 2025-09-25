@@ -728,7 +728,7 @@ def select_output_path(start: Callable[[], None]) -> None:
         start()
 
 
-def select_directory_and_process(start) -> None:
+def select_directory_and_process(start_func):
     global RECENT_DIRECTORY_TARGET
 
     PREVIEW.withdraw()
@@ -738,11 +738,11 @@ def select_directory_and_process(start) -> None:
     if directory_path:
         RECENT_DIRECTORY_TARGET = directory_path
 
-        # Save directory as special target_path for later
+        # SET GLOBALS
+        modules.globals.source_path = directory_path
         modules.globals.target_path = directory_path
 
-        start_directory(start, directory_path)
-
+        start_func()
 
 def check_and_ignore_nsfw(target, destroy: Callable = None) -> bool:
     """Check if the target is NSFW.
