@@ -710,7 +710,7 @@ def select_output_path(start: Callable[[], None]) -> None:
         start()
 
 
-def select_directory_and_process() -> None:
+def select_directory_and_process(start) -> None:
     global RECENT_DIRECTORY_TARGET
 
     PREVIEW.withdraw()
