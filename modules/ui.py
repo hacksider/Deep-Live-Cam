@@ -719,9 +719,8 @@ def select_directory_and_process() -> None:
     )
     if directory_path:
         RECENT_DIRECTORY_TARGET = directory_path
-        from modules import core
-        core.process_directory(modules.globals.source_path, directory_path)
-
+        modules.globals.target_path = directory_path
+        start()
 
 def check_and_ignore_nsfw(target, destroy: Callable = None) -> bool:
     """Check if the target is NSFW.
