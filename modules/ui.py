@@ -728,21 +728,24 @@ def select_output_path(start: Callable[[], None]) -> None:
         start()
 
 
-def select_directory_and_process(start_func):
+def select_directory_and_process() -> None:
     global RECENT_DIRECTORY_TARGET
 
-    PREVIEW.withdraw()
+    # Hide preview window if it's running
+    if hasattr(modules.globals, "PREVIEW"):
+        try:
+            modules.globals.PREVIEW.withdraw()
+        except Exception:
+            pass
+
     directory_path = ctk.filedialog.askdirectory(
-        title=_("select directory"), initialdir=RECENT_DIRECTORY_TARGET
+        title="Select directory",
+        initialdir=RECENT_DIRECTORY_TARGET
     )
+
     if directory_path:
         RECENT_DIRECTORY_TARGET = directory_path
-
-        # SET GLOBALS
-        modules.globals.source_path = directory_path
-        modules.globals.target_path = directory_path
-
-        start_func()
+        core.process_directory(directory_path)
 
 def check_and_ignore_nsfw(target, destroy: Callable = None) -> bool:
     """Check if the target is NSFW.
