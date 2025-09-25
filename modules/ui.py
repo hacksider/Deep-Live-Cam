@@ -354,7 +354,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         root,
         text=_("Process Dir"),
         cursor="hand2",
-        command=lambda: select_directory_and_process(),
+        command=lambda: select_directory_and_process(start),
     )
     directory_button.place(relx=0.80, rely=0.80, relwidth=0.18, relheight=0.05)
 
