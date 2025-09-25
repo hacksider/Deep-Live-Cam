@@ -212,14 +212,6 @@ def process_directory(directory_path: str) -> None:
         core.start()
 
 
-import os
-import shutil
-import modules.globals
-from modules.ui import update_status, destroy
-from modules.utilities import has_image_extension, is_image, is_video, create_temp, extract_frames, clean_temp, get_temp_frame_paths, detect_fps, create_video, restore_audio, move_temp
-from modules.processors.frame.core import get_frame_processors_modules
-
-
 def start() -> None:
     if not modules.globals.source_path or not os.path.exists(modules.globals.source_path):
         print("[DLC.CORE] Error: source path is not set or does not exist.")
