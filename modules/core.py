@@ -178,17 +178,60 @@ def update_status(message: str, scope: str = 'DLC.CORE') -> None:
         ui.update_status(message)
 
 
+import os
+import shutil
+
 def process_directory(source_path: str, directory_path: str) -> None:
-    """Process all images in *directory_path* the same way video frames are handled."""
+    """Process all images in *directory_path*, copying them to a safe temp folder with original names,
+    then renaming temp folder to {folderName}_output on completion."""
 
     update_status('Creating temp resources...')
-    frame_paths = copy_frames_from_directory(directory_path)
+
+    parent_dir = os.path.dirname(directory_path)
+    folder_name = os.path.basename(directory_path)
+
+    # Generate a safe temp folder name
+    temp_dir = os.path.join(directory_path, f"{folder_name}_temp")
+    suffix = 1
+    while os.path.exists(temp_dir):
+        temp_dir = os.path.join(directory_path, f"{folder_name}_temp_{suffix}")
+        suffix += 1
+
+    os.makedirs(temp_dir, exist_ok=True)
+
+    # Copy all image/video files into temp folder, preserving original names
+    frame_paths = []
+    for file in os.listdir(directory_path):
+        src_path = os.path.join(directory_path, file)
+        if is_image(src_path) or is_video(src_path):
+            dest_path = os.path.join(temp_dir, file)
+            shutil.copy2(src_path, dest_path)
+            frame_paths.append(dest_path)
+
+    # Process copied files
     for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
         update_status('Progressing...', frame_processor.NAME)
         frame_processor.process_video(source_path, frame_paths)
         release_resources()
+
     clean_temp(directory_path)
-    update_status('Processing directory succeed!')
+
+    # Rename temp folder to {folderName}_output
+    new_folder_name = f"{folder_name}_output"
+    new_path = os.path.join(parent_dir, new_folder_name)
+
+    suffix = 1
+    while os.path.exists(new_path):
+        new_folder_name = f"{folder_name}_output_{suffix}"
+        new_path = os.path.join(parent_dir, new_folder_name)
+        suffix += 1
+
+    try:
+        shutil.move(temp_dir, new_path)
+        update_status(f'Processing directory succeed! Output saved to: {new_path}')
+    except Exception as e:
+        update_status(f'Error renaming temp folder: {str(e)}')
+
 
 def start() -> None:
     if modules.globals.fp_ui.get("face_enhancer_only"):
