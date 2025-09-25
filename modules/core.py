@@ -234,6 +234,10 @@ def process_directory(source_path: str, directory_path: str) -> None:
 
 
 def start() -> None:
+    if os.path.isdir(modules.globals.source_path):
+        core.process_directory(modules.globals.source_path, modules.globals.source_path)
+        return
+
     if modules.globals.fp_ui.get("face_enhancer_only"):
         modules.globals.frame_processors = ["face_enhancer"]
     print("Pipeline to run:", modules.globals.frame_processors)
