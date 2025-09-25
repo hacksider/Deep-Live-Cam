@@ -719,8 +719,12 @@ def select_directory_and_process(start) -> None:
     )
     if directory_path:
         RECENT_DIRECTORY_TARGET = directory_path
+
+        # Save directory as special target_path for later
         modules.globals.target_path = directory_path
-        start()
+
+        start_directory(start, directory_path)
+
 
 def check_and_ignore_nsfw(target, destroy: Callable = None) -> bool:
     """Check if the target is NSFW.
@@ -1252,3 +1256,10 @@ def update_webcam_target(
         else:
             update_pop_live_status("Face could not be detected in last upload!")
         return map
+
+def start_directory(start, directory_path):
+    for file in os.listdir(directory_path):
+        full_path = os.path.join(directory_path, file)
+        if is_image(full_path) or is_video(full_path):
+            modules.globals.target_path = full_path
+            start()
