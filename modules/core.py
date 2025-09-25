@@ -181,88 +181,79 @@ def update_status(message: str, scope: str = 'DLC.CORE') -> None:
 import os
 import shutil
 
-def process_directory(source_path: str, directory_path: str) -> None:
-    """Process all images in *directory_path*, copying them to a safe temp folder with original names,
-    then renaming temp folder to {folderName}_output on completion."""
+import os
+import modules.globals
+from modules import core
+from modules.utilities import is_image, is_video
 
-    update_status('Creating temp resources...')
 
-    parent_dir = os.path.dirname(directory_path)
-    folder_name = os.path.basename(directory_path)
+def process_directory(directory_path: str) -> None:
+    if not os.path.isdir(directory_path):
+        print(f"Not a directory: {directory_path}")
+        return
 
-    # Generate a safe temp folder name
-    temp_dir = os.path.join(directory_path, f"{folder_name}_temp")
-    suffix = 1
-    while os.path.exists(temp_dir):
-        temp_dir = os.path.join(directory_path, f"{folder_name}_temp_{suffix}")
-        suffix += 1
-
-    os.makedirs(temp_dir, exist_ok=True)
-
-    # Copy all image/video files into temp folder, preserving original names
-    frame_paths = []
     for file in os.listdir(directory_path):
-        src_path = os.path.join(directory_path, file)
-        if is_image(src_path) or is_video(src_path):
-            dest_path = os.path.join(temp_dir, file)
-            shutil.copy2(src_path, dest_path)
-            frame_paths.append(dest_path)
+        file_path = os.path.join(directory_path, file)
 
-    # Process copied files
-    for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
-        update_status('Progressing...', frame_processor.NAME)
-        frame_processor.process_video(source_path, frame_paths)
-        release_resources()
+        if not (is_image(file_path) or is_video(file_path)):
+            continue  # skip non-media files
 
-    clean_temp(directory_path)
+        print(f"[DLC.CORE] Processing file: {file_path}")
 
-    # Rename temp folder to {folderName}_output
-    new_folder_name = f"{folder_name}_output"
-    new_path = os.path.join(parent_dir, new_folder_name)
+        modules.globals.source_path = file_path
+        modules.globals.target_path = file_path
 
-    suffix = 1
-    while os.path.exists(new_path):
-        new_folder_name = f"{folder_name}_output_{suffix}"
-        new_path = os.path.join(parent_dir, new_folder_name)
-        suffix += 1
+        # Set output path for this file
+        base_name, ext = os.path.splitext(file)
+        modules.globals.output_path = os.path.join(
+            directory_path, f"{base_name}_output{ext}"
+        )
 
-    try:
-        shutil.move(temp_dir, new_path)
-        update_status(f'Processing directory succeed! Output saved to: {new_path}')
-    except Exception as e:
-        update_status(f'Error renaming temp folder: {str(e)}')
+        core.start()
+
+
+import os
+import shutil
+import modules.globals
+from modules.ui import update_status, destroy
+from modules.utilities import has_image_extension, is_image, is_video, create_temp, extract_frames, clean_temp, get_temp_frame_paths, detect_fps, create_video, restore_audio, move_temp
+from modules.processors.frame.core import get_frame_processors_modules
 
 
 def start() -> None:
-    if os.path.isdir(modules.globals.source_path):
-        core.process_directory(modules.globals.source_path, modules.globals.source_path)
+    if not modules.globals.source_path or not os.path.exists(modules.globals.source_path):
+        print("[DLC.CORE] Error: source path is not set or does not exist.")
         return
 
     if modules.globals.fp_ui.get("face_enhancer_only"):
         modules.globals.frame_processors = ["face_enhancer"]
+
     print("Pipeline to run:", modules.globals.frame_processors)
+
     for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
         if not frame_processor.pre_start():
             return
+
     update_status('Processing...')
-    # process image to image
+
+    # IMAGE processing
     if has_image_extension(modules.globals.target_path):
         if modules.globals.nsfw_filter and ui.check_and_ignore_nsfw(modules.globals.target_path, destroy):
             return
+
         try:
             shutil.copy2(modules.globals.target_path, modules.globals.output_path)
         except Exception as e:
             print("Error copying file:", str(e))
+
         for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
             update_status('Progressing...', frame_processor.NAME)
             frame_processor.process_image(modules.globals.source_path, modules.globals.output_path, modules.globals.output_path)
-            release_resources()
-        if is_image(modules.globals.target_path):
-            update_status('Processing to image succeed!')
-        else:
-            update_status('Processing to image failed!')
+
+        update_status('Processing to image succeed!' if is_image(modules.globals.target_path) else 'Processing to image failed!')
         return
-    # process image to videos
+
+    # VIDEO processing
     if modules.globals.nsfw_filter and ui.check_and_ignore_nsfw(modules.globals.target_path, destroy):
         return
 
@@ -273,11 +264,11 @@ def start() -> None:
         extract_frames(modules.globals.target_path)
 
     temp_frame_paths = get_temp_frame_paths(modules.globals.target_path)
+
     for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
         update_status('Progressing...', frame_processor.NAME)
         frame_processor.process_video(modules.globals.source_path, temp_frame_paths)
-        release_resources()
-    # handles fps
+
     if modules.globals.keep_fps:
         update_status('Detecting fps...')
         fps = detect_fps(modules.globals.target_path)
@@ -286,21 +277,16 @@ def start() -> None:
     else:
         update_status('Creating video with 30.0 fps...')
         create_video(modules.globals.target_path)
-    # handle audio
+
     if modules.globals.keep_audio:
-        if modules.globals.keep_fps:
-            update_status('Restoring audio...')
-        else:
-            update_status('Restoring audio might cause issues as fps are not kept...')
+        update_status('Restoring audio...')
         restore_audio(modules.globals.target_path, modules.globals.output_path)
     else:
         move_temp(modules.globals.target_path, modules.globals.output_path)
-    # clean and validate
+
     clean_temp(modules.globals.target_path)
-    if is_video(modules.globals.target_path):
-        update_status('Processing to video succeed!')
-    else:
-        update_status('Processing to video failed!')
+    update_status('Processing to video succeed!' if is_video(modules.globals.target_path) else 'Processing to video failed!')
+
 
 
 def destroy(to_quit=True) -> None:
