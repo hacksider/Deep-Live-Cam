@@ -215,7 +215,15 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         command=lambda: (
             update_tumbler("face_enhancer", enhancer_value.get()),
             save_switch_states(),
-            enhancer_only_switch.configure(state="normal" if enhancer_value.get() else "disabled"),
+            (
+                enhancer_only_switch.configure(state="normal")
+                if enhancer_value.get()
+                else (
+                    enhancer_only_value.set(False),
+                    update_tumbler("face_enhancer_only", False),
+                    enhancer_only_switch.configure(state="disabled"),
+                )
+            ),
         ),
     )
     enhancer_switch.pack(side="left", padx=(0, 20))
@@ -234,15 +242,6 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         ),
     )
     enhancer_only_switch.pack(side="left")
-    # Toggle availability dynamically
-    def toggle_enhancer_only_state():
-        if enhancer_value.get():
-            enhancer_only_switch.configure(state="normal")
-        else:
-            enhancer_only_value.set(False)
-            update_tumbler("face_enhancer_only", False)
-            enhancer_only_switch.configure(state="disabled")
-
 
     keep_audio_value = ctk.BooleanVar(value=modules.globals.keep_audio)
     keep_audio_switch = ctk.CTkSwitch(
