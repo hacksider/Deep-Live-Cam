@@ -218,6 +218,13 @@ def start() -> None:
         print("[DLC.CORE] Error: source path is not set or does not exist.")
         return
 
+    if not modules.globals.source_target_map:
+        from modules import face_analyser
+        if is_image(modules.globals.target_path):
+            face_analyser.get_unique_faces_from_target_image()
+        elif is_video(modules.globals.target_path):
+            face_analyser.get_unique_faces_from_target_video()
+
     if modules.globals.fp_ui.get("face_enhancer_only"):
         modules.globals.frame_processors = ["face_enhancer"]
 
