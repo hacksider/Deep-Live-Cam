@@ -1203,38 +1203,6 @@ def update_webcam_source(
             update_pop_live_status("Face could not be detected in last upload!")
         return map
 
-def enhance_only_ui_callback():
-    input_path = filedialog.askopenfilename(
-        title=_("Select an image or video to enhance"),
-        filetypes=[("Image/Video", ("*.png", "*.jpg", "*.jpeg", "*.gif", "*.bmp", "*.mp4", "*.mkv"))]
-    )
-    if not input_path:
-        return  # user cancelled
-
-    output_path = filedialog.asksaveasfilename(
-        title=_("Save enhanced output as"),
-        defaultextension=".png" if input_path.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".bmp")) else ".mp4",
-        filetypes=[("Image/Video", ("*.png", "*.jpg", "*.jpeg", "*.gif", "*.bmp", "*.mp4", "*.mkv"))]
-    )
-    if not output_path:
-        return  # user cancelled
-
-    # Call the enhancer. Source is not needed, so pass None.
-    process_image(None, input_path, output_path)
-
-    # Optional: Show done message
-    import tkinter.messagebox as messagebox
-    messagebox.showinfo(_("Enhance Only"), _("Enhancement complete!"))
-
-# ... in your UI setup (where you place other buttons)
-enhance_only_button = ctk.CTkButton(
-    root,
-    text=_("Enhance Only"),
-    command=enhance_only_ui_callback,
-)
-enhance_only_button.place(relx=0.1, rely=0.85)  # Adjust placement as desired
-
-
 def update_webcam_target(
         scrollable_frame: ctk.CTkScrollableFrame, map: list, button_num: int
 ) -> list:
