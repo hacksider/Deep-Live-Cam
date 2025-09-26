@@ -34,7 +34,7 @@ def parse_args() -> None:
     program.add_argument('-s', '--source', help='select an source image', dest='source_path')
     program.add_argument('-t', '--target', help='select an target image or video', dest='target_path')
     program.add_argument('-o', '--output', help='select output file or directory', dest='output_path')
-    program.add_argument('--frame-processor', help='pipeline of frame processors', dest='frame_processor', default=['face_swapper'], choices=['face_swapper', 'face_enhancer'], nargs='+')
+    program.add_argument('--frame-processor', help='pipeline of frame processors', dest='frame_processor', default=['face_swapper'], choices=['face_swapper', 'face_enhancer',  'face_sorter'], nargs='+')
     program.add_argument('--keep-fps', help='keep original fps', dest='keep_fps', action='store_true', default=False)
     program.add_argument('--keep-audio', help='keep original audio', dest='keep_audio', action='store_true', default=True)
     program.add_argument('--keep-frames', help='keep temporary frames', dest='keep_frames', action='store_true', default=False)
@@ -86,6 +86,10 @@ def parse_args() -> None:
         modules.globals.fp_ui['face_enhancer'] = True
     else:
         modules.globals.fp_ui['face_enhancer'] = False
+    if 'face_sorter' in args.frame_processor:
+        modules.globals.fp_ui['face_sorter'] = True
+    else:
+        modules.globals.fp_ui['face_sorter'] = False
 
     # translate deprecated args
     if args.source_path_deprecated:
@@ -175,8 +179,104 @@ def update_status(message: str, scope: str = 'DLC.CORE') -> None:
     if not modules.globals.headless:
         ui.update_status(message)
 
+from modules.face_analyser import get_one_face
+from modules.utilities import is_image, is_video
+import os
+import cv2
+import shutil
+
+def _sort_folder_by_face(folder_path: str) -> None:
+    """
+    Move any images without a face to 'unprocessed/'.
+    Ignore videos.
+    """
+    unprocessed_dir = os.path.join(folder_path, "unprocessed")
+    os.makedirs(unprocessed_dir, exist_ok=True)
+
+    for filename in os.listdir(folder_path):
+        file_path = os.path.join(folder_path, filename)
+
+        if is_video(file_path):
+            print(f"[SKIP] Video file: {filename}")
+            continue
+
+        if not is_image(file_path):
+            print(f"[SKIP] Not an image: {filename}")
+            continue
+
+        img = cv2.imread(file_path)
+        if img is None:
+            print(f"[ERROR] Failed to read: {filename}")
+            continue
+
+        if not get_one_face(img):
+            dest_path = os.path.join(unprocessed_dir, filename)
+            print(f"[MOVE] No face found: {filename} → {dest_path}")
+            shutil.move(file_path, dest_path)
+        else:
+            print(f"[KEEP] Face detected: {filename}")
+
 
 def process_directory(source_path: str, directory_path: str) -> None:
+    """
+    Sorts folder by face, moves no-face images to 'Unprocessed/',
+    processes each file individually, and outputs results to 'output/'.
+    """
+
+    unprocessed_dir = os.path.join(directory_path, "Unprocessed")
+    output_dir = os.path.join(directory_path, "output")
+    os.makedirs(unprocessed_dir, exist_ok=True)
+    os.makedirs(output_dir, exist_ok=True)
+
+    # --- Phase 1: Sort folder ---
+    update_status("Sorting folder by face...", "DLC.CORE")
+    for filename in os.listdir(directory_path):
+        file_path = os.path.join(directory_path, filename)
+
+        if filename in ["Unprocessed", "output"]:
+            continue  # skip output folders
+
+        if is_video(file_path):
+            print(f"[VIDEO] Queued for processing: {filename}")
+            continue  # skip sorting videos
+
+        if not is_image(file_path):
+            print(f"[SKIP] Not an image: {filename}")
+            continue
+
+        img = cv2.imread(file_path)
+        if img is None:
+            print(f"[ERROR] Failed to read: {filename}")
+            continue
+
+        if not get_one_face(img):
+            dest_path = os.path.join(unprocessed_dir, filename)
+            print(f"[MOVE] No face found: {filename} → {dest_path}")
+            shutil.move(file_path, dest_path)
+
+    # --- Phase 2: Process files ---
+    update_status("Processing files...", "DLC.CORE")
+    for filename in os.listdir(directory_path):
+        file_path = os.path.join(directory_path, filename)
+
+        if filename in ["Unprocessed", "output"]:
+            continue  # skip special folders
+
+        if not (is_image(file_path) or is_video(file_path)):
+            print(f"[SKIP] Unknown file type: {filename}")
+            continue
+
+        print(f"[PROCESS] {filename}")
+
+        # Update globals for start()
+        modules.globals.target_path = file_path
+        modules.globals.output_path = os.path.join(output_dir, filename)
+
+        start()  # run normal start pipeline for this file
+
+    update_status("Processing directory completed!", "DLC.CORE")
+
+def process_directoryOLD(source_path: str, directory_path: str) -> None:
     """Process all images in *directory_path* the same way video frames are handled."""
 
     update_status('Creating temp resources...')

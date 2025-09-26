@@ -123,7 +123,9 @@ def load_switch_states():
         modules.globals.nsfw_filter = switch_states.get("nsfw_filter", False)
         modules.globals.live_mirror = switch_states.get("live_mirror", False)
         modules.globals.live_resizable = switch_states.get("live_resizable", False)
-        modules.globals.fp_ui = switch_states.get("fp_ui", {"face_enhancer": False})
+        modules.globals.fp_ui = switch_states.get(
+            "fp_ui", {"face_enhancer": False, "face_sorter": False}
+        )
         modules.globals.show_fps = switch_states.get("show_fps", False)
         modules.globals.mouth_mask = switch_states.get("mouth_mask", False)
         modules.globals.show_mouth_mask_box = switch_states.get(
@@ -131,6 +133,7 @@ def load_switch_states():
         )
     except FileNotFoundError:
         # If the file doesn't exist, use default values
+        modules.globals.fp_ui = {"face_enhancer": False, "face_sorter": False}
         pass
 
 
@@ -213,6 +216,19 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         ),
     )
     enhancer_switch.place(relx=0.1, rely=0.7)
+
+    sorter_value = ctk.BooleanVar(value=modules.globals.fp_ui["face_sorter"])
+    sorter_switch = ctk.CTkSwitch(
+        root,
+        text=_("Face Sorter"),
+        variable=sorter_value,
+        cursor="hand2",
+        command=lambda: (
+            update_tumbler("face_sorter", sorter_value.get()),
+            save_switch_states(),
+        ),
+    )
+    sorter_switch.place(relx=0.1, rely=0.8)  # adjust position so it doesn’t overlap
 
     keep_audio_value = ctk.BooleanVar(value=modules.globals.keep_audio)
     keep_audio_switch = ctk.CTkSwitch(
