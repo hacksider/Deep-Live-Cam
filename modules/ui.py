@@ -106,10 +106,11 @@ def save_switch_states():
         "show_fps": modules.globals.show_fps,
         "mouth_mask": modules.globals.mouth_mask,
         "show_mouth_mask_box": modules.globals.show_mouth_mask_box,
+        "selected_face_path": getattr(modules.globals, "source_path", None),  # ✅ new
     }
     with open("switch_states.json", "w") as f:
         json.dump(switch_states, f)
-        
+
 
 VALID_EXTENSIONS = (".png", ".jpg", ".jpeg", ".bmp", ".mp4", ".avi", ".mov", ".mkv")
 
@@ -147,8 +148,8 @@ def load_switch_states():
         modules.globals.show_mouth_mask_box = switch_states.get(
             "show_mouth_mask_box", False
         )
+        modules.globals.source_path = switch_states.get("selected_face_path", None)  # ✅ new
     except FileNotFoundError:
-        # If the file doesn't exist, use default values
         pass
 
 
@@ -156,7 +157,6 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     global source_label, target_label, status_label, show_fps_switch
 
     load_switch_states()
-
     ctk.deactivate_automatic_dpi_awareness()
     ctk.set_appearance_mode("system")
     ctk.set_default_color_theme(resolve_relative_path("ui.json"))
@@ -433,7 +433,8 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     donate_label.bind(
         "<Button>", lambda event: webbrowser.open("https://deeplivecam.net")
     )
-
+    if modules.globals.source_path:
+        select_source_path_automatically(modules.globals.source_path)
     return root
 
 def close_mapper_window():
@@ -537,6 +538,17 @@ def create_source_target_popup(
     )
     close_button.grid(row=2, column=0, pady=10)
 
+def select_source_path_automatically(saved_path: str) -> None:
+    global RECENT_DIRECTORY_SOURCE
+
+    if not saved_path or not os.path.exists(saved_path):
+        return  # nothing to do if no saved path or file missing
+
+    RECENT_DIRECTORY_SOURCE = os.path.dirname(saved_path)
+    modules.globals.source_path = saved_path
+    image = render_image_preview(saved_path, (200, 200))
+    source_label.configure(image=image)
+    save_switch_states()
 
 def update_popup_source(
         scrollable_frame: ctk.CTkScrollableFrame, map: list, button_num: int
@@ -648,6 +660,7 @@ def select_source_path() -> None:
         RECENT_DIRECTORY_SOURCE = os.path.dirname(modules.globals.source_path)
         image = render_image_preview(modules.globals.source_path, (200, 200))
         source_label.configure(image=image)
+        save_switch_states()
     else:
         modules.globals.source_path = None
         source_label.configure(image=None)
