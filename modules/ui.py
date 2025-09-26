@@ -9,7 +9,6 @@ import time
 import json
 import modules.globals
 import modules.metadata
-from modules import core
 from modules.face_analyser import (
     get_one_face,
     get_unique_faces_from_target_image,
@@ -150,6 +149,7 @@ def load_switch_states():
         )
         modules.globals.source_path = switch_states.get("selected_face_path", None)  # ✅ new
     except FileNotFoundError:
+        # If the file doesn't exist, use default values
         pass
 
 
@@ -157,6 +157,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     global source_label, target_label, status_label, show_fps_switch
 
     load_switch_states()
+
     ctk.deactivate_automatic_dpi_awareness()
     ctk.set_appearance_mode("system")
     ctk.set_default_color_theme(resolve_relative_path("ui.json"))
@@ -219,47 +220,18 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     )
     keep_frames_switch.place(relx=0.1, rely=0.65)
 
-    # Frame to hold both switches on the same line
-    enhancer_frame = ctk.CTkFrame(root, fg_color="transparent")
-    enhancer_frame.place(relx=0.1, rely=0.7)
-    
-    # Main enhancer switch
     enhancer_value = ctk.BooleanVar(value=modules.globals.fp_ui["face_enhancer"])
     enhancer_switch = ctk.CTkSwitch(
-        enhancer_frame,
+        root,
         text=_("Face Enhancer"),
         variable=enhancer_value,
         cursor="hand2",
         command=lambda: (
             update_tumbler("face_enhancer", enhancer_value.get()),
             save_switch_states(),
-            (
-                enhancer_only_switch.configure(state="normal")
-                if enhancer_value.get()
-                else (
-                    enhancer_only_value.set(False),
-                    update_tumbler("face_enhancer_only", False),
-                    enhancer_only_switch.configure(state="disabled"),
-                )
-            ),
         ),
     )
-    enhancer_switch.pack(side="left", padx=(0, 20))
-    
-    # Enhancer-only switch
-    enhancer_only_value = ctk.BooleanVar(value=modules.globals.fp_ui.get("face_enhancer_only", False))
-    enhancer_only_switch = ctk.CTkSwitch(
-        enhancer_frame,
-        text=_("Enhancer Only"),
-        variable=enhancer_only_value,
-        cursor="hand2",
-        state="normal" if enhancer_value.get() else "disabled",
-        command=lambda: (
-            update_tumbler("face_enhancer_only", enhancer_only_value.get()),
-            save_switch_states(),
-        ),
-    )
-    enhancer_only_switch.pack(side="left")
+    enhancer_switch.place(relx=0.1, rely=0.7)
 
     keep_audio_value = ctk.BooleanVar(value=modules.globals.keep_audio)
     keep_audio_switch = ctk.CTkSwitch(
@@ -356,17 +328,17 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     start_button = ctk.CTkButton(
         root, text=_("Start"), cursor="hand2", command=lambda: analyze_target(start, root)
     )
-    start_button.place(relx=0.05, rely=0.80, relwidth=0.18, relheight=0.05)
+    start_button.place(relx=0.15, rely=0.80, relwidth=0.2, relheight=0.05)
 
     stop_button = ctk.CTkButton(
         root, text=_("Destroy"), cursor="hand2", command=lambda: destroy()
     )
-    stop_button.place(relx=0.30, rely=0.80, relwidth=0.18, relheight=0.05)
+    stop_button.place(relx=0.4, rely=0.80, relwidth=0.2, relheight=0.05)
 
     preview_button = ctk.CTkButton(
         root, text=_("Preview"), cursor="hand2", command=lambda: toggle_preview()
     )
-    preview_button.place(relx=0.55, rely=0.80, relwidth=0.18, relheight=0.05)
+    preview_button.place(relx=0.65, rely=0.80, relwidth=0.2, relheight=0.05)
 
     directory_button = ctk.CTkButton(
         root,
@@ -374,7 +346,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         cursor="hand2",
         command=lambda: select_directory_and_process(),
     )
-    directory_button.place(relx=0.80, rely=0.80, relwidth=0.18, relheight=0.05)
+    directory_button.place(relx=0.85, rely=0.80, relwidth=0.15, relheight=0.05)
 
     # --- Camera Selection ---
     camera_label = ctk.CTkLabel(root, text=_("Select Camera:"))

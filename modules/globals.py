@@ -5,8 +5,8 @@ ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 WORKFLOW_DIR = os.path.join(ROOT_DIR, "workflow")
 
 file_types = [
-    ("Image", ("*.png", "*.jpg", "*.jpeg", "*.gif", "*.bmp")),
-    ("Video", ("*.mp4", "*.mkv")),
+    ("Image", ("*.png", "*.jpg", "*.jpeg", "*.bmp")),
+    ("Video", ("*.mp4", "*.mkv", "*.gif")),
 ]
 
 source_target_map = []
@@ -32,7 +32,7 @@ execution_providers: List[str] = []
 execution_threads = None
 headless = None
 log_level = "error"
-fp_ui: Dict[str, bool] = {"face_enhancer": False, "face_enhancer_only": False}
+fp_ui: Dict[str, bool] = {"face_enhancer": False}
 camera_input_combobox = None
 webcam_preview_running = False
 show_fps = False
