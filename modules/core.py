@@ -272,17 +272,7 @@ def process_directory(source_path: str, directory_path: str) -> None:
 
     update_status("Processing directory completed!", "DLC.CORE")
 
-def process_directoryOLD(source_path: str, directory_path: str) -> None:
-    """Process all images in *directory_path* the same way video frames are handled."""
 
-    update_status('Creating temp resources...')
-    frame_paths = copy_frames_from_directory(directory_path)
-    for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
-        update_status('Progressing...', frame_processor.NAME)
-        frame_processor.process_video(source_path, frame_paths)
-        release_resources()
-    clean_temp(directory_path)
-    update_status('Processing directory succeed!')
 
 def start() -> None:
     for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
@@ -306,6 +296,7 @@ def start() -> None:
         else:
             update_status('Processing to image failed!')
         return
+
     # process image to videos
     if modules.globals.nsfw_filter and ui.check_and_ignore_nsfw(modules.globals.target_path, destroy):
         return
@@ -321,7 +312,8 @@ def start() -> None:
         update_status('Progressing...', frame_processor.NAME)
         frame_processor.process_video(modules.globals.source_path, temp_frame_paths)
         release_resources()
-    # handles fps
+
+    # handles fps / audio / cleanup...
     if modules.globals.keep_fps:
         update_status('Detecting fps...')
         fps = detect_fps(modules.globals.target_path)
@@ -330,7 +322,7 @@ def start() -> None:
     else:
         update_status('Creating video with 30.0 fps...')
         create_video(modules.globals.target_path)
-    # handle audio
+
     if modules.globals.keep_audio:
         if modules.globals.keep_fps:
             update_status('Restoring audio...')
@@ -339,13 +331,12 @@ def start() -> None:
         restore_audio(modules.globals.target_path, modules.globals.output_path)
     else:
         move_temp(modules.globals.target_path, modules.globals.output_path)
-    # clean and validate
+
     clean_temp(modules.globals.target_path)
     if is_video(modules.globals.target_path):
         update_status('Processing to video succeed!')
     else:
         update_status('Processing to video failed!')
-
 
 def destroy(to_quit=True) -> None:
     if modules.globals.target_path:

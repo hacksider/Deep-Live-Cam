@@ -32,6 +32,7 @@ execution_providers: List[str] = []
 execution_threads = None
 headless = None
 log_level = "error"
+gender_filter = True
 fp_ui: Dict[str, bool] = {"face_enhancer": False}
 camera_input_combobox = None
 webcam_preview_running = False

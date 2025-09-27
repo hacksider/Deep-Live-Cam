@@ -23,12 +23,10 @@ def get_face_analyser() -> Any:
     if FACE_ANALYSER is None:
         FACE_ANALYSER = insightface.app.FaceAnalysis(
             name='buffalo_l',
-            allowed_modules=['detection', 'recognition', 'genderage', 'landmark'],  # add genderage
             providers=modules.globals.execution_providers
         )
         FACE_ANALYSER.prepare(ctx_id=0, det_size=(640, 640))
     return FACE_ANALYSER
-
 
 def get_one_face(frame: Frame) -> Any:
     face = get_face_analyser().get(frame)
@@ -36,59 +34,6 @@ def get_one_face(frame: Frame) -> Any:
         return min(face, key=lambda x: x.bbox[0])
     except ValueError:
         return None
-
-def get_source_face_with_gender(frame: np.ndarray):
-    """Analyse the source frame and return the first detected face + gender."""
-    face_analyser = get_face_analyser()
-    faces = face_analyser.get(frame)
-
-    if not faces:
-        print("[DEBUG] No face detected in source image.")
-        return None, None
-
-    source_face = faces[0]  # assume first face is the source
-    gender = getattr(source_face, "gender", None)
-    gender_str = "female" if gender == 1 else "male" if gender == 0 else "unknown"
-
-    print(f"[DEBUG] Source face detected with gender: {gender_str}")
-    return source_face, gender
-
-
-def get_target_faces_with_gender_filter(frame: np.ndarray, source_gender: int):
-    """Analyse the target frame, return only faces matching source_gender."""
-    face_analyser = get_face_analyser()
-    faces = face_analyser.get(frame)
-
-    if not faces:
-        print("[DEBUG] No face(s) detected in target frame.")
-        return []
-
-    filtered_faces = [f for f in faces if getattr(f, "gender", None) == source_gender]
-
-    print(f"[DEBUG] Found {len(faces)} face(s), {len(filtered_faces)} match source gender.")
-    return filtered_faces
-
-def get_faces_with_gender_filter(temp_frame: Frame):
-    """Return source face and target faces with optional gender filtering."""
-    # Get source face (with optional gender filtering)
-    if GENDER_FILTER_ENABLED:
-        source_face, source_gender = get_source_face_with_gender(
-            cv2.imread(modules.globals.source_path)
-        )
-        if not source_face:
-            logging.error("No source face detected for gender filtering.")
-            return None, []
-        target_faces = get_target_faces_with_gender_filter(temp_frame, source_gender)
-    else:
-        source_face = get_one_face(cv2.imread(modules.globals.source_path))
-        if modules.globals.many_faces:
-            target_faces = get_many_faces(temp_frame)
-        else:
-            face = get_one_face(temp_frame)
-            target_faces = [face] if face else []
-
-    return source_face, target_faces
-
 
 def get_many_faces(frame: Frame) -> List[Any]:
     """
@@ -98,50 +43,10 @@ def get_many_faces(frame: Frame) -> List[Any]:
     """
     try:
         faces = get_face_analyser().get(frame)
+        print(f"[DEBUG] faces detected: {len(faces) if faces else 0}")
         return faces if faces is not None else []
     except Exception:
         return []
-
-def get_source_face_with_gender_age(source_frame: Frame):
-    face = get_one_face(source_frame)
-    if face:
-        return face, face.gender, face.age
-    return None, None, None
-
-#def get_matching_faces_by_gender_age(faces: List[Face], gender: int, age: float) -> List[Face]:
-#    # Filter by gender
-#    matching_faces = [f for f in faces if f.gender == gender]
-#    if not matching_faces:
-#        return []
-
-    # Sort by closest age
-#    matching_faces.sort(key=lambda f: abs(f.age - age))
-#    return matching_faces
-
-# New helper: apply gender filter only where desired (e.g. when building target maps)
-def filter_faces_by_gender(faces: List[Any]) -> List[Any]:
-    if not faces:
-        return []
-
-    if GENDER_FILTER is None:
-        return faces
-
-    filtered = []
-    for face in faces:
-        # insightface uses `sex` (1 => male, 0 => female) and `age` attribute
-        if hasattr(face, "sex"):
-            gender = "male" if face.sex == 1 else "female"
-            # debug: show detected gender & age
-            # (comment out in production if noisy)
-            print(f"[DEBUG] Detected gender: {gender}, Age: {getattr(face, 'age', 'N/A')}")
-            if gender == GENDER_FILTER:
-                filtered.append(face)
-        else:
-            # if no sex attribute, keep the face (or change to drop)
-            filtered.append(face)
-
-    print(f"[DEBUG] filter_faces_by_gender: kept {len(filtered)}/{len(faces)} faces for filter='{GENDER_FILTER}'")
-    return filtered
 
 
 def has_valid_map() -> bool:

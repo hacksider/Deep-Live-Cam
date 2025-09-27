@@ -714,6 +714,7 @@ def select_output_path(start: Callable[[], None]) -> None:
 
 
 def select_directory_and_process() -> None:
+    from modules import core
     global RECENT_DIRECTORY_TARGET
 
     # Hide preview window if it's running
@@ -730,7 +731,7 @@ def select_directory_and_process() -> None:
 
     if directory_path:
         RECENT_DIRECTORY_TARGET = directory_path
-        core.process_directory(directory_path)
+        core.process_directory(modules.globals.source_path, directory_path)
 
 def check_and_ignore_nsfw(target, destroy: Callable = None) -> bool:
     """Check if the target is NSFW.
