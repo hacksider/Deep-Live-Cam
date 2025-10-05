@@ -7,6 +7,7 @@ from cv2_enumerate_cameras import enumerate_cameras  # Add this import
 from PIL import Image, ImageOps
 import time
 import json
+import tkinterdnd2 as tkdnd
 import modules.globals
 import modules.metadata
 from modules.face_analyser import (
@@ -134,50 +135,65 @@ def load_switch_states():
         pass
 
 
-def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.CTk:
+def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> tkdnd.TkinterDnD.Tk:
     global source_label, target_label, status_label, show_fps_switch
 
     load_switch_states()
 
     ctk.deactivate_automatic_dpi_awareness()
-    ctk.set_appearance_mode("system")
+    ctk.set_appearance_mode("dark")
     ctk.set_default_color_theme(resolve_relative_path("ui.json"))
 
-    root = ctk.CTk()
+    root = tkdnd.TkinterDnD.Tk()
     root.minsize(ROOT_WIDTH, ROOT_HEIGHT)
     root.title(
         f"{modules.metadata.name} {modules.metadata.version} {modules.metadata.edition}"
     )
-    root.configure()
+    root.configure(bg="#050505")
     root.protocol("WM_DELETE_WINDOW", lambda: destroy())
 
-    source_label = ctk.CTkLabel(root, text=None)
-    source_label.place(relx=0.1, rely=0.1, relwidth=0.3, relheight=0.25)
+    main_frame = ctk.CTkFrame(root, fg_color="#181818", corner_radius=0)
+    main_frame.pack(fill="both", expand=True, padx=0, pady=0)
 
-    target_label = ctk.CTkLabel(root, text=None)
+    source_label = ctk.CTkLabel(main_frame, text=None)
+    source_label.place(relx=0.1, rely=0.1, relwidth=0.3, relheight=0.25)
+    
+    source_label.drop_target_register(tkdnd.DND_FILES)
+    source_label.dnd_bind("<<Drop>>", lambda event: handle_drop_source(event))
+
+    target_label = ctk.CTkLabel(main_frame, text=None)
     target_label.place(relx=0.6, rely=0.1, relwidth=0.3, relheight=0.25)
+    
+    target_label.drop_target_register(tkdnd.DND_FILES)
+    target_label.dnd_bind("<<Drop>>", lambda event: handle_drop_target(event))
 
     select_face_button = ctk.CTkButton(
-        root, text=_("Select a face"), cursor="hand2", command=lambda: select_source_path()
+        main_frame, text=_("Select a face"), cursor="hand2", command=lambda: select_source_path()
     )
     select_face_button.place(relx=0.1, rely=0.4, relwidth=0.3, relheight=0.1)
+    
+    select_face_button.drop_target_register(tkdnd.DND_FILES)
+    select_face_button.dnd_bind("<<Drop>>", lambda event: handle_drop_source(event))
 
     swap_faces_button = ctk.CTkButton(
-        root, text="↔", cursor="hand2", command=lambda: swap_faces_paths()
+        main_frame, text="↔", cursor="hand2", command=lambda: swap_faces_paths()
     )
     swap_faces_button.place(relx=0.45, rely=0.4, relwidth=0.1, relheight=0.1)
 
     select_target_button = ctk.CTkButton(
-        root,
+        main_frame,
         text=_("Select a target"),
         cursor="hand2",
         command=lambda: select_target_path(),
     )
     select_target_button.place(relx=0.6, rely=0.4, relwidth=0.3, relheight=0.1)
+    
+    select_target_button.drop_target_register(tkdnd.DND_FILES)
+    select_target_button.dnd_bind("<<Drop>>", lambda event: handle_drop_target(event))
 
     keep_fps_value = ctk.BooleanVar(value=modules.globals.keep_fps)
     keep_fps_checkbox = ctk.CTkSwitch(
-        root,
+        main_frame,
         text=_("Keep fps"),
         variable=keep_fps_value,
         cursor="hand2",
@@ -190,7 +206,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
 
     keep_frames_value = ctk.BooleanVar(value=modules.globals.keep_frames)
     keep_frames_switch = ctk.CTkSwitch(
-        root,
+        main_frame,
         text=_("Keep frames"),
         variable=keep_frames_value,
         cursor="hand2",
@@ -203,7 +219,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
 
     enhancer_value = ctk.BooleanVar(value=modules.globals.fp_ui["face_enhancer"])
     enhancer_switch = ctk.CTkSwitch(
-        root,
+        main_frame,
         text=_("Face Enhancer"),
         variable=enhancer_value,
         cursor="hand2",
@@ -216,7 +232,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
 
     keep_audio_value = ctk.BooleanVar(value=modules.globals.keep_audio)
     keep_audio_switch = ctk.CTkSwitch(
-        root,
+        main_frame,
         text=_("Keep audio"),
         variable=keep_audio_value,
         cursor="hand2",
@@ -229,7 +245,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
 
     many_faces_value = ctk.BooleanVar(value=modules.globals.many_faces)
     many_faces_switch = ctk.CTkSwitch(
-        root,
+        main_frame,
         text=_("Many faces"),
         variable=many_faces_value,
         cursor="hand2",
@@ -242,7 +258,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
 
     color_correction_value = ctk.BooleanVar(value=modules.globals.color_correction)
     color_correction_switch = ctk.CTkSwitch(
-        root,
+        main_frame,
         text=_("Fix Blueish Cam"),
         variable=color_correction_value,
         cursor="hand2",
@@ -253,13 +269,9 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     )
     color_correction_switch.place(relx=0.6, rely=0.70)
 
-    #    nsfw_value = ctk.BooleanVar(value=modules.globals.nsfw_filter)
-    #    nsfw_switch = ctk.CTkSwitch(root, text='NSFW filter', variable=nsfw_value, cursor='hand2', command=lambda: setattr(modules.globals, 'nsfw_filter', nsfw_value.get()))
-    #    nsfw_switch.place(relx=0.6, rely=0.7)
-
     map_faces = ctk.BooleanVar(value=modules.globals.map_faces)
     map_faces_switch = ctk.CTkSwitch(
-        root,
+        main_frame,
         text=_("Map faces"),
         variable=map_faces,
         cursor="hand2",
@@ -273,7 +285,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
 
     show_fps_value = ctk.BooleanVar(value=modules.globals.show_fps)
     show_fps_switch = ctk.CTkSwitch(
-        root,
+        main_frame,
         text=_("Show FPS"),
         variable=show_fps_value,
         cursor="hand2",
@@ -286,7 +298,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
 
     mouth_mask_var = ctk.BooleanVar(value=modules.globals.mouth_mask)
     mouth_mask_switch = ctk.CTkSwitch(
-        root,
+        main_frame,
         text=_("Mouth Mask"),
         variable=mouth_mask_var,
         cursor="hand2",
@@ -296,7 +308,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
 
     show_mouth_mask_box_var = ctk.BooleanVar(value=modules.globals.show_mouth_mask_box)
     show_mouth_mask_box_switch = ctk.CTkSwitch(
-        root,
+        main_frame,
         text=_("Show Mouth Mask Box"),
         variable=show_mouth_mask_box_var,
         cursor="hand2",
@@ -307,22 +319,22 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     show_mouth_mask_box_switch.place(relx=0.6, rely=0.55)
 
     start_button = ctk.CTkButton(
-        root, text=_("Start"), cursor="hand2", command=lambda: analyze_target(start, root)
+        main_frame, text=_("Start"), cursor="hand2", command=lambda: analyze_target(start, root)
     )
     start_button.place(relx=0.15, rely=0.80, relwidth=0.2, relheight=0.05)
 
     stop_button = ctk.CTkButton(
-        root, text=_("Destroy"), cursor="hand2", command=lambda: destroy()
+        main_frame, text=_("Destroy"), cursor="hand2", command=lambda: destroy()
     )
     stop_button.place(relx=0.4, rely=0.80, relwidth=0.2, relheight=0.05)
 
     preview_button = ctk.CTkButton(
-        root, text=_("Preview"), cursor="hand2", command=lambda: toggle_preview()
+        main_frame, text=_("Preview"), cursor="hand2", command=lambda: toggle_preview()
     )
     preview_button.place(relx=0.65, rely=0.80, relwidth=0.2, relheight=0.05)
 
     # --- Camera Selection ---
-    camera_label = ctk.CTkLabel(root, text=_("Select Camera:"))
+    camera_label = ctk.CTkLabel(main_frame, text=_("Select Camera:"))
     camera_label.place(relx=0.1, rely=0.86, relwidth=0.2, relheight=0.05)
 
     available_cameras = get_available_cameras()
@@ -331,7 +343,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     if not camera_names or camera_names[0] == "No cameras found":
         camera_variable = ctk.StringVar(value="No cameras found")
         camera_optionmenu = ctk.CTkOptionMenu(
-            root,
+            main_frame,
             variable=camera_variable,
             values=["No cameras found"],
             state="disabled",
@@ -339,13 +351,13 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     else:
         camera_variable = ctk.StringVar(value=camera_names[0])
         camera_optionmenu = ctk.CTkOptionMenu(
-            root, variable=camera_variable, values=camera_names
+            main_frame, variable=camera_variable, values=camera_names
         )
 
     camera_optionmenu.place(relx=0.35, rely=0.86, relwidth=0.25, relheight=0.05)
 
     live_button = ctk.CTkButton(
-        root,
+        main_frame,
         text=_("Live"),
         cursor="hand2",
         command=lambda: webcam_preview(
@@ -365,11 +377,11 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     live_button.place(relx=0.65, rely=0.86, relwidth=0.2, relheight=0.05)
     # --- End Camera Selection ---
 
-    status_label = ctk.CTkLabel(root, text=None, justify="center")
+    status_label = ctk.CTkLabel(main_frame, text=None, justify="center")
     status_label.place(relx=0.1, rely=0.9, relwidth=0.8)
 
     donate_label = ctk.CTkLabel(
-        root, text="Deep Live Cam", justify="center", cursor="hand2"
+        main_frame, text="Deep Live Cam", justify="center", cursor="hand2"
     )
     donate_label.place(relx=0.1, rely=0.95, relwidth=0.8)
     donate_label.configure(
@@ -797,7 +809,6 @@ def webcam_preview(root: ctk.CTk, camera_index: int):
         )
 
 
-
 def get_available_cameras():
     """Returns a list of available camera names and indices."""
     if platform.system() == "Windows":
@@ -1003,7 +1014,6 @@ def create_source_target_popup_for_webcam(
     close_button.place(relx=0.7, rely=0.92, relwidth=0.2, relheight=0.05)
 
 
-
 def clear_source_target_images(map: list):
     global source_label_dict_live, target_label_dict_live
 
@@ -1204,3 +1214,43 @@ def update_webcam_target(
         else:
             update_pop_live_status("Face could not be detected in last upload!")
         return map
+
+
+# New drop handler functions
+def handle_drop_source(event):
+    """Handle files dropped on source button or label"""
+    file_path = event.data
+    # On Windows, file paths may be enclosed in {}
+    if file_path.startswith("{") and file_path.endswith("}"):
+        file_path = file_path[1:-1]
+
+    if is_image(file_path):
+        modules.globals.source_path = file_path
+        global RECENT_DIRECTORY_SOURCE
+        RECENT_DIRECTORY_SOURCE = os.path.dirname(modules.globals.source_path)
+        image = render_image_preview(modules.globals.source_path, (200, 200))
+        source_label.configure(image=image)
+    else:
+        update_status("Please drop an image file for the source.")
+
+
+def handle_drop_target(event):
+    """Handle files dropped on target button or label"""
+    file_path = event.data
+    # On Windows, file paths may be enclosed in {}
+    if file_path.startswith("{") and file_path.endswith("}"):
+        file_path = file_path[1:-1]
+
+    if is_image(file_path) or is_video(file_path):
+        modules.globals.target_path = file_path
+        global RECENT_DIRECTORY_TARGET
+        RECENT_DIRECTORY_TARGET = os.path.dirname(modules.globals.target_path)
+        
+        if is_image(file_path):
+            image = render_image_preview(modules.globals.target_path, (200, 200))
+            target_label.configure(image=image)
+        elif is_video(file_path):
+            video_frame = render_video_preview(file_path, (200, 200))
+            target_label.configure(image=video_frame)
+    else:
+        update_status("Please drop an image or video file for the target.")
