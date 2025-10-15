@@ -21,3 +21,4 @@ opennsfw2==0.10.2
 protobuf==4.25.1
 git+https://github.com/xinntao/BasicSR.git@master
 git+https://github.com/TencentARC/GFPGAN.git@master
+pygrabber
