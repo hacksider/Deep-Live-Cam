@@ -63,14 +63,32 @@ def get_face_swapper() -> Any:
 
     with THREAD_LOCK:
         if FACE_SWAPPER is None:
-            model_path = os.path.join(models_dir, "inswapper_128_fp16.onnx")
+            model_name = "inswapper_128.onnx"
+            if "CUDAExecutionProvider" in modules.globals.execution_providers:
+                model_name = "inswapper_128_fp16.onnx"
+            model_path = os.path.join(models_dir, model_name)
             update_status(f"Loading face swapper model from: {model_path}", NAME)
             try:
                 # Ensure the providers list is correctly passed
-                providers = modules.globals.execution_providers
-                # print(f"Attempting to load model with providers: {providers}") # Debug print
+                # Apply CoreML optimization for Mac systems
                 FACE_SWAPPER = insightface.model_zoo.get_model(
-                    model_path, providers=providers
+                    model_path,
+                    providers=[
+                        (
+                            (
+                                "CoreMLExecutionProvider",
+                                {
+                                    "ModelFormat": "MLProgram",
+                                    "MLComputeUnits": "CPUAndGPU",
+                                    "SpecializationStrategy": "FastPrediction",
+                                    "AllowLowPrecisionAccumulationOnGPU": 1,
+                                },
+                            )
+                            if p == "CoreMLExecutionProvider"
+                            else p
+                        )
+                        for p in modules.globals.execution_providers
+                    ],
                 )
                 update_status("Face swapper model loaded successfully.", NAME)
             except Exception as e:
