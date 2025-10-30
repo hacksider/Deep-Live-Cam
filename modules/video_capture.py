@@ -42,15 +42,31 @@ class VideoCapturer:
 
                 for dev_id, backend in capture_methods:
                     try:
+                        print(f"Trying device {dev_id} with backend {backend}")
                         self.cap = cv2.VideoCapture(dev_id, backend)
                         if self.cap.isOpened():
+                            print(f"Successfully opened device {dev_id} with backend {backend}")
                             break
                         self.cap.release()
-                    except Exception:
+                    except Exception as e:
+                        print(f"Failed to open device {dev_id} with backend {backend}: {str(e)}")
                         continue
             else:
                 # Unix-like systems (Linux/Mac) capture method
-                self.cap = cv2.VideoCapture(self.device_index)
+                # Try device 0 first, then the specified device index if different
+                capture_methods = [(0, cv2.CAP_V4L2), (self.device_index, cv2.CAP_V4L2)] if self.device_index != 0 else [(0, cv2.CAP_V4L2)]
+                
+                for dev_id, backend in capture_methods:
+                    try:
+                        print(f"Trying device {dev_id} with backend {backend}")
+                        self.cap = cv2.VideoCapture(dev_id, backend)
+                        if self.cap.isOpened():
+                            print(f"Successfully opened device {dev_id} with backend {backend}")
+                            break
+                        self.cap.release()
+                    except Exception as e:
+                        print(f"Failed to open device {dev_id} with backend {backend}: {str(e)}")
+                        continue
 
             if not self.cap or not self.cap.isOpened():
                 raise RuntimeError("Failed to open camera")
@@ -59,6 +75,12 @@ class VideoCapturer:
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
             self.cap.set(cv2.CAP_PROP_FPS, fps)
+
+            # Print actual camera settings
+            actual_width = self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+            actual_height = self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+            actual_fps = self.cap.get(cv2.CAP_PROP_FPS)
+            print(f"Camera initialized with: {actual_width}x{actual_height} @ {actual_fps}fps")
 
             self.is_running = True
             return True
