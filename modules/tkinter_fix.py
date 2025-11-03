@@ -1,26 +1,16 @@
-import tkinter
+# Additional Tkinter compatibility handling for macOS
+import platform
+import os
 
-# Only needs to be imported once at the beginning of the application
-def apply_patch():
-    # Create a monkey patch for the internal _tkinter module
-    original_init = tkinter.Tk.__init__
-    
-    def patched_init(self, *args, **kwargs):
-        # Call the original init
-        original_init(self, *args, **kwargs)
-        
-        # Define the missing ::tk::ScreenChanged procedure
-        self.tk.eval("""
-        if {[info commands ::tk::ScreenChanged] == ""} {
-            proc ::tk::ScreenChanged {args} {
-                # Do nothing
-                return
-            }
-        }
-        """)
-    
-    # Apply the monkey patch
-    tkinter.Tk.__init__ = patched_init
-
-# Apply the patch automatically when this module is imported
-apply_patch() 
+def check_tkinter_support():
+    if platform.system() == "Darwin":  # macOS
+        # Check if we're running in a proper GUI environment
+        if 'DISPLAY' not in os.environ and not os.environ.get('DISPLAY'):
+            # Try to use a different backend or fallback
+            try:
+                import tkinter as tk
+                return True
+            except ImportError:
+                return False
+        return True
+    return True
