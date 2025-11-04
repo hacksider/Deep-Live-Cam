@@ -12,7 +12,7 @@ file_types = [
 ]
 
 # Face Mapping Data
-souce_target_map: List[Dict[str, Any]] = [] # Stores detailed map for image/video processing
+source_target_map: List[Dict[str, Any]] = [] # Stores detailed map for image/video processing
 simple_map: Dict[str, Any] = {}             # Stores simplified map (embeddings/faces) for live/simple mode
 
 # Paths
