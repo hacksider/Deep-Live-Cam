@@ -23,6 +23,6 @@ def process_frame_with_gui_fallback(frame):
             root = tk.Tk()
             root.withdraw()
             messagebox.showwarning("Processing Error", str(e))
-        except:
+        except Exception:
             pass  # Silently fail if GUI is not available
         return frame
