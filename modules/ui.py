@@ -465,7 +465,7 @@ def analyze_target(start: Callable[[], None], root: ctk.CTk):
         return
 
     if modules.globals.map_faces:
-        modules.globals.souce_target_map = []
+        modules.globals.source_target_map = []
 
         if is_image(modules.globals.target_path):
             update_status("Getting unique faces")
@@ -474,8 +474,8 @@ def analyze_target(start: Callable[[], None], root: ctk.CTk):
             update_status("Getting unique faces")
             get_unique_faces_from_target_video()
 
-        if len(modules.globals.souce_target_map) > 0:
-            create_source_target_popup(start, root, modules.globals.souce_target_map)
+        if len(modules.globals.source_target_map) > 0:
+            create_source_target_popup(start, root, modules.globals.source_target_map)
         else:
             update_status("No faces found in target")
     else:
@@ -855,9 +855,9 @@ def webcam_preview(root: ctk.CTk, camera_index: int):
             return
         create_webcam_preview(camera_index)
     else:
-        modules.globals.souce_target_map = []
+        modules.globals.source_target_map = []
         create_source_target_popup_for_webcam(
-            root, modules.globals.souce_target_map, camera_index
+            root, modules.globals.source_target_map, camera_index
         )
 
 
