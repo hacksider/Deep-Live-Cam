@@ -341,7 +341,7 @@ def process_frame_v2(temp_frame: Frame, temp_frame_path: str = "") -> Frame:
     source_target_pairs = []
 
     # Ensure maps exist before accessing them
-    souce_target_map = getattr(modules.globals, "souce_target_map", None)
+    source_target_map = getattr(modules.globals, "source_target_map", None)
     simple_map = getattr(modules.globals, "simple_map", None)
 
     # Check if target is a file path (image or video) or live stream
@@ -349,11 +349,11 @@ def process_frame_v2(temp_frame: Frame, temp_frame_path: str = "") -> Frame:
 
     if is_file_target:
         # Processing specific image or video file with pre-analyzed maps
-        if souce_target_map:
+        if source_target_map:
             if modules.globals.many_faces:
                 source_face = default_source_face() # Use default source for all targets
                 if source_face:
-                    for map_data in souce_target_map:
+                    for map_data in source_target_map:
                         if is_image(modules.globals.target_path):
                             target_info = map_data.get("target", {})
                             if target_info: # Check if target info exists
@@ -371,7 +371,7 @@ def process_frame_v2(temp_frame: Frame, temp_frame_path: str = "") -> Frame:
                                          for target_face in faces_in_frame:
                                              source_target_pairs.append((source_face, target_face))
             else: # Single face or specific mapping
-                 for map_data in souce_target_map:
+                 for map_data in source_target_map:
                     source_info = map_data.get("source", {})
                     if not source_info: continue # Skip if no source info
                     source_face = source_info.get("face")

@@ -26,7 +26,7 @@ keep_fps: bool = True
 keep_audio: bool = True
 keep_frames: bool = False
 many_faces: bool = False         # Process all detected faces with default source
-map_faces: bool = False          # Use souce_target_map or simple_map for specific swaps
+map_faces: bool = False          # Use source_target_map or simple_map for specific swaps
 color_correction: bool = False   # Enable color correction (implementation specific)
 nsfw_filter: bool = False
 
