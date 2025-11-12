@@ -32,21 +32,26 @@ models_dir = os.path.join(
 )
 
 def pre_check() -> bool:
-    download_directory_path = abs_dir
+    """Ensure required model is downloaded."""
+    download_directory_path = models_dir
     conditional_download(
         download_directory_path,
         [
-            "https://huggingface.co/hacksider/deep-live-cam/blob/main/inswapper_128_fp16.onnx"
+            "https://huggingface.co/hacksider/deep-live-cam/resolve/main/inswapper_128_fp16.onnx"
         ],
     )
     return True
 
 
 def pre_start() -> bool:
-    # Simplified pre_start, assuming checks happen before calling process functions
-    model_path = os.path.join(models_dir, "inswapper_128_fp16.onnx")
-    if not os.path.exists(model_path):
-        update_status(f"Model not found: {model_path}. Please download it.", NAME)
+    """Check if source and target paths are valid before starting."""
+    if not modules.globals.map_faces and not is_image(modules.globals.source_path):
+        update_status("Select an image for source path.", NAME)
+        return False
+    elif not modules.globals.map_faces and not get_one_face(
+        cv2.imread(modules.globals.source_path)
+    ):
+        update_status("No face in source path detected.", NAME)
         return False
 
     # Try to get the face swapper to ensure it loads correctly
@@ -59,8 +64,8 @@ def pre_start() -> bool:
 
 
 def get_face_swapper() -> Any:
+    """Thread-safe singleton loader for the face swapper model."""
     global FACE_SWAPPER
-
     with THREAD_LOCK:
         if FACE_SWAPPER is None:
             model_name = "inswapper_128.onnx"
@@ -101,217 +106,53 @@ def get_face_swapper() -> Any:
     return FACE_SWAPPER
 
 
-def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
+def swap_face(source_face: Any, target_face: Any, temp_frame: Any) -> Any:
+    """Swap source_face onto target_face in temp_frame, with improved Poisson blending and optional mouth region blending."""
     face_swapper = get_face_swapper()
-    if face_swapper is None:
-        update_status("Face swapper model not loaded or failed to load. Skipping swap.", NAME)
-        return temp_frame # Return original frame if model failed or not loaded
-
-    # Store a copy of the original frame before swapping for opacity blending
-    original_frame = temp_frame.copy()
-
-    # --- Pre-swap Input Check (Optional but good practice) ---
-    if temp_frame.dtype != np.uint8:
-        # print(f"Warning: Input frame is {temp_frame.dtype}, converting to uint8 before swap.")
-        temp_frame = np.clip(temp_frame, 0, 255).astype(np.uint8)
-    # --- End Input Check ---
-
-    # Apply the face swap
     try:
-        swapped_frame_raw = face_swapper.get(
+        face_swapper = get_face_swapper()
+        swapped_frame = face_swapper.get(
             temp_frame, target_face, source_face, paste_back=True
         )
-
-        # --- START: CRITICAL FIX FOR ORT 1.17 ---
-        # Check the output type and range from the model
-        if swapped_frame_raw is None:
-             # print("Warning: face_swapper.get returned None.") # Debug
-             return original_frame # Return original if swap somehow failed internally
-
-        # Ensure the output is a numpy array
-        if not isinstance(swapped_frame_raw, np.ndarray):
-            # print(f"Warning: face_swapper.get returned type {type(swapped_frame_raw)}, expected numpy array.") # Debug
-            return original_frame
-
-        # Ensure the output has the correct shape (like the input frame)
-        if swapped_frame_raw.shape != temp_frame.shape:
-             # print(f"Warning: Swapped frame shape {swapped_frame_raw.shape} differs from input {temp_frame.shape}.") # Debug
-             # Attempt resize (might distort if aspect ratio changed, but better than crashing)
-             try:
-                 swapped_frame_raw = cv2.resize(swapped_frame_raw, (temp_frame.shape[1], temp_frame.shape[0]))
-             except Exception as resize_e:
-                 # print(f"Error resizing swapped frame: {resize_e}") # Debug
-                 return original_frame
-
-        # Explicitly clip values to 0-255 and convert to uint8
-        # This handles cases where the model might output floats or values outside the valid range
-        swapped_frame = np.clip(swapped_frame_raw, 0, 255).astype(np.uint8)
-        # --- END: CRITICAL FIX FOR ORT 1.17 ---
-
-    except Exception as e:
-        print(f"Error during face swap using face_swapper.get: {e}") # More specific error
-        # import traceback
-        # traceback.print_exc() # Print full traceback for debugging
-        return original_frame # Return original if swap fails
-
-    # --- Post-swap Processing (Masking, Opacity, etc.) ---
-    # Now, work with the guaranteed uint8 'swapped_frame'
-
-    if getattr(modules.globals, "mouth_mask", False): # Check if mouth_mask is enabled
-        # Create a mask for the target face
-        face_mask = create_face_mask(target_face, temp_frame) # Use temp_frame (original shape) for mask creation geometry
-
-        # Create the mouth mask using original geometry
-        mouth_mask, mouth_cutout, mouth_box, lower_lip_polygon = (
-            create_lower_mouth_mask(target_face, temp_frame) # Use temp_frame (original) for cutout
-        )
-
-        # Apply the mouth area only if mouth_cutout exists
-        if mouth_cutout is not None and mouth_box != (0,0,0,0): # Add check for valid box
-             # Apply mouth area (from original) onto the 'swapped_frame'
-            swapped_frame = apply_mouth_area(
-                swapped_frame, mouth_cutout, mouth_box, face_mask, lower_lip_polygon
-            )
-
-            if getattr(modules.globals, "show_mouth_mask_box", False):
-                mouth_mask_data = (mouth_mask, mouth_cutout, mouth_box, lower_lip_polygon)
-                # Draw visualization on the swapped_frame *before* opacity blending
-                swapped_frame = draw_mouth_mask_visualization(
-                    swapped_frame, target_face, mouth_mask_data
+        if modules.globals.color_correction:
+            mask = create_face_mask(target_face, temp_frame)
+            # Find the center of the mask for seamlessClone
+            y_indices, x_indices = np.where(mask > 0)
+            if len(x_indices) > 0 and len(y_indices) > 0:
+                center_x = int(np.mean(x_indices))
+                center_y = int(np.mean(y_indices))
+                center = (center_x, center_y)
+                # Use seamlessClone for Poisson blending
+                swapped_frame = cv2.seamlessClone(
+                    swapped_frame, temp_frame, mask, center, cv2.NORMAL_CLONE
                 )
-
-    # Apply opacity blend between the original frame and the swapped frame
-    opacity = getattr(modules.globals, "opacity", 1.0)
-    # Ensure opacity is within valid range [0.0, 1.0]
-    opacity = max(0.0, min(1.0, opacity))
-
-    # Blend the original_frame with the (potentially mouth-masked) swapped_frame
-    # Ensure both frames are uint8 before blending
-    final_swapped_frame = cv2.addWeighted(original_frame.astype(np.uint8), 1 - opacity, swapped_frame.astype(np.uint8), opacity, 0)
-
-    # Ensure final frame is uint8 after blending (addWeighted should preserve it, but belt-and-suspenders)
-    final_swapped_frame = final_swapped_frame.astype(np.uint8)
-
-    return final_swapped_frame
-
-
-# --- START: Helper function for interpolation and sharpening ---
-def apply_post_processing(current_frame: Frame, swapped_face_bboxes: List[np.ndarray]) -> Frame:
-    """Applies sharpening and interpolation."""
-    global PREVIOUS_FRAME_RESULT
-
-    processed_frame = current_frame.copy()
-
-    # 1. Apply Sharpening (if enabled)
-    sharpness_value = getattr(modules.globals, "sharpness", 0.0)
-    if sharpness_value > 0.0 and swapped_face_bboxes:
-        height, width = processed_frame.shape[:2]
-        for bbox in swapped_face_bboxes:
-            # Ensure bbox is iterable and has 4 elements
-            if not hasattr(bbox, '__iter__') or len(bbox) != 4:
-                # print(f"Warning: Invalid bbox format for sharpening: {bbox}") # Debug
-                continue
-            x1, y1, x2, y2 = bbox
-            # Ensure coordinates are integers and within bounds
-            try:
-                 x1, y1 = max(0, int(x1)), max(0, int(y1))
-                 x2, y2 = min(width, int(x2)), min(height, int(y2))
-            except ValueError:
-                # print(f"Warning: Could not convert bbox coordinates to int: {bbox}") # Debug
-                continue
-
-
-            if x2 <= x1 or y2 <= y1:
-                continue
-
-            face_region = processed_frame[y1:y2, x1:x2]
-            if face_region.size == 0: continue # Skip empty regions
-
-            # Apply sharpening using addWeighted for smoother control
-            # Use try-except for GaussianBlur and addWeighted as they can fail on invalid inputs
-            try:
-                 blurred = cv2.GaussianBlur(face_region, (0, 0), 3) # sigma=3, kernel size auto
-                 sharpened_region = cv2.addWeighted(
-                    face_region, 1.0 + sharpness_value,
-                    blurred, -sharpness_value,
-                    0
-                 )
-                 # Ensure the sharpened region doesn't have invalid values
-                 sharpened_region = np.clip(sharpened_region, 0, 255).astype(np.uint8)
-                 processed_frame[y1:y2, x1:x2] = sharpened_region
-            except cv2.error as sharpen_e:
-                # print(f"Warning: OpenCV error during sharpening: {sharpen_e} for bbox {bbox}") # Debug
-                # Skip sharpening for this region if it fails
-                pass
-
-
-    # 2. Apply Interpolation (if enabled)
-    enable_interpolation = getattr(modules.globals, "enable_interpolation", False)
-    interpolation_weight = getattr(modules.globals, "interpolation_weight", 0.2)
-
-    final_frame = processed_frame # Start with the current (potentially sharpened) frame
-
-    if enable_interpolation and 0 < interpolation_weight < 1:
-        if PREVIOUS_FRAME_RESULT is not None and PREVIOUS_FRAME_RESULT.shape == processed_frame.shape and PREVIOUS_FRAME_RESULT.dtype == processed_frame.dtype:
-            # Perform interpolation
-            try:
-                 final_frame = cv2.addWeighted(
-                    PREVIOUS_FRAME_RESULT, 1.0 - interpolation_weight,
-                    processed_frame, interpolation_weight,
-                    0
-                 )
-                 # Ensure final frame is uint8
-                 final_frame = np.clip(final_frame, 0, 255).astype(np.uint8)
-            except cv2.error as interp_e:
-                 # print(f"Warning: OpenCV error during interpolation: {interp_e}") # Debug
-                 final_frame = processed_frame # Use current frame if interpolation fails
-                 PREVIOUS_FRAME_RESULT = None # Reset state if error occurs
-
-            # Update the state for the next frame *with the interpolated result*
-            PREVIOUS_FRAME_RESULT = final_frame.copy()
-        else:
-            # If previous frame invalid or doesn't match, use current frame and update state
-            if PREVIOUS_FRAME_RESULT is not None and PREVIOUS_FRAME_RESULT.shape != processed_frame.shape:
-                # print("Info: Frame shape changed, resetting interpolation state.") # Debug
-                pass
-            PREVIOUS_FRAME_RESULT = processed_frame.copy()
-    else:
-         # If interpolation is off or weight is invalid, just use the current frame
-         # Update state with the current (potentially sharpened) frame
-         # Reset previous frame state if interpolation was just turned off or weight is invalid
-         PREVIOUS_FRAME_RESULT = processed_frame.copy()
-
-
-    return final_frame
-# --- END: Helper function for interpolation and sharpening ---
-
-
-def process_frame(source_face: Face, temp_frame: Frame) -> Frame:
-    """
-    DEPRECATED / SIMPLER VERSION - Processes a single frame using one source face.
-    Consider using process_frame_v2 for more complex scenarios.
-    """
-    if getattr(modules.globals, "opacity", 1.0) == 0:
-        # If opacity is 0, no swap happens, so no post-processing needed.
-        # Also reset interpolation state if it was active.
-        global PREVIOUS_FRAME_RESULT
-        PREVIOUS_FRAME_RESULT = None
+        # --- Mouth region blending (optional, after Poisson blending) ---
+        if hasattr(modules.globals, "mouth_mask") and modules.globals.mouth_mask:
+            # Extract mouth region from the original frame
+            mouth_mask_data = create_lower_mouth_mask(target_face, temp_frame)
+            if mouth_mask_data is not None:
+                mask, mouth_cutout, mouth_box, mouth_polygon = mouth_mask_data
+                face_mask = create_face_mask(target_face, temp_frame)
+                swapped_frame = apply_mouth_area(
+                    swapped_frame, mouth_cutout, mouth_box, face_mask, mouth_polygon
+                )
+        return swapped_frame
+    except Exception as e:
+        logging.error(f"Face swap failed: {e}")
         return temp_frame
 
-    # Color correction removed from here (better applied before swap if needed)
 
-    processed_frame = temp_frame # Start with the input frame
-    swapped_face_bboxes = [] # Keep track of where swaps happened
-
+def process_frame(source_face: Any, temp_frame: Any) -> Any:
+    """Process a single frame for face swapping."""
     if modules.globals.many_faces:
         many_faces = get_many_faces(processed_frame)
         if many_faces:
             current_swap_target = processed_frame.copy() # Apply swaps sequentially on a copy
             for target_face in many_faces:
-                current_swap_target = swap_face(source_face, target_face, current_swap_target)
-                if target_face is not None and hasattr(target_face, "bbox") and target_face.bbox is not None:
-                    swapped_face_bboxes.append(target_face.bbox.astype(int))
-            processed_frame = current_swap_target # Assign the final result after all swaps
+                if source_face and target_face:
+                    temp_frame = swap_face(source_face, target_face, temp_frame)
+                else:
+                    logging.warning("Face detection failed for target/source.")
     else:
         target_face = get_one_face(processed_frame)
         if target_face:
@@ -324,74 +165,49 @@ def process_frame(source_face: Face, temp_frame: Frame) -> Frame:
 
     return final_frame
 
+def process_frame_v2(temp_frame: Any, temp_frame_path: str = "") -> Any:
+    """Process a frame using mapped faces (for mapped face mode)."""
+    if is_image(modules.globals.target_path):
+        if modules.globals.many_faces:
+            source_face = default_source_face()
+            for map in modules.globals.source_target_map:
+                target_face = map["target"]["face"]
+                temp_frame = swap_face(source_face, target_face, temp_frame)
 
-def process_frame_v2(temp_frame: Frame, temp_frame_path: str = "") -> Frame:
-    """Handles complex mapping scenarios (map_faces=True) and live streams."""
-    if getattr(modules.globals, "opacity", 1.0) == 0:
-        # If opacity is 0, no swap happens, so no post-processing needed.
-        # Also reset interpolation state if it was active.
-        global PREVIOUS_FRAME_RESULT
-        PREVIOUS_FRAME_RESULT = None
-        return temp_frame
+        elif not modules.globals.many_faces:
+            for map in modules.globals.source_target_map:
+                if "source" in map:
+                    source_face = map["source"]["face"]
+                    target_face = map["target"]["face"]
+                    temp_frame = swap_face(source_face, target_face, temp_frame)
 
-    processed_frame = temp_frame # Start with the input frame
-    swapped_face_bboxes = [] # Keep track of where swaps happened
+    elif is_video(modules.globals.target_path):
+        if modules.globals.many_faces:
+            source_face = default_source_face()
+            for map in modules.globals.source_target_map:
+                target_frame = [
+                    f
+                    for f in map["target_faces_in_frame"]
+                    if f["location"] == temp_frame_path
+                ]
 
-    # Determine source/target pairs based on mode
-    source_target_pairs = []
+                for frame in target_frame:
+                    for target_face in frame["faces"]:
+                        temp_frame = swap_face(source_face, target_face, temp_frame)
 
-    # Ensure maps exist before accessing them
-    source_target_map = getattr(modules.globals, "source_target_map", None)
-    simple_map = getattr(modules.globals, "simple_map", None)
+        elif not modules.globals.many_faces:
+            for map in modules.globals.source_target_map:
+                if "source" in map:
+                    target_frame = [
+                        f
+                        for f in map["target_faces_in_frame"]
+                        if f["location"] == temp_frame_path
+                    ]
+                    source_face = map["source"]["face"]
 
-    # Check if target is a file path (image or video) or live stream
-    is_file_target = modules.globals.target_path and (is_image(modules.globals.target_path) or is_video(modules.globals.target_path))
-
-    if is_file_target:
-        # Processing specific image or video file with pre-analyzed maps
-        if source_target_map:
-            if modules.globals.many_faces:
-                source_face = default_source_face() # Use default source for all targets
-                if source_face:
-                    for map_data in source_target_map:
-                        if is_image(modules.globals.target_path):
-                            target_info = map_data.get("target", {})
-                            if target_info: # Check if target info exists
-                                target_face = target_info.get("face")
-                                if target_face:
-                                    source_target_pairs.append((source_face, target_face))
-                        elif is_video(modules.globals.target_path):
-                             # Find faces for the current frame_path in video map
-                             target_frames_data = map_data.get("target_faces_in_frame", [])
-                             if target_frames_data: # Check if frame data exists
-                                 target_frames = [f for f in target_frames_data if f and f.get("location") == temp_frame_path]
-                                 for frame_data in target_frames:
-                                     faces_in_frame = frame_data.get("faces", [])
-                                     if faces_in_frame: # Check if faces exist
-                                         for target_face in faces_in_frame:
-                                             source_target_pairs.append((source_face, target_face))
-            else: # Single face or specific mapping
-                 for map_data in source_target_map:
-                    source_info = map_data.get("source", {})
-                    if not source_info: continue # Skip if no source info
-                    source_face = source_info.get("face")
-                    if not source_face: continue # Skip if no source defined for this map entry
-
-                    if is_image(modules.globals.target_path):
-                        target_info = map_data.get("target", {})
-                        if target_info:
-                           target_face = target_info.get("face")
-                           if target_face:
-                              source_target_pairs.append((source_face, target_face))
-                    elif is_video(modules.globals.target_path):
-                        target_frames_data = map_data.get("target_faces_in_frame", [])
-                        if target_frames_data:
-                           target_frames = [f for f in target_frames_data if f and f.get("location") == temp_frame_path]
-                           for frame_data in target_frames:
-                               faces_in_frame = frame_data.get("faces", [])
-                               if faces_in_frame:
-                                  for target_face in faces_in_frame:
-                                      source_target_pairs.append((source_face, target_face))
+                    for frame in target_frame:
+                        for target_face in frame["faces"]:
+                            temp_frame = swap_face(source_face, target_face, temp_frame)
 
     else:
         # Live stream or webcam processing (analyze faces on the fly)
@@ -453,167 +269,70 @@ def process_frame_v2(temp_frame: Frame, temp_frame_path: str = "") -> Frame:
 def process_frames(
     source_path: str, temp_frame_paths: List[str], progress: Any = None
 ) -> None:
-    """
-    Processes a list of frame paths (typically for video).
-    Iterates through frames, applies the appropriate swapping logic based on globals,
-    and saves the result back to the frame path. Handles multi-threading via caller.
-    """
-    # Determine which processing function to use based on map_faces global setting
-    use_v2 = getattr(modules.globals, "map_faces", False)
-    source_face = None # Initialize source_face
-
-    # --- Pre-load source face only if needed (Simple Mode: map_faces=False) ---
-    if not use_v2:
-        if not source_path or not os.path.exists(source_path):
-            update_status(f"Error: Source path invalid or not provided for simple mode: {source_path}", NAME)
-            # Log the error but allow proceeding; subsequent check will stop processing.
-        else:
-            try:
-                source_img = cv2.imread(source_path)
-                if source_img is None:
-                    # Specific error for file reading failure
-                    update_status(f"Error reading source image file {source_path}. Please check the path and file integrity.", NAME)
-                else:
-                    source_face = get_one_face(source_img)
-                    if source_face is None:
-                        # Specific message for no face detected after successful read
-                        update_status(f"Warning: Successfully read source image {source_path}, but no face was detected. Swaps will be skipped.", NAME)
-            except Exception as e:
-                # Print the specific exception caught
-                import traceback
-                print(f"{NAME}: Caught exception during source image processing for {source_path}:")
-                traceback.print_exc() # Print the full traceback
-                update_status(f"Error during source image reading or analysis {source_path}: {e}", NAME)
-                # Log general exception during the process
-
-    total_frames = len(temp_frame_paths)
-    # update_status(f"Processing {total_frames} frames. Use V2 (map_faces): {use_v2}", NAME) # Optional Debug
-
-    # --- Stop processing entirely if in Simple Mode and source face is invalid ---
-    if not use_v2 and source_face is None:
-        update_status(f"Halting video processing: Invalid or no face detected in source image for simple mode.", NAME)
-        if progress:
-            # Ensure the progress bar completes if it was started
-            remaining_updates = total_frames - progress.n if hasattr(progress, 'n') else total_frames
-            if remaining_updates > 0:
-                progress.update(remaining_updates)
-        return # Exit the function entirely
-
-    # --- Process each frame path provided in the list ---
-    # Note: In the current core.py multi_process_frame, temp_frame_paths will usually contain only ONE path per call.
-    for i, temp_frame_path in enumerate(temp_frame_paths):
-        # update_status(f"Processing frame {i+1}/{total_frames}: {os.path.basename(temp_frame_path)}", NAME) # Optional Debug
-
-        # Read the target frame
-        try:
-            temp_frame = cv2.imread(temp_frame_path)
-            if temp_frame is None:
-                print(f"{NAME}: Error: Could not read frame: {temp_frame_path}, skipping.")
-                if progress: progress.update(1)
-                continue # Skip this frame if read fails
-        except Exception as read_e:
-            print(f"{NAME}: Error reading frame {temp_frame_path}: {read_e}, skipping.")
-            if progress: progress.update(1)
-            continue
-
-        # Select processing function and execute
-        result_frame = None
-        try:
-            if use_v2:
-                # V2 uses global maps and needs the frame path for lookup in video mode
-                # update_status(f"Using process_frame_v2 for: {os.path.basename(temp_frame_path)}", NAME) # Optional Debug
-                result_frame = process_frame_v2(temp_frame, temp_frame_path)
-            else:
-                # Simple mode uses the pre-loaded source_face (already checked for validity above)
-                # update_status(f"Using process_frame (simple) for: {os.path.basename(temp_frame_path)}", NAME) # Optional Debug
-                result_frame = process_frame(source_face, temp_frame) # source_face is guaranteed to be valid here
-
-            # Check if processing actually returned a frame
-            if result_frame is None:
-                 print(f"{NAME}: Warning: Processing returned None for frame {temp_frame_path}. Using original.")
-                 result_frame = temp_frame
-
-        except Exception as proc_e:
-            print(f"{NAME}: Error processing frame {temp_frame_path}: {proc_e}")
-            # import traceback # Optional for detailed debugging
-            # traceback.print_exc()
-            result_frame = temp_frame # Use original frame on processing error
-
-        # Write the result back to the same frame path
-        try:
-            write_success = cv2.imwrite(temp_frame_path, result_frame)
-            if not write_success:
-                print(f"{NAME}: Error: Failed to write processed frame to {temp_frame_path}")
-        except Exception as write_e:
-            print(f"{NAME}: Error writing frame {temp_frame_path}: {write_e}")
-
-        # Update progress bar
-        if progress:
-            progress.update(1)
-        # else: # Basic console progress (optional)
-        #     if (i + 1) % 10 == 0 or (i + 1) == total_frames: # Update every 10 frames or on last frame
-        #        update_status(f"Processed frame {i+1}/{total_frames}", NAME)
-
-
-def process_image(source_path: str, target_path: str, output_path: str) -> None:
-    """Processes a single target image."""
-    # --- Reset interpolation state for single image processing ---
-    global PREVIOUS_FRAME_RESULT
-    PREVIOUS_FRAME_RESULT = None
-    # ---
-
-    use_v2 = getattr(modules.globals, "map_faces", False)
-
-    # Read target first
-    try:
-        target_frame = cv2.imread(target_path)
-        if target_frame is None:
-            update_status(f"Error: Could not read target image: {target_path}", NAME)
+    """Process a list of frames for face swapping, updating progress and handling errors."""
+    if not modules.globals.map_faces:
+        source_face = get_one_face(cv2.imread(source_path))
+        if source_face is None:
+            logging.warning("No face detected in source image. Skipping all frames.")
+            if progress:
+                for _ in temp_frame_paths:
+                    progress.update(1)
             return
-    except Exception as read_e:
-        update_status(f"Error reading target image {target_path}: {read_e}", NAME)
-        return
-
-    result = None
-    try:
-        if use_v2:
-            if getattr(modules.globals, "many_faces", False):
-                 update_status("Processing image with 'map_faces' and 'many_faces'. Using pre-analysis map.", NAME)
-            # V2 processes based on global maps, doesn't need source_path here directly
-            # Assumes maps are pre-populated. Pass target_path for map lookup.
-            result = process_frame_v2(target_frame, target_path)
-
-        else: # Simple mode
+        for temp_frame_path in temp_frame_paths:
+            temp_frame = cv2.imread(temp_frame_path)
             try:
-                source_img = cv2.imread(source_path)
-                if source_img is None:
-                    update_status(f"Error: Could not read source image: {source_path}", NAME)
-                    return
-                source_face = get_one_face(source_img)
-                if not source_face:
-                    update_status(f"Error: No face found in source image: {source_path}", NAME)
-                    return
-            except Exception as src_e:
-                 update_status(f"Error reading or analyzing source image {source_path}: {src_e}", NAME)
-                 return
+                result = process_frame(source_face, temp_frame)
+                if np.array_equal(result, temp_frame):
+                    logging.warning(f"No face detected in target frame: {temp_frame_path}. Skipping write.")
+                else:
+                    cv2.imwrite(temp_frame_path, result)
+            except Exception as exception:
+                logging.error(f"Frame processing failed: {exception}")
+            finally:
+                if progress:
+                    progress.update(1)
+    else:
+        for temp_frame_path in temp_frame_paths:
+            temp_frame = cv2.imread(temp_frame_path)
+            try:
+                result = process_frame_v2(temp_frame, temp_frame_path)
+                if np.array_equal(result, temp_frame):
+                    logging.warning(f"No face detected in mapped target frame: {temp_frame_path}. Skipping write.")
+                else:
+                    cv2.imwrite(temp_frame_path, result)
+            except Exception as exception:
+                logging.error(f"Frame processing failed: {exception}")
+            finally:
+                if progress:
+                    progress.update(1)
 
-            result = process_frame(source_face, target_frame)
 
-        # Write the result if processing was successful
-        if result is not None:
-            write_success = cv2.imwrite(output_path, result)
-            if write_success:
-                update_status(f"Output image saved to: {output_path}", NAME)
-            else:
-                update_status(f"Error: Failed to write output image to {output_path}", NAME)
-        else:
-            # This case might occur if process_frame/v2 returns None unexpectedly
-            update_status("Image processing failed (result was None).", NAME)
-
-    except Exception as proc_e:
-         update_status(f"Error during image processing: {proc_e}", NAME)
-         # import traceback
-         # traceback.print_exc()
+def process_image(source_path: str, target_path: str, output_path: str) -> bool:
+    """Process a single image and return True if successful, False if no face detected."""
+    if not modules.globals.map_faces:
+        source_face = get_one_face(cv2.imread(source_path))
+        if source_face is None:
+            logging.warning("No face detected in source image. Skipping output.")
+            return False
+        target_frame = cv2.imread(target_path)
+        result = process_frame(source_face, target_frame)
+        if np.array_equal(result, target_frame):
+            logging.warning("No face detected in target image. Skipping output.")
+            return False
+        cv2.imwrite(output_path, result)
+        return True
+    else:
+        if modules.globals.many_faces:
+            update_status(
+                "Many faces enabled. Using first source image. Progressing...", NAME
+            )
+        target_frame = cv2.imread(target_path)
+        result = process_frame_v2(target_frame)
+        if np.array_equal(result, target_frame):
+            logging.warning("No face detected in mapped target image. Skipping output.")
+            return False
+        cv2.imwrite(output_path, result)
+        return True
 
 
 def process_video(source_path: str, temp_frame_paths: List[str]) -> None:
@@ -638,9 +357,21 @@ def process_video(source_path: str, temp_frame_paths: List[str]) -> None:
 # MASKING FUNCTIONS (Mostly unchanged, added safety checks and minor improvements)
 # ==========================
 
-def create_lower_mouth_mask(
-    face: Face, frame: Frame
-) -> (np.ndarray, np.ndarray, tuple, np.ndarray):
+def color_transfer(source: np.ndarray, target: np.ndarray) -> np.ndarray:
+    source_lab = cv2.cvtColor(source, cv2.COLOR_BGR2LAB).astype("float32")
+    target_lab = cv2.cvtColor(target, cv2.COLOR_BGR2LAB).astype("float32")
+    s_mean, s_std = cv2.meanStdDev(source_lab)
+    t_mean, t_std = cv2.meanStdDev(target_lab)
+    s_mean = s_mean.reshape(1, 1, 3)
+    s_std = s_std.reshape(1, 1, 3)
+    t_mean = t_mean.reshape(1, 1, 3)
+    t_std = t_std.reshape(1, 1, 3)
+    result = (source_lab - s_mean) * (t_std / (s_std + 1e-6)) + t_mean
+    result = np.clip(result, 0, 255).astype("uint8")
+    return cv2.cvtColor(result, cv2.COLOR_LAB2BGR)
+
+
+def create_lower_mouth_mask(face, frame: np.ndarray):
     mask = np.zeros(frame.shape[:2], dtype=np.uint8)
     mouth_cutout = None
     lower_lip_polygon = None # Initialize
@@ -774,9 +505,12 @@ def create_lower_mouth_mask(
     return mask, mouth_cutout, mouth_box, lower_lip_polygon
 
 
-def draw_mouth_mask_visualization(
-    frame: Frame, face: Face, mouth_mask_data: tuple
-) -> Frame:
+def draw_mouth_mask_visualization(frame: np.ndarray, face, mouth_mask_data: tuple) -> np.ndarray:
+    landmarks = face.landmark_2d_106
+    if landmarks is not None and mouth_mask_data is not None:
+        mask, mouth_cutout, (min_x, min_y, max_x, max_y), lower_lip_polygon = (
+            mouth_mask_data
+        )
 
     # Validate inputs
     if frame is None or face is None or mouth_mask_data is None or len(mouth_mask_data) != 4:
@@ -871,7 +605,7 @@ def apply_mouth_area(
             # print("Warning: ROI became invalid after clamping in apply_mouth_area.")
             return frame # ROI is invalid
 
-        roi = frame[min_y:max_y, min_x:max_x]
+        color_corrected_mouth = color_transfer(resized_mouth_cutout, roi)
 
         # Ensure ROI extraction was successful
         if roi.size == 0:
@@ -984,15 +718,8 @@ def apply_mouth_area(
     return frame
 
 
-def create_face_mask(face: Face, frame: Frame) -> np.ndarray:
-    """Creates a feathered mask covering the whole face area based on landmarks."""
-    mask = np.zeros(frame.shape[:2], dtype=np.uint8) # Start with uint8
-
-    # Validate inputs
-    if face is None or not hasattr(face, 'landmark_2d_106') or frame is None:
-        # print("Warning: Invalid face or frame for create_face_mask.")
-        return mask # Return empty mask
-
+def create_face_mask(face, frame: np.ndarray) -> np.ndarray:
+    mask = np.zeros(frame.shape[:2], dtype=np.uint8)
     landmarks = face.landmark_2d_106
     if landmarks is None or not isinstance(landmarks, np.ndarray) or landmarks.shape[0] < 106:
         # print("Warning: Invalid or insufficient landmarks for face mask.")
@@ -1019,115 +746,4 @@ def create_face_mask(face: Face, frame: Frame) -> np.ndarray:
                  # Fallback: use bounding box of landmarks? Or just return empty mask?
                  return mask
 
-             # Draw the filled convex hull on the mask
-             cv2.fillConvexPoly(mask, hull.astype(np.int32), 255)
-        except Exception as hull_e:
-             print(f"Error creating convex hull for face mask: {hull_e}")
-             return mask # Return empty mask on error
-
-
-        # Apply Gaussian blur to feather the mask edges
-        # Kernel size should be reasonably large, odd, and positive
-        blur_k_size = getattr(modules.globals, "face_mask_blur", 31) # Default 31
-        blur_k_size = max(1, blur_k_size // 2 * 2 + 1) # Ensure odd and positive
-
-        # Use sigma=0 to let OpenCV calculate from kernel size
-        # Apply blur to the uint8 mask directly
-        mask = cv2.GaussianBlur(mask, (blur_k_size, blur_k_size), 0)
-
-        # --- Optional: Return float mask for apply_mouth_area ---
-        # mask = mask.astype(float) / 255.0
-        # ---
-
-    except IndexError:
-        # print("Warning: Landmark index out of bounds for face mask.") # Optional debug
-        pass
-    except Exception as e:
-        print(f"Error creating face mask: {e}") # Print unexpected errors
-        # import traceback
-        # traceback.print_exc()
-        pass
-
-    return mask # Return uint8 mask
-
-
-def apply_color_transfer(source, target):
-    """
-    Apply color transfer using LAB color space. Handles potential division by zero and ensures output is uint8.
-    """
-    # Input validation
-    if source is None or target is None or source.size == 0 or target.size == 0:
-        # print("Warning: Invalid input to apply_color_transfer.")
-        return source # Return original source if invalid input
-
-    # Ensure images are 3-channel BGR uint8
-    if len(source.shape) != 3 or source.shape[2] != 3 or source.dtype != np.uint8:
-        # print("Warning: Source image for color transfer is not uint8 BGR.")
-        # Attempt conversion if possible, otherwise return original
-        try:
-            if len(source.shape) == 2: # Grayscale
-                source = cv2.cvtColor(source, cv2.COLOR_GRAY2BGR)
-            source = np.clip(source, 0, 255).astype(np.uint8)
-            if len(source.shape)!= 3 or source.shape[2]!= 3: raise ValueError("Conversion failed")
-        except Exception:
-            return source
-    if len(target.shape) != 3 or target.shape[2] != 3 or target.dtype != np.uint8:
-        # print("Warning: Target image for color transfer is not uint8 BGR.")
-        try:
-            if len(target.shape) == 2: # Grayscale
-                target = cv2.cvtColor(target, cv2.COLOR_GRAY2BGR)
-            target = np.clip(target, 0, 255).astype(np.uint8)
-            if len(target.shape)!= 3 or target.shape[2]!= 3: raise ValueError("Conversion failed")
-        except Exception:
-             return source # Return original source if target invalid
-
-    result_bgr = source # Default to original source in case of errors
-
-    try:
-        # Convert to float32 [0, 1] range for LAB conversion
-        source_float = source.astype(np.float32) / 255.0
-        target_float = target.astype(np.float32) / 255.0
-
-        source_lab = cv2.cvtColor(source_float, cv2.COLOR_BGR2LAB)
-        target_lab = cv2.cvtColor(target_float, cv2.COLOR_BGR2LAB)
-
-        # Compute statistics
-        source_mean, source_std = cv2.meanStdDev(source_lab)
-        target_mean, target_std = cv2.meanStdDev(target_lab)
-
-        # Reshape for broadcasting
-        source_mean = source_mean.reshape((1, 1, 3))
-        source_std = source_std.reshape((1, 1, 3))
-        target_mean = target_mean.reshape((1, 1, 3))
-        target_std = target_std.reshape((1, 1, 3))
-
-        # Avoid division by zero or very small std deviations (add epsilon)
-        epsilon = 1e-6
-        source_std = np.maximum(source_std, epsilon)
-        # target_std = np.maximum(target_std, epsilon) # Target std can be small
-
-        # Perform color transfer in LAB space
-        result_lab = (source_lab - source_mean) * (target_std / source_std) + target_mean
-
-        # --- No explicit clipping needed in LAB space typically ---
-        # Clipping is handled implicitly by the conversion back to BGR and then to uint8
-
-        # Convert back to BGR float [0, 1]
-        result_bgr_float = cv2.cvtColor(result_lab, cv2.COLOR_LAB2BGR)
-
-        # Clip final BGR values to [0, 1] range before scaling to [0, 255]
-        result_bgr_float = np.clip(result_bgr_float, 0.0, 1.0)
-
-        # Convert back to uint8 [0, 255]
-        result_bgr = (result_bgr_float * 255.0).astype("uint8")
-
-    except cv2.error as e:
-         # print(f"OpenCV error during color transfer: {e}. Returning original source.") # Optional debug
-         return source # Return original source if conversion fails
-    except Exception as e:
-         # print(f"Unexpected color transfer error: {e}. Returning original source.") # Optional debug
-         # import traceback
-         # traceback.print_exc()
-         return source
-
-    return result_bgr
+    return mask

@@ -2,13 +2,14 @@ import glob
 import mimetypes
 import os
 import platform
-import shutil
 import ssl
 import subprocess
-import urllib
+import cv2
+import modules
 from pathlib import Path
 from typing import List, Any
 from tqdm import tqdm
+import shlex
 
 import modules.globals
 
@@ -21,6 +22,7 @@ if platform.system().lower() == "darwin":
 
 
 def run_ffmpeg(args: List[str]) -> bool:
+    """Run an ffmpeg command with the given arguments."""
     commands = [
         "ffmpeg",
         "-hide_banner",
@@ -31,14 +33,16 @@ def run_ffmpeg(args: List[str]) -> bool:
     ]
     commands.extend(args)
     try:
-        subprocess.check_output(commands, stderr=subprocess.STDOUT)
+
+        subprocess.run(shlex.split(shlex.join(commands)), check=True)
         return True
-    except Exception:
-        pass
-    return False
+    except Exception as e:
+        print(f"Error running ffmpeg: {e}")
+        return False
 
 
 def detect_fps(target_path: str) -> float:
+    """Detect the FPS of a video file using ffprobe."""
     command = [
         "ffprobe",
         "-v",
@@ -51,16 +55,18 @@ def detect_fps(target_path: str) -> float:
         "default=noprint_wrappers=1:nokey=1",
         target_path,
     ]
-    output = subprocess.check_output(command).decode().strip().split("/")
     try:
-        numerator, denominator = map(int, output)
-        return numerator / denominator
-    except Exception:
-        pass
-    return 30.0
+        output = subprocess.check_output(command).decode().strip().split("/")
+        if len(output) == 2:
+            return float(output[0]) / float(output[1])
+        return float(output[0])
+    except Exception as e:
+        print(f"Error detecting FPS: {e}")
+        return 30.0
 
 
 def extract_frames(target_path: str) -> None:
+    """Extract frames from a video file to a temp directory."""
     temp_directory_path = get_temp_directory_path(target_path)
     run_ffmpeg(
         [
@@ -74,6 +80,7 @@ def extract_frames(target_path: str) -> None:
 
 
 def create_video(target_path: str, fps: float = 30.0) -> None:
+    """Create a video from frames in the temp directory."""
     temp_output_path = get_temp_output_path(target_path)
     temp_directory_path = get_temp_directory_path(target_path)
     run_ffmpeg(
@@ -97,6 +104,7 @@ def create_video(target_path: str, fps: float = 30.0) -> None:
 
 
 def restore_audio(target_path: str, output_path: str) -> None:
+    """Restore audio from the original video to the output video."""
     temp_output_path = get_temp_output_path(target_path)
     done = run_ffmpeg(
         [
@@ -115,26 +123,37 @@ def restore_audio(target_path: str, output_path: str) -> None:
         ]
     )
     if not done:
-        move_temp(target_path, output_path)
+        print(f"Failed to restore audio for {output_path}")
 
 
 def get_temp_frame_paths(target_path: str) -> List[str]:
+    """Get all temp frame file paths for a given target path."""
     temp_directory_path = get_temp_directory_path(target_path)
-    return glob.glob((os.path.join(glob.escape(temp_directory_path), "*.png")))
+    try:
+        return sorted([
+            str(p) for p in Path(temp_directory_path).glob("*.png")
+        ])
+    except Exception as e:
+        print(f"Error getting temp frame paths: {e}")
+        return []
 
 
 def get_temp_directory_path(target_path: str) -> str:
-    target_name, _ = os.path.splitext(os.path.basename(target_path))
-    target_directory_path = os.path.dirname(target_path)
-    return os.path.join(target_directory_path, TEMP_DIRECTORY, target_name)
+    """Get the temp directory path for a given target path."""
+    base = os.path.splitext(os.path.basename(target_path))[0]
+    temp_dir = os.path.join(TEMP_DIRECTORY, base)
+    os.makedirs(temp_dir, exist_ok=True)
+    return temp_dir
 
 
 def get_temp_output_path(target_path: str) -> str:
-    temp_directory_path = get_temp_directory_path(target_path)
-    return os.path.join(temp_directory_path, TEMP_FILE)
+    """Get the temp output video path for a given target path."""
+    base = os.path.splitext(os.path.basename(target_path))[0]
+    return os.path.join(TEMP_DIRECTORY, f"{base}_out.mp4")
 
 
 def normalize_output_path(source_path: str, target_path: str, output_path: str) -> Any:
+    """Normalize the output path for saving results."""
     if source_path and target_path:
         source_name, _ = os.path.splitext(os.path.basename(source_path))
         target_name, target_extension = os.path.splitext(os.path.basename(target_path))
@@ -142,68 +161,76 @@ def normalize_output_path(source_path: str, target_path: str, output_path: str) 
             return os.path.join(
                 output_path, source_name + "-" + target_name + target_extension
             )
+    # if not output_path:
+    #     base = os.path.splitext(os.path.basename(target_path))[0]
+    #     return os.path.join(TEMP_DIRECTORY, f"{base}_result.png")
     return output_path
 
 
 def create_temp(target_path: str) -> None:
+    """Create a temp directory for a given target path."""
     temp_directory_path = get_temp_directory_path(target_path)
-    Path(temp_directory_path).mkdir(parents=True, exist_ok=True)
+    os.makedirs(temp_directory_path, exist_ok=True)
 
 
 def move_temp(target_path: str, output_path: str) -> None:
+    """Move temp output to the final output path."""
     temp_output_path = get_temp_output_path(target_path)
-    if os.path.isfile(temp_output_path):
-        if os.path.isfile(output_path):
-            os.remove(output_path)
-        shutil.move(temp_output_path, output_path)
+    try:
+        os.rename(temp_output_path, output_path)
+    except Exception as e:
+        print(f"Error moving temp output: {e}")
 
 
 def clean_temp(target_path: str) -> None:
+    """Remove temp directory and files for a given target path."""
     temp_directory_path = get_temp_directory_path(target_path)
-    parent_directory_path = os.path.dirname(temp_directory_path)
-    if not modules.globals.keep_frames and os.path.isdir(temp_directory_path):
-        shutil.rmtree(temp_directory_path)
-    if os.path.exists(parent_directory_path) and not os.listdir(parent_directory_path):
-        os.rmdir(parent_directory_path)
+    try:
+        for p in Path(temp_directory_path).glob("*"):
+            p.unlink()
+        os.rmdir(temp_directory_path)
+    except Exception as e:
+        print(f"Error cleaning temp directory: {e}")
 
 
 def has_image_extension(image_path: str) -> bool:
-    return image_path.lower().endswith(("png", "jpg", "jpeg"))
+    """Check if a file has an image extension."""
+    return os.path.splitext(image_path)[1].lower() in [
+        ".png", ".jpg", ".jpeg", ".gif", ".bmp"
+    ]
 
 
 def is_image(image_path: str) -> bool:
-    if image_path and os.path.isfile(image_path):
-        mimetype, _ = mimetypes.guess_type(image_path)
-        return bool(mimetype and mimetype.startswith("image/"))
-    return False
+    """Check if a file is an image."""
+    return has_image_extension(image_path)
 
 
 def is_video(video_path: str) -> bool:
-    if video_path and os.path.isfile(video_path):
-        mimetype, _ = mimetypes.guess_type(video_path)
-        return bool(mimetype and mimetype.startswith("video/"))
-    return False
+    """Check if a file is a video."""
+    return os.path.splitext(video_path)[1].lower() in [
+        ".mp4", ".mkv"
+    ]
 
 
 def conditional_download(download_directory_path: str, urls: List[str]) -> None:
-    if not os.path.exists(download_directory_path):
-        os.makedirs(download_directory_path)
+    """Download files from URLs if they do not exist in the directory."""
+    import requests
     for url in urls:
-        download_file_path = os.path.join(
-            download_directory_path, os.path.basename(url)
-        )
-        if not os.path.exists(download_file_path):
-            request = urllib.request.urlopen(url)  # type: ignore[attr-defined]
-            total = int(request.headers.get("Content-Length", 0))
-            with tqdm(
-                total=total,
-                desc="Downloading",
-                unit="B",
-                unit_scale=True,
-                unit_divisor=1024,
-            ) as progress:
-                urllib.request.urlretrieve(url, download_file_path, reporthook=lambda count, block_size, total_size: progress.update(block_size))  # type: ignore[attr-defined]
+        filename = os.path.basename(url)
+        file_path = os.path.join(download_directory_path, filename)
+        if not os.path.exists(file_path):
+            try:
+                print(f"Downloading {url}...")
+                r = requests.get(url, stream=True)
+                with open(file_path, "wb") as f:
+                    for chunk in r.iter_content(chunk_size=8192):
+                        if chunk:
+                            f.write(chunk)
+                print(f"Downloaded {filename}")
+            except Exception as e:
+                print(f"Error downloading {url}: {e}")
 
 
 def resolve_relative_path(path: str) -> str:
-    return os.path.abspath(os.path.join(os.path.dirname(__file__), path))
+    """Resolve a relative path to an absolute path."""
+    return os.path.abspath(path)
