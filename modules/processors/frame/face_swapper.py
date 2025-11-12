@@ -4,7 +4,6 @@ import insightface
 import threading
 import numpy as np
 import modules.globals
-import logging
 import modules.processors.frame.core
 from modules.core import update_status
 from modules.face_analyser import get_one_face, get_many_faces, default_source_face
@@ -15,17 +14,22 @@ from modules.utilities import (
     is_video,
 )
 from modules.cluster_analysis import find_closest_centroid
+# Removed modules.globals.face_swapper_enabled - assuming controlled elsewhere or implicitly true if used
+# Removed modules.globals.opacity - accessed via getattr
 import os
 
 FACE_SWAPPER = None
 THREAD_LOCK = threading.Lock()
 NAME = "DLC.FACE-SWAPPER"
 
+# --- START: Added for Interpolation ---
+PREVIOUS_FRAME_RESULT = None # Stores the final processed frame from the previous step
+# --- END: Added for Interpolation ---
+
 abs_dir = os.path.dirname(os.path.abspath(__file__))
 models_dir = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(abs_dir))), "models"
 )
-
 
 def pre_check() -> bool:
     """Ensure required model is downloaded."""
@@ -49,11 +53,13 @@ def pre_start() -> bool:
     ):
         update_status("No face in source path detected.", NAME)
         return False
-    if not is_image(modules.globals.target_path) and not is_video(
-        modules.globals.target_path
-    ):
-        update_status("Select an image or video for target path.", NAME)
+
+    # Try to get the face swapper to ensure it loads correctly
+    if get_face_swapper() is None:
+        # Error message already printed within get_face_swapper
         return False
+
+    # Add other essential checks if needed, e.g., target/source path validity
     return True
 
 
@@ -62,10 +68,41 @@ def get_face_swapper() -> Any:
     global FACE_SWAPPER
     with THREAD_LOCK:
         if FACE_SWAPPER is None:
-            model_path = os.path.join(models_dir, "inswapper_128_fp16.onnx")
-            FACE_SWAPPER = insightface.model_zoo.get_model(
-                model_path, providers=modules.globals.execution_providers
-            )
+            model_name = "inswapper_128.onnx"
+            if "CUDAExecutionProvider" in modules.globals.execution_providers:
+                model_name = "inswapper_128_fp16.onnx"
+            model_path = os.path.join(models_dir, model_name)
+            update_status(f"Loading face swapper model from: {model_path}", NAME)
+            try:
+                # Ensure the providers list is correctly passed
+                # Apply CoreML optimization for Mac systems
+                FACE_SWAPPER = insightface.model_zoo.get_model(
+                    model_path,
+                    providers=[
+                        (
+                            (
+                                "CoreMLExecutionProvider",
+                                {
+                                    "ModelFormat": "MLProgram",
+                                    "MLComputeUnits": "CPUAndGPU",
+                                    "SpecializationStrategy": "FastPrediction",
+                                    "AllowLowPrecisionAccumulationOnGPU": 1,
+                                },
+                            )
+                            if p == "CoreMLExecutionProvider"
+                            else p
+                        )
+                        for p in modules.globals.execution_providers
+                    ],
+                )
+                update_status("Face swapper model loaded successfully.", NAME)
+            except Exception as e:
+                update_status(f"Error loading face swapper model: {e}", NAME)
+                # print traceback maybe?
+                # import traceback
+                # traceback.print_exc()
+                FACE_SWAPPER = None # Ensure it remains None on failure
+                return None
     return FACE_SWAPPER
 
 
@@ -108,21 +145,25 @@ def swap_face(source_face: Any, target_face: Any, temp_frame: Any) -> Any:
 def process_frame(source_face: Any, temp_frame: Any) -> Any:
     """Process a single frame for face swapping."""
     if modules.globals.many_faces:
-        many_faces = get_many_faces(temp_frame)
+        many_faces = get_many_faces(processed_frame)
         if many_faces:
+            current_swap_target = processed_frame.copy() # Apply swaps sequentially on a copy
             for target_face in many_faces:
                 if source_face and target_face:
                     temp_frame = swap_face(source_face, target_face, temp_frame)
                 else:
                     logging.warning("Face detection failed for target/source.")
     else:
-        target_face = get_one_face(temp_frame)
-        if target_face and source_face:
-            temp_frame = swap_face(source_face, target_face, temp_frame)
-        else:
-            logging.error("Face detection failed for target or source.")
-    return temp_frame
+        target_face = get_one_face(processed_frame)
+        if target_face:
+            processed_frame = swap_face(source_face, target_face, processed_frame)
+            if target_face is not None and hasattr(target_face, "bbox") and target_face.bbox is not None:
+                    swapped_face_bboxes.append(target_face.bbox.astype(int))
 
+    # Apply sharpening and interpolation
+    final_frame = apply_post_processing(processed_frame, swapped_face_bboxes)
+
+    return final_frame
 
 def process_frame_v2(temp_frame: Any, temp_frame_path: str = "") -> Any:
     """Process a frame using mapped faces (for mapped face mode)."""
@@ -169,50 +210,60 @@ def process_frame_v2(temp_frame: Any, temp_frame_path: str = "") -> Any:
                             temp_frame = swap_face(source_face, target_face, temp_frame)
 
     else:
-        detected_faces = get_many_faces(temp_frame)
-        if modules.globals.many_faces:
-            if detected_faces:
+        # Live stream or webcam processing (analyze faces on the fly)
+        detected_faces = get_many_faces(processed_frame)
+        if detected_faces:
+            if modules.globals.many_faces:
+                 source_face = default_source_face() # Use default source for all detected targets
+                 if source_face:
+                     for target_face in detected_faces:
+                        source_target_pairs.append((source_face, target_face))
+            elif simple_map:
+                # Use simple_map (source_faces <-> target_embeddings)
+                source_faces = simple_map.get("source_faces", [])
+                target_embeddings = simple_map.get("target_embeddings", [])
+
+                if source_faces and target_embeddings and len(source_faces) == len(target_embeddings):
+                     # Match detected faces to the closest target embedding
+                     if len(detected_faces) <= len(target_embeddings):
+                          # More targets defined than detected - match each detected face
+                          for detected_face in detected_faces:
+                              if detected_face.normed_embedding is None: continue
+                              closest_idx, _ = find_closest_centroid(target_embeddings, detected_face.normed_embedding)
+                              if 0 <= closest_idx < len(source_faces):
+                                  source_target_pairs.append((source_faces[closest_idx], detected_face))
+                     else:
+                          # More faces detected than targets defined - match each target embedding to closest detected face
+                          detected_embeddings = [f.normed_embedding for f in detected_faces if f.normed_embedding is not None]
+                          detected_faces_with_embedding = [f for f in detected_faces if f.normed_embedding is not None]
+                          if not detected_embeddings: return processed_frame # No embeddings to match
+
+                          for i, target_embedding in enumerate(target_embeddings):
+                              if 0 <= i < len(source_faces): # Ensure source face exists for this embedding
+                                 closest_idx, _ = find_closest_centroid(detected_embeddings, target_embedding)
+                                 if 0 <= closest_idx < len(detected_faces_with_embedding):
+                                     source_target_pairs.append((source_faces[i], detected_faces_with_embedding[closest_idx]))
+            else: # Fallback: if no map, use default source for the single detected face (if any)
                 source_face = default_source_face()
-                for target_face in detected_faces:
-                    temp_frame = swap_face(source_face, target_face, temp_frame)
+                target_face = get_one_face(processed_frame, detected_faces) # Use faces already detected
+                if source_face and target_face:
+                    source_target_pairs.append((source_face, target_face))
 
-        elif not modules.globals.many_faces:
-            if detected_faces:
-                if len(detected_faces) <= len(
-                    modules.globals.simple_map["target_embeddings"]
-                ):
-                    for detected_face in detected_faces:
-                        closest_centroid_index, _ = find_closest_centroid(
-                            modules.globals.simple_map["target_embeddings"],
-                            detected_face.normed_embedding,
-                        )
 
-                        temp_frame = swap_face(
-                            modules.globals.simple_map["source_faces"][
-                                closest_centroid_index
-                            ],
-                            detected_face,
-                            temp_frame,
-                        )
-                else:
-                    detected_faces_centroids = []
-                    for face in detected_faces:
-                        detected_faces_centroids.append(face.normed_embedding)
-                    i = 0
-                    for target_embedding in modules.globals.simple_map[
-                        "target_embeddings"
-                    ]:
-                        closest_centroid_index, _ = find_closest_centroid(
-                            detected_faces_centroids, target_embedding
-                        )
+    # Perform swaps based on the collected pairs
+    current_swap_target = processed_frame.copy() # Apply swaps sequentially
+    for source_face, target_face in source_target_pairs:
+        if source_face and target_face:
+            current_swap_target = swap_face(source_face, target_face, current_swap_target)
+            if target_face is not None and hasattr(target_face, "bbox") and target_face.bbox is not None:
+                swapped_face_bboxes.append(target_face.bbox.astype(int))
+    processed_frame = current_swap_target # Assign final result
 
-                        temp_frame = swap_face(
-                            modules.globals.simple_map["source_faces"][i],
-                            detected_faces[closest_centroid_index],
-                            temp_frame,
-                        )
-                        i += 1
-    return temp_frame
+
+    # Apply sharpening and interpolation
+    final_frame = apply_post_processing(processed_frame, swapped_face_bboxes)
+
+    return final_frame
 
 
 def process_frames(
@@ -285,14 +336,26 @@ def process_image(source_path: str, target_path: str, output_path: str) -> bool:
 
 
 def process_video(source_path: str, temp_frame_paths: List[str]) -> None:
-    if modules.globals.map_faces and modules.globals.many_faces:
-        update_status(
-            "Many faces enabled. Using first source image. Progressing...", NAME
-        )
+    """Sets up and calls the frame processing for video."""
+    # --- Reset interpolation state before starting video processing ---
+    global PREVIOUS_FRAME_RESULT
+    PREVIOUS_FRAME_RESULT = None
+    # ---
+
+    mode_desc = "'map_faces'" if getattr(modules.globals, "map_faces", False) else "'simple'"
+    if getattr(modules.globals, "map_faces", False) and getattr(modules.globals, "many_faces", False):
+        mode_desc += " and 'many_faces'. Using pre-analysis map."
+    update_status(f"Processing video with {mode_desc} mode.", NAME)
+
+    # Pass the correct source_path (needed for simple mode in process_frames)
+    # The core processing logic handles calling the right frame function (process_frames)
     modules.processors.frame.core.process_video(
-        source_path, temp_frame_paths, process_frames
+        source_path, temp_frame_paths, process_frames # Pass the newly modified process_frames
     )
 
+# ==========================
+# MASKING FUNCTIONS (Mostly unchanged, added safety checks and minor improvements)
+# ==========================
 
 def color_transfer(source: np.ndarray, target: np.ndarray) -> np.ndarray:
     source_lab = cv2.cvtColor(source, cv2.COLOR_BGR2LAB).astype("float32")
@@ -311,116 +374,135 @@ def color_transfer(source: np.ndarray, target: np.ndarray) -> np.ndarray:
 def create_lower_mouth_mask(face, frame: np.ndarray):
     mask = np.zeros(frame.shape[:2], dtype=np.uint8)
     mouth_cutout = None
+    lower_lip_polygon = None # Initialize
+    mouth_box = (0,0,0,0) # Initialize
+
+    # Validate face and landmarks
+    if face is None or not hasattr(face, 'landmark_2d_106'):
+        # print("Warning: Invalid face object passed to create_lower_mouth_mask.")
+        return mask, mouth_cutout, mouth_box, lower_lip_polygon
+
     landmarks = face.landmark_2d_106
-    if landmarks is not None:
+
+    # Check landmark validity
+    if landmarks is None or not isinstance(landmarks, np.ndarray) or landmarks.shape[0] < 106:
+        # print("Warning: Invalid or insufficient landmarks for mouth mask.")
+        return mask, mouth_cutout, mouth_box, lower_lip_polygon
+
+    try: # Wrap main logic in try-except
         #                  0  1  2  3  4  5  6  7  8  9  10 11 12 13 14 15 16 17 18 19 20
-        lower_lip_order = [
-            65,
-            66,
-            62,
-            70,
-            69,
-            18,
-            19,
-            20,
-            21,
-            22,
-            23,
-            24,
-            0,
-            8,
-            7,
-            6,
-            5,
-            4,
-            3,
-            2,
-            65,
-        ]
-        lower_lip_landmarks = landmarks[lower_lip_order].astype(
-            np.float32
-        )  # Use float for precise calculations
+        lower_lip_order = [65, 66, 62, 70, 69, 18, 19, 20, 21, 22, 23, 24, 0, 8, 7, 6, 5, 4, 3, 2, 65] # 21 points
 
-        # Calculate the center of the landmarks
+        # Check if all indices are valid for the loaded landmarks (already partially done by < 106 check)
+        if max(lower_lip_order) >= landmarks.shape[0]:
+            # print(f"Warning: Landmark index {max(lower_lip_order)} out of bounds for shape {landmarks.shape[0]}.")
+            return mask, mouth_cutout, mouth_box, lower_lip_polygon
+
+        lower_lip_landmarks = landmarks[lower_lip_order].astype(np.float32)
+
+        # Filter out potential NaN or Inf values in landmarks
+        if not np.all(np.isfinite(lower_lip_landmarks)):
+            # print("Warning: Non-finite values detected in lower lip landmarks.")
+            return mask, mouth_cutout, mouth_box, lower_lip_polygon
+
         center = np.mean(lower_lip_landmarks, axis=0)
+        if not np.all(np.isfinite(center)): # Check center calculation
+            # print("Warning: Could not calculate valid center for mouth mask.")
+            return mask, mouth_cutout, mouth_box, lower_lip_polygon
 
-        # Expand the landmarks outward
-        expansion_factor = (
-            1 + modules.globals.mask_down_size
-        )  # Adjust this for more or less expansion
+
+        mask_down_size = getattr(modules.globals, "mask_down_size", 0.1) # Default 0.1
+        expansion_factor = 1 + mask_down_size
         expanded_landmarks = (lower_lip_landmarks - center) * expansion_factor + center
 
-        # Extend the top lip part
-        toplip_indices = [
-            20,
-            0,
-            1,
-            2,
-            3,
-            4,
-            5,
-        ]  # Indices for landmarks 2, 65, 66, 62, 70, 69, 18
-        toplip_extension = (
-            modules.globals.mask_size * 0.5
-        )  # Adjust this factor to control the extension
-        for idx in toplip_indices:
-            direction = expanded_landmarks[idx] - center
-            direction = direction / np.linalg.norm(direction)
-            expanded_landmarks[idx] += direction * toplip_extension
+        mask_size = getattr(modules.globals, "mask_size", 1.0) # Default 1.0
+        toplip_extension = mask_size * 0.5
 
-        # Extend the bottom part (chin area)
-        chin_indices = [
-            11,
-            12,
-            13,
-            14,
-            15,
-            16,
-        ]  # Indices for landmarks 21, 22, 23, 24, 0, 8
-        chin_extension = 2 * 0.2  # Adjust this factor to control the extension
-        for idx in chin_indices:
-            expanded_landmarks[idx][1] += (
-                expanded_landmarks[idx][1] - center[1]
-            ) * chin_extension
+        # Define toplip indices relative to lower_lip_order (safer)
+        toplip_local_indices = [0, 1, 2, 3, 4, 5, 19] # Indices in lower_lip_order for [65, 66, 62, 70, 69, 18, 2]
 
-        # Convert back to integer coordinates
+        for idx in toplip_local_indices:
+            if idx < len(expanded_landmarks): # Boundary check
+                direction = expanded_landmarks[idx] - center
+                norm = np.linalg.norm(direction)
+                if norm > 1e-6: # Avoid division by zero
+                   direction_normalized = direction / norm
+                   expanded_landmarks[idx] += direction_normalized * toplip_extension
+
+        # Define chin indices relative to lower_lip_order
+        chin_local_indices = [9, 10, 11, 12, 13, 14] # Indices for [22, 23, 24, 0, 8, 7]
+        chin_extension = 2 * 0.2
+
+        for idx in chin_local_indices:
+            if idx < len(expanded_landmarks): # Boundary check
+               # Extend vertically based on distance from center y
+               y_diff = expanded_landmarks[idx][1] - center[1]
+               expanded_landmarks[idx][1] += y_diff * chin_extension
+
+
+        # Ensure landmarks are finite after adjustments
+        if not np.all(np.isfinite(expanded_landmarks)):
+            # print("Warning: Non-finite values detected after expanding landmarks.")
+            return mask, mouth_cutout, mouth_box, lower_lip_polygon
+
         expanded_landmarks = expanded_landmarks.astype(np.int32)
 
-        # Calculate bounding box for the expanded lower mouth
         min_x, min_y = np.min(expanded_landmarks, axis=0)
         max_x, max_y = np.max(expanded_landmarks, axis=0)
 
-        # Add some padding to the bounding box
-        padding = int((max_x - min_x) * 0.1)  # 10% padding
-        min_x = max(0, min_x - padding)
-        min_y = max(0, min_y - padding)
-        max_x = min(frame.shape[1], max_x + padding)
-        max_y = min(frame.shape[0], max_y + padding)
+        # Add padding *after* initial min/max calculation
+        padding_ratio = 0.1 # Percentage padding
+        padding_x = int((max_x - min_x) * padding_ratio)
+        padding_y = int((max_y - min_y) * padding_ratio) # Use y-range for y-padding
 
-        # Ensure the bounding box dimensions are valid
-        if max_x <= min_x or max_y <= min_y:
-            if (max_x - min_x) <= 1:
-                max_x = min_x + 1
-            if (max_y - min_y) <= 1:
-                max_y = min_y + 1
+        # Apply padding and clamp to frame boundaries
+        frame_h, frame_w = frame.shape[:2]
+        min_x = max(0, min_x - padding_x)
+        min_y = max(0, min_y - padding_y)
+        max_x = min(frame_w, max_x + padding_x)
+        max_y = min(frame_h, max_y + padding_y)
 
-        # Create the mask
-        mask_roi = np.zeros((max_y - min_y, max_x - min_x), dtype=np.uint8)
-        cv2.fillPoly(mask_roi, [expanded_landmarks - [min_x, min_y]], 255)
 
-        # Apply Gaussian blur to soften the mask edges
-        mask_roi = cv2.GaussianBlur(mask_roi, (15, 15), 5)
+        if max_x > min_x and max_y > min_y:
+            # Create the mask ROI
+            mask_roi_h = max_y - min_y
+            mask_roi_w = max_x - min_x
+            mask_roi = np.zeros((mask_roi_h, mask_roi_w), dtype=np.uint8)
 
-        # Place the mask ROI in the full-sized mask
-        mask[min_y:max_y, min_x:max_x] = mask_roi
+            # Shift polygon coordinates relative to the ROI's top-left corner
+            polygon_relative_to_roi = expanded_landmarks - [min_x, min_y]
 
-        # Extract the masked area from the frame
-        mouth_cutout = frame[min_y:max_y, min_x:max_x].copy()
+            # Draw polygon on the ROI mask
+            cv2.fillPoly(mask_roi, [polygon_relative_to_roi], 255)
 
-        # Return the expanded lower lip polygon in original frame coordinates
-        lower_lip_polygon = expanded_landmarks
+            # Apply Gaussian blur (ensure kernel size is odd and positive)
+            blur_k_size = getattr(modules.globals, "mask_blur_kernel", 15) # Default 15
+            blur_k_size = max(1, blur_k_size // 2 * 2 + 1) # Ensure odd
+            mask_roi = cv2.GaussianBlur(mask_roi, (blur_k_size, blur_k_size), 0) # Sigma=0 calculates from kernel
 
-    return mask, mouth_cutout, (min_x, min_y, max_x, max_y), lower_lip_polygon
+            # Place the mask ROI in the full-sized mask
+            mask[min_y:max_y, min_x:max_x] = mask_roi
+
+            # Extract the masked area from the *original* frame
+            mouth_cutout = frame[min_y:max_y, min_x:max_x].copy()
+
+            lower_lip_polygon = expanded_landmarks # Return polygon in original frame coords
+            mouth_box = (min_x, min_y, max_x, max_y) # Return the calculated box
+        else:
+            # print("Warning: Invalid mouth mask bounding box after padding/clamping.") # Optional debug
+            pass
+
+    except IndexError as idx_e:
+        # print(f"Warning: Landmark index out of bounds during mouth mask creation: {idx_e}") # Optional debug
+        pass
+    except Exception as e:
+        print(f"Error in create_lower_mouth_mask: {e}") # Print unexpected errors
+        # import traceback
+        # traceback.print_exc()
+        pass
+
+    # Return values, ensuring defaults if errors occurred
+    return mask, mouth_cutout, mouth_box, lower_lip_polygon
 
 
 def draw_mouth_mask_visualization(frame: np.ndarray, face, mouth_mask_data: tuple) -> np.ndarray:
@@ -430,143 +512,208 @@ def draw_mouth_mask_visualization(frame: np.ndarray, face, mouth_mask_data: tupl
             mouth_mask_data
         )
 
-        vis_frame = frame.copy()
+    # Validate inputs
+    if frame is None or face is None or mouth_mask_data is None or len(mouth_mask_data) != 4:
+        return frame # Return original frame if inputs are invalid
 
-        # Ensure coordinates are within frame bounds
-        height, width = vis_frame.shape[:2]
-        min_x, min_y = max(0, min_x), max(0, min_y)
-        max_x, max_y = min(width, max_x), min(height, max_y)
+    mask, mouth_cutout, box, lower_lip_polygon = mouth_mask_data
+    (min_x, min_y, max_x, max_y) = box
 
-        # Adjust mask to match the region size
-        mask_region = mask[0 : max_y - min_y, 0 : max_x - min_x]
+    # Check if polygon is valid for drawing
+    if lower_lip_polygon is None or not isinstance(lower_lip_polygon, np.ndarray) or len(lower_lip_polygon) < 3:
+        return frame # Cannot draw without a valid polygon
 
-        # Remove the color mask overlay
-        # color_mask = cv2.applyColorMap((mask_region * 255).astype(np.uint8), cv2.COLORMAP_JET)
+    vis_frame = frame.copy()
+    height, width = vis_frame.shape[:2]
 
-        # Ensure shapes match before blending
-        vis_region = vis_frame[min_y:max_y, min_x:max_x]
-        # Remove blending with color_mask
-        # if vis_region.shape[:2] == color_mask.shape[:2]:
-        #     blended = cv2.addWeighted(vis_region, 0.7, color_mask, 0.3, 0)
-        #     vis_frame[min_y:max_y, min_x:max_x] = blended
+    # Ensure box coordinates are valid integers within frame bounds
+    try:
+        min_x, min_y = max(0, int(min_x)), max(0, int(min_y))
+        max_x, max_y = min(width, int(max_x)), min(height, int(max_y))
+    except ValueError:
+        # print("Warning: Invalid coordinates for mask visualization box.")
+        return frame
 
-        # Draw the lower lip polygon
-        cv2.polylines(vis_frame, [lower_lip_polygon], True, (0, 255, 0), 2)
+    if max_x <= min_x or max_y <= min_y:
+        return frame # Invalid box
 
-        # Remove the red box
-        # cv2.rectangle(vis_frame, (min_x, min_y), (max_x, max_y), (0, 0, 255), 2)
+    # Draw the lower lip polygon (green outline)
+    try:
+         # Ensure polygon points are within frame boundaries before drawing
+         safe_polygon = lower_lip_polygon.copy()
+         safe_polygon[:, 0] = np.clip(safe_polygon[:, 0], 0, width - 1)
+         safe_polygon[:, 1] = np.clip(safe_polygon[:, 1], 0, height - 1)
+         cv2.polylines(vis_frame, [safe_polygon.astype(np.int32)], isClosed=True, color=(0, 255, 0), thickness=2)
+    except Exception as e:
+        print(f"Error drawing polygon for visualization: {e}") # Optional debug
+        pass
 
-        # Visualize the feathered mask
-        feather_amount = max(
-            1,
-            min(
-                30,
-                (max_x - min_x) // modules.globals.mask_feather_ratio,
-                (max_y - min_y) // modules.globals.mask_feather_ratio,
-            ),
-        )
-        # Ensure kernel size is odd
-        kernel_size = 2 * feather_amount + 1
-        feathered_mask = cv2.GaussianBlur(
-            mask_region.astype(float), (kernel_size, kernel_size), 0
-        )
-        feathered_mask = (feathered_mask / feathered_mask.max() * 255).astype(np.uint8)
-        # Remove the feathered mask color overlay
-        # color_feathered_mask = cv2.applyColorMap(feathered_mask, cv2.COLORMAP_VIRIDIS)
+    # Optional: Draw bounding box (red rectangle)
+    # cv2.rectangle(vis_frame, (min_x, min_y), (max_x, max_y), (0, 0, 255), 1)
 
-        # Ensure shapes match before blending feathered mask
-        # if vis_region.shape == color_feathered_mask.shape:
-        #     blended_feathered = cv2.addWeighted(vis_region, 0.7, color_feathered_mask, 0.3, 0)
-        #     vis_frame[min_y:max_y, min_x:max_x] = blended_feathered
+    # Optional: Add labels
+    label_pos_y = min_y - 10 if min_y > 20 else max_y + 15 # Adjust position based on box location
+    label_pos_x = min_x
+    try:
+        cv2.putText(vis_frame, "Mouth Mask", (label_pos_x, label_pos_y),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1, cv2.LINE_AA)
+    except Exception as e:
+        # print(f"Error drawing text for visualization: {e}") # Optional debug
+        pass
 
-        # Add labels
-        cv2.putText(
-            vis_frame,
-            "Lower Mouth Mask",
-            (min_x, min_y - 10),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.5,
-            (255, 255, 255),
-            1,
-        )
-        cv2.putText(
-            vis_frame,
-            "Feathered Mask",
-            (min_x, max_y + 20),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.5,
-            (255, 255, 255),
-            1,
-        )
 
-        return vis_frame
-    return frame
+    return vis_frame
 
 
 def apply_mouth_area(
     frame: np.ndarray,
     mouth_cutout: np.ndarray,
     mouth_box: tuple,
-    face_mask: np.ndarray,
-    mouth_polygon: np.ndarray,
+    face_mask: np.ndarray, # Full face mask (for blending edges)
+    mouth_polygon: np.ndarray, # Specific polygon for the mouth area itself
 ) -> np.ndarray:
-    min_x, min_y, max_x, max_y = mouth_box
-    box_width = max_x - min_x
-    box_height = max_y - min_y
 
-    if (
-        mouth_cutout is None
-        or box_width is None
-        or box_height is None
-        or face_mask is None
-        or mouth_polygon is None
-    ):
+    # Basic validation
+    if (frame is None or mouth_cutout is None or mouth_box is None or
+        face_mask is None or mouth_polygon is None):
+        # print("Warning: Invalid input (None value) to apply_mouth_area") # Optional debug
+        return frame
+    if (mouth_cutout.size == 0 or face_mask.size == 0 or len(mouth_polygon) < 3):
+        # print("Warning: Invalid input (empty array/polygon) to apply_mouth_area") # Optional debug
         return frame
 
-    try:
-        resized_mouth_cutout = cv2.resize(mouth_cutout, (box_width, box_height))
-        roi = frame[min_y:max_y, min_x:max_x]
+    try: # Wrap main logic in try-except
+        min_x, min_y, max_x, max_y = map(int, mouth_box) # Ensure integer coords
+        box_width = max_x - min_x
+        box_height = max_y - min_y
 
-        if roi.shape != resized_mouth_cutout.shape:
-            resized_mouth_cutout = cv2.resize(
-                resized_mouth_cutout, (roi.shape[1], roi.shape[0])
-            )
+        # Check box validity
+        if box_width <= 0 or box_height <= 0:
+            # print("Warning: Invalid mouth box dimensions in apply_mouth_area.")
+            return frame
+
+        # Define the Region of Interest (ROI) on the target frame (swapped frame)
+        frame_h, frame_w = frame.shape[:2]
+        # Clamp coordinates strictly within frame boundaries
+        min_y, max_y = max(0, min_y), min(frame_h, max_y)
+        min_x, max_x = max(0, min_x), min(frame_w, max_x)
+
+        # Recalculate box dimensions based on clamped coords
+        box_width = max_x - min_x
+        box_height = max_y - min_y
+        if box_width <= 0 or box_height <= 0:
+            # print("Warning: ROI became invalid after clamping in apply_mouth_area.")
+            return frame # ROI is invalid
 
         color_corrected_mouth = color_transfer(resized_mouth_cutout, roi)
 
-        # Use the provided mouth polygon to create the mask
-        polygon_mask = np.zeros(roi.shape[:2], dtype=np.uint8)
+        # Ensure ROI extraction was successful
+        if roi.size == 0:
+            # print("Warning: Extracted ROI is empty in apply_mouth_area.")
+            return frame
+
+        # Resize mouth cutout from original frame to fit the ROI size
+        resized_mouth_cutout = None
+        if roi.shape[:2] != mouth_cutout.shape[:2]:
+             # Check if mouth_cutout has valid dimensions before resizing
+             if mouth_cutout.shape[0] > 0 and mouth_cutout.shape[1] > 0:
+                 resized_mouth_cutout = cv2.resize(mouth_cutout, (box_width, box_height), interpolation=cv2.INTER_LINEAR)
+             else:
+                 # print("Warning: mouth_cutout has invalid dimensions, cannot resize.")
+                 return frame # Cannot proceed without valid cutout
+        else:
+             resized_mouth_cutout = mouth_cutout
+
+        # If resize failed or original was invalid
+        if resized_mouth_cutout is None or resized_mouth_cutout.size == 0:
+            # print("Warning: Mouth cutout is invalid after resize attempt.")
+            return frame
+
+        # --- Color Correction Step ---
+        # Apply color transfer from ROI (swapped face region) to the original mouth cutout
+        # This helps match lighting/color before blending
+        color_corrected_mouth = resized_mouth_cutout # Default to resized if correction fails
+        try:
+           # Ensure both images are 3 channels for color transfer
+           if len(resized_mouth_cutout.shape) == 3 and resized_mouth_cutout.shape[2] == 3 and \
+              len(roi.shape) == 3 and roi.shape[2] == 3:
+                 color_corrected_mouth = apply_color_transfer(resized_mouth_cutout, roi)
+           else:
+               # print("Warning: Cannot apply color transfer, images not BGR.")
+               pass
+        except cv2.error as ct_e: # Handle potential errors in color transfer
+           # print(f"Warning: Color transfer failed: {ct_e}. Using uncorrected mouth cutout.") # Optional debug
+           pass
+        except Exception as ct_gen_e:
+           # print(f"Warning: Unexpected error during color transfer: {ct_gen_e}")
+           pass
+        # --- End Color Correction ---
+
+
+        # --- Mask Creation ---
+        # Create a mask based *specifically* on the mouth_polygon, relative to the ROI
+        polygon_mask_roi = np.zeros(roi.shape[:2], dtype=np.uint8)
+        # Adjust polygon coordinates relative to the ROI's top-left corner
         adjusted_polygon = mouth_polygon - [min_x, min_y]
-        cv2.fillPoly(polygon_mask, [adjusted_polygon], 255)
+        # Draw the filled polygon on the ROI mask
+        cv2.fillPoly(polygon_mask_roi, [adjusted_polygon.astype(np.int32)], 255)
 
-        # Apply feathering to the polygon mask
-        feather_amount = min(
-            30,
-            box_width // modules.globals.mask_feather_ratio,
-            box_height // modules.globals.mask_feather_ratio,
-        )
-        feathered_mask = cv2.GaussianBlur(
-            polygon_mask.astype(float), (0, 0), feather_amount
-        )
-        feathered_mask = feathered_mask / feathered_mask.max()
+        # Feather the polygon mask (Gaussian blur)
+        mask_feather_ratio = getattr(modules.globals, "mask_feather_ratio", 12) # Default 12
+        # Calculate feather amount based on the smaller dimension of the box
+        feather_base_dim = min(box_width, box_height)
+        feather_amount = max(1, min(30, feather_base_dim // max(1, mask_feather_ratio))) # Avoid div by zero
+        # Ensure kernel size is odd and positive
+        kernel_size = 2 * feather_amount + 1
+        feathered_polygon_mask = cv2.GaussianBlur(polygon_mask_roi.astype(float), (kernel_size, kernel_size), 0)
 
-        face_mask_roi = face_mask[min_y:max_y, min_x:max_x]
-        combined_mask = feathered_mask * (face_mask_roi / 255.0)
+        # Normalize feathered mask to [0.0, 1.0] range
+        max_val = feathered_polygon_mask.max()
+        if max_val > 1e-6: # Avoid division by zero
+           feathered_polygon_mask = feathered_polygon_mask / max_val
+        else:
+           feathered_polygon_mask.fill(0.0) # Mask is all black if max is near zero
+        # --- End Mask Creation ---
 
-        combined_mask = combined_mask[:, :, np.newaxis]
-        blended = (
-            color_corrected_mouth * combined_mask + roi * (1 - combined_mask)
-        ).astype(np.uint8)
 
-        # Apply face mask to blended result
-        face_mask_3channel = (
-            np.repeat(face_mask_roi[:, :, np.newaxis], 3, axis=2) / 255.0
-        )
-        final_blend = blended * face_mask_3channel + roi * (1 - face_mask_3channel)
+        # --- Refined Blending ---
+        # Get the corresponding ROI from the *full face mask* (already blurred)
+        # Ensure face_mask is float and normalized [0.0, 1.0]
+        if face_mask.dtype != np.float64 and face_mask.dtype != np.float32:
+            face_mask_float = face_mask.astype(float) / 255.0
+        else: # Assume already float [0,1] if type is float
+            face_mask_float = face_mask
+        face_mask_roi = face_mask_float[min_y:max_y, min_x:max_x]
 
-        frame[min_y:max_y, min_x:max_x] = final_blend.astype(np.uint8)
+        # Combine the feathered mouth polygon mask with the face mask ROI
+        # Use minimum to ensure we only affect area inside both masks (mouth area within face)
+        # This helps blend the edges smoothly with the surrounding swapped face region
+        combined_mask = np.minimum(feathered_polygon_mask, face_mask_roi)
+
+        # Expand mask to 3 channels for blending (ensure it matches image channels)
+        if len(frame.shape) == 3 and frame.shape[2] == 3:
+            combined_mask_3channel = combined_mask[:, :, np.newaxis]
+
+            # Ensure data types are compatible for blending (float or double for mask, uint8 for images)
+            color_corrected_mouth_uint8 = color_corrected_mouth.astype(np.uint8)
+            roi_uint8 = roi.astype(np.uint8)
+            combined_mask_float = combined_mask_3channel.astype(np.float64) # Use float64 for precision in mask
+
+            # Blend: (original_mouth * combined_mask) + (swapped_face_roi * (1 - combined_mask))
+            blended_roi = (color_corrected_mouth_uint8 * combined_mask_float +
+                           roi_uint8 * (1.0 - combined_mask_float))
+
+            # Place the blended ROI back into the frame
+            frame[min_y:max_y, min_x:max_x] = blended_roi.astype(np.uint8)
+        else:
+            # print("Warning: Cannot apply mouth mask blending, frame is not 3-channel BGR.")
+            pass # Don't modify frame if it's not BGR
+
     except Exception as e:
-        pass
+        print(f"Error applying mouth area: {e}") # Optional debug
+        # import traceback
+        # traceback.print_exc()
+        pass # Don't crash, just return the frame as is
 
     return frame
 
@@ -574,67 +721,29 @@ def apply_mouth_area(
 def create_face_mask(face, frame: np.ndarray) -> np.ndarray:
     mask = np.zeros(frame.shape[:2], dtype=np.uint8)
     landmarks = face.landmark_2d_106
-    if landmarks is not None:
-        # Convert landmarks to int32
-        landmarks = landmarks.astype(np.int32)
+    if landmarks is None or not isinstance(landmarks, np.ndarray) or landmarks.shape[0] < 106:
+        # print("Warning: Invalid or insufficient landmarks for face mask.")
+        return mask # Return empty mask
 
-        # Extract facial features
-        right_side_face = landmarks[0:16]
-        left_side_face = landmarks[17:32]
-        right_eye = landmarks[33:42]
-        right_eye_brow = landmarks[43:51]
-        left_eye = landmarks[87:96]
-        left_eye_brow = landmarks[97:105]
+    try: # Wrap main logic in try-except
+        # Filter out non-finite landmark values
+        if not np.all(np.isfinite(landmarks)):
+            # print("Warning: Non-finite values detected in landmarks for face mask.")
+            return mask
 
-        # Calculate forehead extension
-        right_eyebrow_top = np.min(right_eye_brow[:, 1])
-        left_eyebrow_top = np.min(left_eye_brow[:, 1])
-        eyebrow_top = min(right_eyebrow_top, left_eyebrow_top)
+        landmarks_int = landmarks.astype(np.int32)
 
-        face_top = np.min([right_side_face[0, 1], left_side_face[-1, 1]])
-        forehead_height = face_top - eyebrow_top
-        extended_forehead_height = int(forehead_height * 5.0)  # Extend by 50%
+        # Use standard face outline landmarks (0-32)
+        face_outline_points = landmarks_int[0:33] # Points 0 to 32 cover chin and sides
 
-        # Create forehead points
-        forehead_left = right_side_face[0].copy()
-        forehead_right = left_side_face[-1].copy()
-        forehead_left[1] -= extended_forehead_height
-        forehead_right[1] -= extended_forehead_height
 
-        # Combine all points to create the face outline
-        face_outline = np.vstack(
-            [
-                [forehead_left],
-                right_side_face,
-                left_side_face[
-                    ::-1
-                ],  # Reverse left side to create a continuous outline
-                [forehead_right],
-            ]
-        )
-
-        # Calculate padding
-        padding = int(
-            np.linalg.norm(right_side_face[0] - left_side_face[-1]) * 0.05
-        )  # 5% of face width
-
-        # Create a slightly larger convex hull for padding
-        hull = cv2.convexHull(face_outline)
-        hull_padded = []
-        for point in hull:
-            x, y = point[0]
-            center = np.mean(face_outline, axis=0)
-            direction = np.array([x, y]) - center
-            direction = direction / np.linalg.norm(direction)
-            padded_point = np.array([x, y]) + direction * padding
-            hull_padded.append(padded_point)
-
-        hull_padded = np.array(hull_padded, dtype=np.int32)
-
-        # Fill the padded convex hull
-        cv2.fillConvexPoly(mask, hull_padded, 255)
-
-        # Smooth the mask edges
-        mask = cv2.GaussianBlur(mask, (5, 5), 3)
+        # Calculate convex hull of these points
+        # Use try-except as convexHull can fail on degenerate input
+        try:
+             hull = cv2.convexHull(full_face_poly.astype(np.float32)) # Use float for accuracy
+             if hull is None or len(hull) < 3:
+                 # print("Warning: Convex hull calculation failed or returned too few points.")
+                 # Fallback: use bounding box of landmarks? Or just return empty mask?
+                 return mask
 
     return mask

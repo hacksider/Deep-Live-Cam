@@ -105,10 +105,16 @@ def process_frame(source_face: Any, temp_frame: Any) -> Any:
 
 
 def process_frames(
-    source_path: str, temp_frame_paths: List[str], progress: Any = None
+    source_path: str | None, temp_frame_paths: List[str], progress: Any = None
 ) -> None:
     """Process a list of frames for face enhancement, updating progress and handling errors."""
     for temp_frame_path in temp_frame_paths:
+        if not os.path.exists(temp_frame_path):
+            print(f"{NAME}: Warning: Frame path not found {temp_frame_path}, skipping.")
+            if progress:
+                progress.update(1)
+            continue
+
         temp_frame = cv2.imread(temp_frame_path)
         try:
             result = process_frame(None, temp_frame)
