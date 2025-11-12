@@ -3,6 +3,8 @@ import numpy as np
 import platform
 import threading
 from typing import Optional, Tuple, Callable
+from cv2.videoio_registry import getBackendName
+from cv2_enumerate_cameras import supported_backends
 
 # Only import Windows-specific library if on Windows
 if platform.system() == "Windows":

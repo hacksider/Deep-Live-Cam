@@ -139,6 +139,70 @@ def load_switch_states():
         # If the file doesn't exist, use default values
         pass
 
+def get_available_cameras():
+    """Returns a list of available camera names and indices."""
+    if platform.system() == "Windows":
+        try:
+            graph = FilterGraph()
+            devices = graph.get_input_devices()
+
+            # Create list of indices and names
+            camera_indices = list(range(len(devices)))
+            camera_names = devices
+
+            # If no cameras found through DirectShow, try OpenCV fallback
+            if not camera_names:
+                # Try to open camera with index -1 and 0
+                test_indices = [-1, 0]
+                working_cameras = []
+
+                for idx in test_indices:
+                    cap = cv2.VideoCapture(idx)
+                    if cap.isOpened():
+                        working_cameras.append(f"Camera {idx}")
+                        cap.release()
+
+                if working_cameras:
+                    return test_indices[: len(working_cameras)], working_cameras
+
+            # If still no cameras found, return empty lists
+            if not camera_names:
+                return [], ["No cameras found"]
+
+            return camera_indices, camera_names
+
+        except Exception as e:
+            print(f"Error detecting cameras: {str(e)}")
+            return [], ["No cameras found"]
+    else:
+        # Unix-like systems (Linux/Mac) camera detection
+        camera_indices = []
+        camera_names = []
+
+        if platform.system() == "Darwin":  # macOS specific handling
+            # Try to open the default FaceTime camera first
+            cams = enumerate_cameras()
+            for camera_info in cams:
+                camera_indices.append(camera_info.index)
+                camera_names.append(camera_info.name)
+            # cap = cv2.VideoCapture(0)
+
+            # On macOS, additional cameras typically use indices 1 and 2
+           
+        else:
+            # Linux camera detection - test first 10 indices
+            for i in range(10):
+                cap = cv2.VideoCapture(i)
+                if cap.isOpened():
+                    camera_indices.append(i)
+                    camera_names.append(f"Camera {i}")
+                    cap.release()
+
+        if not camera_names:
+            return [], ["No cameras found"]
+
+        return camera_indices, camera_names
+    
 
 def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.CTk:
     global source_label, target_label, status_label, show_fps_switch
@@ -330,7 +394,6 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     # --- Camera Selection ---
     camera_label = ctk.CTkLabel(root, text=_("Select Camera:"))
     camera_label.place(relx=0.1, rely=0.86, relwidth=0.2, relheight=0.05)
-
     available_cameras = get_available_cameras()
     camera_indices, camera_names = available_cameras
 
@@ -812,24 +875,6 @@ def webcam_preview(root: ctk.CTk, camera_index: int):
             root, modules.globals.source_target_map, camera_index
         )
 
-
-virtual_cam_manager = VirtualCamManager()
-virtual_cam_enabled = False  # Use a global variable for clarity
-
-def toggle_virtual_cam():
-    global virtual_cam_enabled
-    if not PYVIRTUALCAM_AVAILABLE:
-        update_status("pyvirtualcam not installed. Cannot enable virtual camera.")
-        return
-    if not virtual_cam_enabled:
-        virtual_cam_manager.start(PREVIEW_DEFAULT_WIDTH, PREVIEW_DEFAULT_HEIGHT, 30)
-        virtual_cam_enabled = True
-        update_status("Virtual camera enabled.")
-    else:
-        virtual_cam_manager.stop()
-        virtual_cam_enabled = False
-        update_status("Virtual camera disabled.")
-
 class VirtualCamManager:
     """Manages the virtual camera output using pyvirtualcam."""
     def __init__(self):
@@ -868,6 +913,25 @@ class VirtualCamManager:
                 print(f"Error closing virtual camera: {e}")
             self.cam = None
             self.enabled = False
+
+virtual_cam_manager = VirtualCamManager()
+virtual_cam_enabled = False  # Use a global variable for clarity
+
+def toggle_virtual_cam():
+    global virtual_cam_enabled
+    if not PYVIRTUALCAM_AVAILABLE:
+        update_status("pyvirtualcam not installed. Cannot enable virtual camera.")
+        return
+    if not virtual_cam_enabled:
+        virtual_cam_manager.start(PREVIEW_DEFAULT_WIDTH, PREVIEW_DEFAULT_HEIGHT, 30)
+        virtual_cam_enabled = True
+        update_status("Virtual camera enabled.")
+    else:
+        virtual_cam_manager.stop()
+        virtual_cam_enabled = False
+        update_status("Virtual camera disabled.")
+
+
 
 
 def create_webcam_preview(camera_index: int):
