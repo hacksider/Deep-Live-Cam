@@ -9,6 +9,7 @@ import modules
 from pathlib import Path
 from typing import List, Any
 from tqdm import tqdm
+import shlex
 
 import modules.globals
 
@@ -32,7 +33,8 @@ def run_ffmpeg(args: List[str]) -> bool:
     ]
     commands.extend(args)
     try:
-        subprocess.run(commands, check=True)
+
+        subprocess.run(shlex.split(shlex.join(commands)), check=True)
         return True
     except Exception as e:
         print(f"Error running ffmpeg: {e}")
