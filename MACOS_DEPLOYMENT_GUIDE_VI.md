@@ -444,6 +444,114 @@ Sau đó kiểm tra:
 which ffmpeg
 ```
 
+### Lỗi 10: "OpenCV: camera failed to properly initialize!"
+
+**Triệu chứng**:
+```
+OpenCV: out device of bound (0-0): 1
+OpenCV: camera failed to properly initialize!
+OpenCV: out device of bound (0-0): 2
+OpenCV: camera failed to properly initialize!
+```
+
+**Nguyên nhân**:
+- Ứng dụng không có quyền truy cập camera
+- Camera đang được sử dụng bởi ứng dụng khác
+- Vấn đề với cv2_enumerate_cameras trên macOS
+
+**Giải pháp**:
+
+**1. Kiểm tra và cấp quyền camera cho Terminal/Python:**
+
+a. Vào **System Settings** (hoặc System Preferences trên macOS cũ):
+   - Chọn **Privacy & Security**
+   - Chọn **Camera** (ở sidebar bên trái)
+   - Đảm bảo **Terminal** được bật
+   - Nếu dùng VS Code hoặc IDE khác, cũng cần bật cho ứng dụng đó
+
+b. Khởi động lại Terminal sau khi cấp quyền
+
+**2. Đóng các ứng dụng đang dùng camera:**
+
+```bash
+# Kiểm tra ứng dụng nào đang dùng camera
+lsof | grep "Camera"
+```
+
+Đóng các ứng dụng như:
+- Zoom, Skype, Microsoft Teams
+- Photo Booth, FaceTime
+- Bất kỳ ứng dụng video call nào khác
+
+**3. Thử chạy ở chế độ ảnh/video trước (không dùng camera):**
+
+```bash
+# Chạy với file ảnh/video thay vì camera
+python run.py
+# Sau đó chọn ảnh nguồn và ảnh/video đích, click "Start"
+```
+
+**4. Test camera với script đơn giản:**
+
+Tạo file test `test_camera.py`:
+
+```python
+import cv2
+
+print("Testing camera access...")
+cap = cv2.VideoCapture(0)
+
+if cap.isOpened():
+    print("✓ Camera opened successfully!")
+    ret, frame = cap.read()
+    if ret:
+        print("✓ Frame captured successfully!")
+        print(f"Frame shape: {frame.shape}")
+    else:
+        print("✗ Failed to capture frame")
+else:
+    print("✗ Failed to open camera")
+
+cap.release()
+```
+
+Chạy test:
+
+```bash
+python test_camera.py
+```
+
+**5. Nếu vẫn không hoạt động, thử gỡ và cài lại opencv:**
+
+```bash
+pip uninstall opencv-python cv2_enumerate_cameras -y
+pip install opencv-python==4.8.1.78
+pip install cv2_enumerate_cameras==1.1.15
+```
+
+**6. Thử với camera index khác:**
+
+Một số máy Mac có nhiều camera (internal + external). Thử các index khác:
+
+```bash
+# Test với các camera index khác
+# Sửa file run.py tạm thời hoặc thử script test với index 1, 2
+```
+
+**7. Workaround - Chạy chế độ không cần camera:**
+
+Nếu bạn chỉ cần xử lý ảnh/video (không cần webcam live):
+
+```bash
+# Chạy với tham số source và target từ command line
+python run.py -s path/to/source.jpg -t path/to/target.mp4 -o output.mp4
+```
+
+**Lưu ý cho macOS Ventura (13.0) trở lên:**
+- Apple đã tăng cường bảo mật camera
+- Bạn có thể cần cho phép "Screen Recording" permission nếu dùng camera trong một số trường hợp
+- Vào **System Settings > Privacy & Security > Screen Recording** và bật cho Terminal
+
 ---
 
 ## Các Tham Số Command Line Hữu Ích
