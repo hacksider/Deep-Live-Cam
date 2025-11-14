@@ -80,8 +80,14 @@ pip install --upgrade pip
 echo ""
 
 # Cài đặt dependencies
-echo "📚 Cài đặt dependencies từ requirements.txt..."
-pip install -r requirements.txt
+echo "📚 Cài đặt dependencies cho macOS..."
+if [ -f "requirements-macos.txt" ]; then
+    echo "   Sử dụng requirements-macos.txt (tối ưu cho Apple Silicon)"
+    pip install -r requirements-macos.txt
+else
+    echo "   Sử dụng requirements.txt"
+    pip install -r requirements.txt
+fi
 echo ""
 
 # Tối ưu hóa cho Apple Silicon - cài đặt onnxruntime-silicon
