@@ -552,6 +552,86 @@ python run.py -s path/to/source.jpg -t path/to/target.mp4 -o output.mp4
 - Bạn có thể cần cho phép "Screen Recording" permission nếu dùng camera trong một số trường hợp
 - Vào **System Settings > Privacy & Security > Screen Recording** và bật cho Terminal
 
+### Lỗi 11: "AVCaptureDeviceTypeExternal is deprecated" và cv2_enumerate_cameras
+
+**Triệu chứng**:
+```
+WARNING: AVCaptureDeviceTypeExternal is deprecated for Continuity Cameras
+OpenCV: out device of bound (0-1): 2
+OpenCV: camera failed to properly initialize!
+```
+
+**Nguyên nhân**:
+- Package `cv2_enumerate_cameras==1.1.15` không tương thích với macOS mới (Sonoma 14.0+)
+- OpenCV 4.8.1.78 có vấn đề với Continuity Camera (tính năng dùng iPhone làm webcam)
+- Apple đã deprecated API cũ
+
+**Giải pháp**:
+
+**Option 1: Nâng cấp OpenCV (Khuyến nghị cho macOS Sonoma+)**
+
+```bash
+# Gỡ các package cũ
+pip uninstall opencv-python cv2_enumerate_cameras -y
+
+# Cài OpenCV mới hơn
+pip install opencv-python==4.10.0.84
+
+# Thử lại (có thể không cần cv2_enumerate_cameras)
+python run.py
+```
+
+**Lưu ý**: Nếu bạn nâng cấp OpenCV, có thể gặp một số vấn đề tương thích. Nếu có lỗi, quay lại version cũ:
+
+```bash
+pip install opencv-python==4.8.1.78 cv2_enumerate_cameras==1.1.15
+```
+
+**Option 2: Tắt Continuity Camera**
+
+Nếu bạn có iPhone và đã bật Continuity Camera, hãy tắt nó đi:
+
+1. Mở **System Settings** > **General** > **AirDrop & Handoff**
+2. Tắt **Continuity Camera**
+3. Khởi động lại máy Mac
+4. Thử chạy lại ứng dụng
+
+**Option 3: Sử dụng chế độ CLI (Không cần camera)**
+
+Nếu camera vẫn không hoạt động, bạn có thể xử lý ảnh/video mà không cần webcam:
+
+```bash
+# Ví dụ: Swap face trong video
+python run.py -s source_face.jpg -t input_video.mp4 -o output_video.mp4 --execution-provider coreml
+
+# Ví dụ: Swap face trong ảnh
+python run.py -s source_face.jpg -t input_image.jpg -o output_image.jpg
+```
+
+**Option 4: Chỉnh sửa code để bỏ qua enumerate_cameras (Nâng cao)**
+
+Nếu bạn có kiến thức Python, có thể comment dòng import trong `modules/ui.py`:
+
+```python
+# Tìm dòng này trong modules/ui.py
+# from cv2_enumerate_cameras import enumerate_cameras
+
+# Thay bằng:
+# from cv2_enumerate_cameras import enumerate_cameras  # Commented for macOS compatibility
+```
+
+Sau đó tìm và comment/fix các dòng sử dụng `enumerate_cameras()`.
+
+**Option 5: Dùng external USB webcam**
+
+Nếu có webcam USB, cắm vào và thử:
+
+```bash
+python run.py
+```
+
+Webcam USB thường hoạt động tốt hơn built-in camera trên macOS.
+
 ---
 
 ## Các Tham Số Command Line Hữu Ích
