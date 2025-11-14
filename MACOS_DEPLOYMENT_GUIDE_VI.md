@@ -175,16 +175,19 @@ pip install --upgrade pip
 
 ### 4.1. Cài Đặt Requirements
 
+⚠️ **QUAN TRỌNG**: Trên macOS, sử dụng file `requirements-macos.txt` thay vì `requirements.txt`
+
 ```bash
-pip install -r requirements.txt
+pip install -r requirements-macos.txt
 ```
 
 Quá trình này có thể mất 5-15 phút tùy thuộc vào tốc độ internet và cấu hình máy.
 
 **Lưu ý quan trọng**:
-- Trên macOS, một số gói sẽ tự động được cài đặt phiên bản phù hợp với hệ điều hành
-- PyTorch sẽ được cài đặt phiên bản không có CUDA (dành cho macOS)
-- Nếu bạn có Apple Silicon, `onnxruntime-silicon` sẽ được cài đặt tự động
+- File `requirements-macos.txt` đã được tối ưu cho macOS (không có CUDA)
+- PyTorch sẽ được cài đặt phiên bản phù hợp cho macOS
+- Nếu bạn có Apple Silicon (M1/M2/M3), `onnxruntime-silicon` sẽ được cài tự động
+- Nếu bạn có MacBook Intel, `onnxruntime` thông thường sẽ được cài
 
 ### 4.2. Xác Nhận Cài Đặt Thành Công
 
@@ -340,7 +343,37 @@ deactivate
 source venv/bin/activate
 ```
 
-### Lỗi 3: "ModuleNotFoundError: No module named 'cv2'"
+### Lỗi 3: "Could not find a version that satisfies the requirement torch==2.0.1+cu118"
+
+**Triệu chứng**:
+```
+ERROR: Could not find a version that satisfies the requirement torch==2.0.1+cu118
+ERROR: No matching distribution found for torch==2.0.1+cu118
+```
+
+**Nguyên nhân**: Bạn đang sử dụng file `requirements.txt` thay vì `requirements-macos.txt`. File `requirements.txt` chứa phiên bản PyTorch với CUDA (dành cho Nvidia GPU), không tương thích với macOS.
+
+**Giải pháp**:
+
+1. **Xóa virtual environment hiện tại**:
+```bash
+deactivate
+rm -rf venv
+```
+
+2. **Tạo lại virtual environment**:
+```bash
+python3.10 -m venv venv
+source venv/bin/activate
+pip install --upgrade pip
+```
+
+3. **Cài đặt với file đúng cho macOS**:
+```bash
+pip install -r requirements-macos.txt
+```
+
+### Lỗi 4: "ModuleNotFoundError: No module named 'cv2'"
 
 **Giải pháp**: Cài đặt lại opencv-python
 
@@ -348,7 +381,7 @@ source venv/bin/activate
 pip install --upgrade opencv-python==4.8.1.78
 ```
 
-### Lỗi 4: Virtual environment không kích hoạt
+### Lỗi 5: Virtual environment không kích hoạt
 
 **Triệu chứng**: Không thấy `(venv)` ở đầu dòng lệnh
 
@@ -359,7 +392,7 @@ cd ~/Projects/Deep-Live-Cam  # Thay đổi đường dẫn nếu cần
 source venv/bin/activate
 ```
 
-### Lỗi 5: "Permission denied"
+### Lỗi 6: "Permission denied"
 
 **Giải pháp**: Cấp quyền cho Terminal truy cập Camera và Microphone
 
@@ -369,7 +402,7 @@ source venv/bin/activate
 4. Chọn **Camera** và cho phép Terminal
 5. Chọn **Microphone** và cho phép Terminal (nếu cần)
 
-### Lỗi 6: Hiệu suất chậm
+### Lỗi 7: Hiệu suất chậm
 
 **Giải pháp**:
 
@@ -387,7 +420,7 @@ python run.py --live-resizable
 python run.py --max-memory 4
 ```
 
-### Lỗi 7: Models không tải được
+### Lỗi 8: Models không tải được
 
 **Giải pháp**: Kiểm tra lại đường dẫn và kích thước file
 
@@ -397,7 +430,7 @@ ls -lh models/
 
 Nếu file bị thiếu hoặc kích thước không đúng, tải lại models theo [Bước 5](#bước-5-tải-models).
 
-### Lỗi 8: "RuntimeError: No ffmpeg exe could be found"
+### Lỗi 9: "RuntimeError: No ffmpeg exe could be found"
 
 **Giải pháp**: Cài đặt lại ffmpeg
 
