@@ -242,7 +242,7 @@ POPUP = None
 POPUP_LIVE = None
 theme_button = None
 ROOT_HEIGHT = 750
-ROOT_WIDTH = 600
+ROOT_WIDTH = 800
 
 PREVIEW = None
 PREVIEW_MAX_HEIGHT = 700
@@ -438,7 +438,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         root, 
         "Preserve the original frame rate of the video when processing.\nRecommended: Keep enabled for smooth playback."
     )
-    keep_fps_help.place(relx=0.36, rely=0.5, relwidth=0.03, relheight=0.04)
+    keep_fps_help.place(relx=0.36, rely=0.5)
 
     keep_frames_value = ctk.BooleanVar(value=modules.globals.keep_frames)
     keep_frames_switch = ctk.CTkSwitch(
@@ -457,7 +457,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         root, 
         "Keep intermediate frames during video processing.\nUseful for debugging but uses more disk space."
     )
-    keep_frames_help.place(relx=0.36, rely=0.55, relwidth=0.03, relheight=0.04)
+    keep_frames_help.place(relx=0.36, rely=0.55)
 
     enhancer_value = ctk.BooleanVar(value=modules.globals.fp_ui["face_enhancer"])
     enhancer_switch = ctk.CTkSwitch(
@@ -476,7 +476,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         root, 
         "Enhance facial features using AI upscaling.\nImproves face quality and reduces artifacts.\nMay increase processing time."
     )
-    enhancer_help.place(relx=0.36, rely=0.6, relwidth=0.03, relheight=0.04)
+    enhancer_help.place(relx=0.36, rely=0.6)
 
     keep_audio_value = ctk.BooleanVar(value=modules.globals.keep_audio)
     keep_audio_switch = ctk.CTkSwitch(
@@ -495,7 +495,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         root, 
         "Preserve the original audio track from the source video.\nRecommended: Keep enabled for videos with sound."
     )
-    keep_audio_help.place(relx=0.86, rely=0.5, relwidth=0.03, relheight=0.04)
+    keep_audio_help.place(relx=0.86, rely=0.5)
 
     many_faces_value = ctk.BooleanVar(value=modules.globals.many_faces)
     many_faces_switch = ctk.CTkSwitch(
@@ -514,7 +514,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         root, 
         "Process multiple faces in the same frame.\nUseful for group photos or videos with many people.\nMay slow down processing speed."
     )
-    many_faces_help.place(relx=0.86, rely=0.55, relwidth=0.03, relheight=0.04)
+    many_faces_help.place(relx=0.86, rely=0.55)
 
     color_correction_value = ctk.BooleanVar(value=modules.globals.color_correction)
     color_correction_switch = ctk.CTkSwitch(
@@ -533,7 +533,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         root, 
         "Automatically correct blue color tint from webcam footage.\nUseful for cameras with poor white balance.\nMay affect overall color accuracy."
     )
-    color_correction_help.place(relx=0.86, rely=0.6, relwidth=0.03, relheight=0.04)
+    color_correction_help.place(relx=0.86, rely=0.6)
 
     #    nsfw_value = ctk.BooleanVar(value=modules.globals.nsfw_filter)
     #    nsfw_switch = ctk.CTkSwitch(root, text='NSFW filter', variable=nsfw_value, cursor='hand2', command=lambda: setattr(modules.globals, 'nsfw_filter', nsfw_value.get()))
@@ -557,7 +557,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         root, 
         "Enable face mapping to manually assign source faces to target faces.\nUseful when there are multiple people in the video.\nRequires manual mapping setup."
     )
-    map_faces_help.place(relx=0.36, rely=0.65, relwidth=0.03, relheight=0.04)
+    map_faces_help.place(relx=0.36, rely=0.65)
 
     show_fps_value = ctk.BooleanVar(value=modules.globals.show_fps)
     show_fps_switch = ctk.CTkSwitch(
@@ -576,7 +576,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         root, 
         "Display frames per second counter during live preview.\nUseful for monitoring performance and processing speed.\nSlightly impacts performance."
     )
-    show_fps_help.place(relx=0.86, rely=0.65, relwidth=0.03, relheight=0.04)
+    show_fps_help.place(relx=0.86, rely=0.65)
 
     mouth_mask_var = ctk.BooleanVar(value=modules.globals.mouth_mask)
     mouth_mask_switch = ctk.CTkSwitch(
@@ -592,7 +592,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         root, 
         "Apply mask to mouth area to prevent face swapping in that region.\nUseful for preserving natural mouth movements.\nMaintains realistic lip sync during face replacement."
     )
-    mouth_mask_help.place(relx=0.36, rely=0.45, relwidth=0.03, relheight=0.04)
+    mouth_mask_help.place(relx=0.36, rely=0.45)
 
     show_mouth_mask_box_var = ctk.BooleanVar(value=modules.globals.show_mouth_mask_box)
     show_mouth_mask_box_switch = ctk.CTkSwitch(
@@ -610,7 +610,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         root, 
         "Visualize the mouth mask area with a bounding box.\nHelps with fine-tuning mask positioning.\nFor debugging and manual adjustment only."
     )
-    show_mouth_mask_box_help.place(relx=0.86, rely=0.45, relwidth=0.03, relheight=0.04)
+    show_mouth_mask_box_help.place(relx=0.86, rely=0.45)
 
     start_button = ctk.CTkButton(
         root, text=_("Start"), cursor="hand2", command=lambda: analyze_target(start, root)
