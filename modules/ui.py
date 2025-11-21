@@ -33,9 +33,214 @@ import platform
 if platform.system() == "Windows":
     from pygrabber.dshow_graph import FilterGraph
 
+
+# A singleton class to manage a single tooltip window for the entire application.
+# This avoids creating/destroying windows constantly, which is the source of the bug.
+class ToolTipManager:
+    _tip_window = None
+    _label = None
+    _show_timer = None
+    _hide_timer = None
+
+    @classmethod
+    def _get_tip_window(cls, parent):
+        if cls._tip_window is None or not cls._tip_window.winfo_exists():
+            cls._tip_window = tw = ctk.CTkToplevel(parent)
+            tw.wm_overrideredirect(1)
+            tw.attributes('-topmost', True)
+            try:
+                # This makes the window transparent to mouse events
+                tw.attributes('-disabled', True)
+            except:
+                pass
+            cls._label = ctk.CTkLabel(
+                tw,
+                text="",
+                fg_color="#2B2B2B",
+                text_color="white",
+                font=("Arial", 10, "normal"),
+                corner_radius=8,
+                padx=12,
+                pady=8,
+                wraplength=250
+            )
+            cls._label.pack()
+            cls._tip_window.withdraw()
+        return cls._tip_window
+
+    @classmethod
+    def schedule_show(cls, widget, text):
+        cls.cancel_timers()
+        cls._show_timer = widget.after(300, lambda: cls._show(widget, text))
+
+    @classmethod
+    def _show(cls, widget, text):
+        cls._show_timer = None
+        if not text:
+            return
+
+        tw = cls._get_tip_window(widget)
+        cls._label.configure(text=text)
+        
+        tw.update_idletasks()
+        tooltip_width = tw.winfo_reqwidth()
+        tooltip_height = tw.winfo_reqheight()
+        
+        button_x = widget.winfo_rootx()
+        button_y = widget.winfo_rooty()
+        button_width = widget.winfo_width()
+        button_height = widget.winfo_height()
+        
+        main_window = ROOT
+        main_x = main_window.winfo_rootx()
+        main_y = main_window.winfo_rooty()
+        main_width = main_window.winfo_width()
+        main_height = main_window.winfo_height()
+        main_right = main_x + main_width
+        main_bottom = main_y + main_height
+        
+        x = button_x + button_width + 10
+        y = button_y + 2
+        
+        if x + tooltip_width > main_right - 10:
+            x = button_x - tooltip_width - 10
+        if x < main_x + 5:
+            x = main_x + 5
+        if x + tooltip_width > main_right - 5:
+            x = main_right - tooltip_width - 5
+        if y + tooltip_height > main_bottom - 5:
+            y = button_y - tooltip_height - 10
+        if y < main_y + 5:
+            y = main_y + 5
+        if x + tooltip_width > main_right:
+            x = main_right - tooltip_width - 5
+        if x < main_x:
+            x = main_x + 5
+            
+        tw.geometry(f"+{x}+{y}")
+        tw.deiconify()
+        
+        cls._hide_timer = tw.after(3000, cls.hide)
+
+    @classmethod
+    def hide(cls):
+        cls.cancel_timers()
+        if cls._tip_window and cls._tip_window.winfo_exists():
+            cls._tip_window.withdraw()
+
+    @classmethod
+    def cancel_timers(cls):
+        if cls._show_timer:
+            if ROOT: ROOT.after_cancel(cls._show_timer)
+            cls._show_timer = None
+        if cls._hide_timer:
+            if cls._tip_window and cls._tip_window.winfo_exists():
+                cls._tip_window.after_cancel(cls._hide_timer)
+            cls._hide_timer = None
+
+# The new ToolTip class is now just a simple controller that calls the manager
+class ToolTip:
+    def __init__(self, widget, text):
+        self.widget = widget
+        self.text = text
+        self.widget.bind("<Enter>", self.on_enter)
+        self.widget.bind("<Leave>", self.on_leave)
+        self.widget.bind("<ButtonPress>", self.on_leave)
+
+    def on_enter(self, event=None):
+        ToolTipManager.schedule_show(self.widget, self.text)
+
+    def on_leave(self, event=None):
+        ToolTipManager.hide()
+
+def create_info_button(parent, tooltip_text, width=20, height=20):
+    """Create a small '?' button with tooltip"""
+    info_button = ctk.CTkButton(
+        parent,
+        text="?",
+        width=width,
+        height=height,
+        font=("Arial", 12, "bold"),
+        fg_color="#666666",
+        hover_color="#888888",
+        corner_radius=10,
+        command=lambda: None
+    )
+    ToolTip(info_button, tooltip_text)
+    return info_button
+
+def close_all_tooltips():
+    """Close any open tooltips."""
+    ToolTipManager.hide()
+
+
+
+def get_theme_icon_char(mode):
+    """Get professional icon characters for theme toggle"""
+    if mode == "Dark":
+        return "☀"  # Sun icon - professional Unicode
+    else:
+        return "☾"  # Moon icon - professional Unicode
+
+
+def get_theme_icon_color(mode):
+    """Get appropriate colors for theme icons"""
+    if mode == "Dark":
+        return "#FFD700"  # Golden yellow for sun
+    else:
+        return "#4682B4"  # Steel blue for moon
+
+
+def update_theme_button(theme_button):
+    """Update theme button icon based on current mode"""
+    current_mode = ctk.get_appearance_mode()
+    icon_char = get_theme_icon_char(current_mode)
+    icon_color = get_theme_icon_color(current_mode)
+    
+    theme_button.configure(
+        text=icon_char,
+        fg_color=icon_color,
+        hover_color=icon_color,
+        text_color="white" if current_mode == "Dark" else "white"
+    )
+
+
+def toggle_theme():
+    """Toggle between light and dark theme"""
+    global theme_button
+    
+    current_mode = ctk.get_appearance_mode()
+    if current_mode == "Dark":
+        ctk.set_appearance_mode("light")
+    else:
+        ctk.set_appearance_mode("dark")
+    save_theme_preference()
+    
+    # Update theme button icon
+    if theme_button:
+        update_theme_button(theme_button)
+
+
+def save_theme_preference():
+    """Save theme preference to file"""
+    theme_data = {"theme": ctk.get_appearance_mode()}
+    with open("theme_preference.json", "w") as f:
+        json.dump(theme_data, f)
+
+
+def load_theme_preference():
+    """Load theme preference from file"""
+    try:
+        with open("theme_preference.json", "r") as f:
+            theme_data = json.load(f)
+            return theme_data.get("theme", "system")
+    except FileNotFoundError:
+        return "system"
+
 ROOT = None
 POPUP = None
 POPUP_LIVE = None
+theme_button = None
 ROOT_HEIGHT = 750
 ROOT_WIDTH = 600
 
@@ -136,12 +341,14 @@ def load_switch_states():
 
 
 def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.CTk:
-    global source_label, target_label, status_label, show_fps_switch
+    global source_label, target_label, status_label, show_fps_switch, theme_button
 
     load_switch_states()
 
     ctk.deactivate_automatic_dpi_awareness()
-    ctk.set_appearance_mode("system")
+    # Load saved theme preference
+    saved_theme = load_theme_preference()
+    ctk.set_appearance_mode(saved_theme)
     ctk.set_default_color_theme(resolve_relative_path("ui.json"))
 
     root = ctk.CTk()
@@ -151,6 +358,44 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     )
     root.configure()
     root.protocol("WM_DELETE_WINDOW", lambda: destroy())
+
+    # Add theme toggle button at top right
+    global theme_button
+    current_mode = ctk.get_appearance_mode()
+    
+    icon_char = get_theme_icon_char(current_mode)
+    icon_color = get_theme_icon_color(current_mode)
+    
+    theme_button = ctk.CTkButton(
+        root,
+        text=icon_char,
+        width=48,  # Double from 24 to 48
+        height=40,  # Double from 20 to 40
+        command=toggle_theme,
+        fg_color=icon_color,
+        hover_color=icon_color,
+        text_color="white",
+        font=("Arial", 20, "bold"),  # Double font size from 10 to 20
+        corner_radius=20  # Double corner radius from 10 to 20
+    )
+    # Position it in the top-left area to avoid cropping with the window
+    theme_button.place(relx=0.02, rely=0.02)
+
+    # Handle window resize events to prevent tooltip issues
+    def on_window_resize(event):
+        if event.widget == root:
+            # Close all tooltips and cleanup when window is resized
+            close_all_tooltips()
+    
+    root.bind("<Configure>", on_window_resize)
+    
+    # Additional window events for better tooltip management
+    def on_window_focus(event):
+        if event.widget == root:
+            # Close tooltips when window gains focus (prevents stuck tooltips)
+            close_all_tooltips()
+    
+    root.bind("<FocusIn>", on_window_focus)
 
     source_label = ctk.CTkLabel(root, text=None)
     source_label.place(relx=0.1, rely=0.05, relwidth=0.275, relheight=0.225)
@@ -187,7 +432,13 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             save_switch_states(),
         ),
     )
-    keep_fps_checkbox.place(relx=0.1, rely=0.5)
+    keep_fps_checkbox.place(relx=0.1, rely=0.5, relwidth=0.25, relheight=0.04)
+    
+    keep_fps_help = create_info_button(
+        root, 
+        "Preserve the original frame rate of the video when processing.\nRecommended: Keep enabled for smooth playback."
+    )
+    keep_fps_help.place(relx=0.36, rely=0.5, relwidth=0.03, relheight=0.04)
 
     keep_frames_value = ctk.BooleanVar(value=modules.globals.keep_frames)
     keep_frames_switch = ctk.CTkSwitch(
@@ -200,7 +451,13 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             save_switch_states(),
         ),
     )
-    keep_frames_switch.place(relx=0.1, rely=0.55)
+    keep_frames_switch.place(relx=0.1, rely=0.55, relwidth=0.25, relheight=0.04)
+    
+    keep_frames_help = create_info_button(
+        root, 
+        "Keep intermediate frames during video processing.\nUseful for debugging but uses more disk space."
+    )
+    keep_frames_help.place(relx=0.36, rely=0.55, relwidth=0.03, relheight=0.04)
 
     enhancer_value = ctk.BooleanVar(value=modules.globals.fp_ui["face_enhancer"])
     enhancer_switch = ctk.CTkSwitch(
@@ -213,7 +470,13 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             save_switch_states(),
         ),
     )
-    enhancer_switch.place(relx=0.1, rely=0.6)
+    enhancer_switch.place(relx=0.1, rely=0.6, relwidth=0.25, relheight=0.04)
+    
+    enhancer_help = create_info_button(
+        root, 
+        "Enhance facial features using AI upscaling.\nImproves face quality and reduces artifacts.\nMay increase processing time."
+    )
+    enhancer_help.place(relx=0.36, rely=0.6, relwidth=0.03, relheight=0.04)
 
     keep_audio_value = ctk.BooleanVar(value=modules.globals.keep_audio)
     keep_audio_switch = ctk.CTkSwitch(
@@ -226,7 +489,13 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             save_switch_states(),
         ),
     )
-    keep_audio_switch.place(relx=0.6, rely=0.5)
+    keep_audio_switch.place(relx=0.6, rely=0.5, relwidth=0.25, relheight=0.04)
+    
+    keep_audio_help = create_info_button(
+        root, 
+        "Preserve the original audio track from the source video.\nRecommended: Keep enabled for videos with sound."
+    )
+    keep_audio_help.place(relx=0.86, rely=0.5, relwidth=0.03, relheight=0.04)
 
     many_faces_value = ctk.BooleanVar(value=modules.globals.many_faces)
     many_faces_switch = ctk.CTkSwitch(
@@ -239,7 +508,13 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             save_switch_states(),
         ),
     )
-    many_faces_switch.place(relx=0.6, rely=0.55)
+    many_faces_switch.place(relx=0.6, rely=0.55, relwidth=0.25, relheight=0.04)
+    
+    many_faces_help = create_info_button(
+        root, 
+        "Process multiple faces in the same frame.\nUseful for group photos or videos with many people.\nMay slow down processing speed."
+    )
+    many_faces_help.place(relx=0.86, rely=0.55, relwidth=0.03, relheight=0.04)
 
     color_correction_value = ctk.BooleanVar(value=modules.globals.color_correction)
     color_correction_switch = ctk.CTkSwitch(
@@ -252,7 +527,13 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             save_switch_states(),
         ),
     )
-    color_correction_switch.place(relx=0.6, rely=0.6)
+    color_correction_switch.place(relx=0.6, rely=0.6, relwidth=0.25, relheight=0.04)
+    
+    color_correction_help = create_info_button(
+        root, 
+        "Automatically correct blue color tint from webcam footage.\nUseful for cameras with poor white balance.\nMay affect overall color accuracy."
+    )
+    color_correction_help.place(relx=0.86, rely=0.6, relwidth=0.03, relheight=0.04)
 
     #    nsfw_value = ctk.BooleanVar(value=modules.globals.nsfw_filter)
     #    nsfw_switch = ctk.CTkSwitch(root, text='NSFW filter', variable=nsfw_value, cursor='hand2', command=lambda: setattr(modules.globals, 'nsfw_filter', nsfw_value.get()))
@@ -270,7 +551,13 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             close_mapper_window() if not map_faces.get() else None
         ),
     )
-    map_faces_switch.place(relx=0.1, rely=0.65)
+    map_faces_switch.place(relx=0.1, rely=0.65, relwidth=0.25, relheight=0.04)
+    
+    map_faces_help = create_info_button(
+        root, 
+        "Enable face mapping to manually assign source faces to target faces.\nUseful when there are multiple people in the video.\nRequires manual mapping setup."
+    )
+    map_faces_help.place(relx=0.36, rely=0.65, relwidth=0.03, relheight=0.04)
 
     show_fps_value = ctk.BooleanVar(value=modules.globals.show_fps)
     show_fps_switch = ctk.CTkSwitch(
@@ -283,7 +570,13 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             save_switch_states(),
         ),
     )
-    show_fps_switch.place(relx=0.6, rely=0.65)
+    show_fps_switch.place(relx=0.6, rely=0.65, relwidth=0.25, relheight=0.04)
+    
+    show_fps_help = create_info_button(
+        root, 
+        "Display frames per second counter during live preview.\nUseful for monitoring performance and processing speed.\nSlightly impacts performance."
+    )
+    show_fps_help.place(relx=0.86, rely=0.65, relwidth=0.03, relheight=0.04)
 
     mouth_mask_var = ctk.BooleanVar(value=modules.globals.mouth_mask)
     mouth_mask_switch = ctk.CTkSwitch(
@@ -293,7 +586,13 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         cursor="hand2",
         command=lambda: setattr(modules.globals, "mouth_mask", mouth_mask_var.get()),
     )
-    mouth_mask_switch.place(relx=0.1, rely=0.45)
+    mouth_mask_switch.place(relx=0.1, rely=0.45, relwidth=0.25, relheight=0.04)
+    
+    mouth_mask_help = create_info_button(
+        root, 
+        "Apply mask to mouth area to prevent face swapping in that region.\nUseful for preserving natural mouth movements.\nMaintains realistic lip sync during face replacement."
+    )
+    mouth_mask_help.place(relx=0.36, rely=0.45, relwidth=0.03, relheight=0.04)
 
     show_mouth_mask_box_var = ctk.BooleanVar(value=modules.globals.show_mouth_mask_box)
     show_mouth_mask_box_switch = ctk.CTkSwitch(
@@ -305,7 +604,13 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             modules.globals, "show_mouth_mask_box", show_mouth_mask_box_var.get()
         ),
     )
-    show_mouth_mask_box_switch.place(relx=0.6, rely=0.45)
+    show_mouth_mask_box_switch.place(relx=0.6, rely=0.45, relwidth=0.25, relheight=0.04)
+    
+    show_mouth_mask_box_help = create_info_button(
+        root, 
+        "Visualize the mouth mask area with a bounding box.\nHelps with fine-tuning mask positioning.\nFor debugging and manual adjustment only."
+    )
+    show_mouth_mask_box_help.place(relx=0.86, rely=0.45, relwidth=0.03, relheight=0.04)
 
     start_button = ctk.CTkButton(
         root, text=_("Start"), cursor="hand2", command=lambda: analyze_target(start, root)
