@@ -1,4 +1,4 @@
-<h1 align="center">Deep-Live-Cam</h1>
+<h1 align="center">Deep-Live-Cam 2.0.1c</h1>
 
 <p align="center">
   Real-time face swap and video deepfake with a single click and only a single image.
