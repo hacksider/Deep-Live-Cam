@@ -188,13 +188,42 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
             )
 
             if getattr(modules.globals, "show_mouth_mask_box", False):
-                mouth_mask_data = (mouth_mask, mouth_cutout, mouth_box, lower_lip_polygon)
-                # Draw visualization on the swapped_frame *before* opacity blending
-                swapped_frame = draw_mouth_mask_visualization(
-                    swapped_frame, target_face, mouth_mask_data
-                )
-
-    # Apply opacity blend between the original frame and the swapped frame
+                        mouth_mask_data = (mouth_mask, mouth_cutout, mouth_box, lower_lip_polygon)
+                        # Draw visualization on the swapped_frame *before* opacity blending
+                        swapped_frame = draw_mouth_mask_visualization(
+                            swapped_frame, target_face, mouth_mask_data
+                        )
+        
+            # --- Poisson Blending ---
+            if getattr(modules.globals, "poisson_blend", False):
+                face_mask = create_face_mask(target_face, temp_frame)
+                if face_mask is not None:
+                    # Find bounding box of the mask
+                    y_indices, x_indices = np.where(face_mask > 0)
+                    if len(x_indices) > 0 and len(y_indices) > 0:
+                        x_min, x_max = np.min(x_indices), np.max(x_indices)
+                        y_min, y_max = np.min(y_indices), np.max(y_indices)
+        
+                        # Calculate center
+                        center = (int((x_min + x_max) / 2), int((y_min + y_max) / 2))
+        
+                        # Crop src and mask
+                        src_crop = swapped_frame[y_min : y_max + 1, x_min : x_max + 1]
+                        mask_crop = face_mask[y_min : y_max + 1, x_min : x_max + 1]
+        
+                        try:
+                            # Use original_frame as destination to blend the swapped face onto it
+                            swapped_frame = cv2.seamlessClone(
+                                src_crop,
+                                original_frame,
+                                mask_crop,
+                                center,
+                                cv2.NORMAL_CLONE,
+                            )
+                        except Exception as e:
+                            print(f"Poisson blending failed: {e}")
+        
+            # Apply opacity blend between the original frame and the swapped frame
     opacity = getattr(modules.globals, "opacity", 1.0)
     # Ensure opacity is within valid range [0.0, 1.0]
     opacity = max(0.0, min(1.0, opacity))

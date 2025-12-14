@@ -36,7 +36,7 @@ if platform.system() == "Windows":
 ROOT = None
 POPUP = None
 POPUP_LIVE = None
-ROOT_HEIGHT = 750
+ROOT_HEIGHT = 800
 ROOT_WIDTH = 600
 
 PREVIEW = None
@@ -98,6 +98,7 @@ def save_switch_states():
         "keep_frames": modules.globals.keep_frames,
         "many_faces": modules.globals.many_faces,
         "map_faces": modules.globals.map_faces,
+        "poisson_blend": modules.globals.poisson_blend,
         "color_correction": modules.globals.color_correction,
         "nsfw_filter": modules.globals.nsfw_filter,
         "live_mirror": modules.globals.live_mirror,
@@ -120,6 +121,7 @@ def load_switch_states():
         modules.globals.keep_frames = switch_states.get("keep_frames", False)
         modules.globals.many_faces = switch_states.get("many_faces", False)
         modules.globals.map_faces = switch_states.get("map_faces", False)
+        modules.globals.poisson_blend = switch_states.get("poisson_blend", False)
         modules.globals.color_correction = switch_states.get("color_correction", False)
         modules.globals.nsfw_filter = switch_states.get("nsfw_filter", False)
         modules.globals.live_mirror = switch_states.get("live_mirror", False)
@@ -272,6 +274,19 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     )
     map_faces_switch.place(relx=0.1, rely=0.65)
 
+    poisson_blend_value = ctk.BooleanVar(value=modules.globals.poisson_blend)
+    poisson_blend_switch = ctk.CTkSwitch(
+        root,
+        text=_("Poisson Blend"),
+        variable=poisson_blend_value,
+        cursor="hand2",
+        command=lambda: (
+            setattr(modules.globals, "poisson_blend", poisson_blend_value.get()),
+            save_switch_states(),
+        ),
+    )
+    poisson_blend_switch.place(relx=0.1, rely=0.7)
+
     show_fps_value = ctk.BooleanVar(value=modules.globals.show_fps)
     show_fps_switch = ctk.CTkSwitch(
         root,
@@ -310,21 +325,21 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     start_button = ctk.CTkButton(
         root, text=_("Start"), cursor="hand2", command=lambda: analyze_target(start, root)
     )
-    start_button.place(relx=0.15, rely=0.80, relwidth=0.2, relheight=0.05)
+    start_button.place(relx=0.15, rely=0.86, relwidth=0.2, relheight=0.05)
 
     stop_button = ctk.CTkButton(
         root, text=_("Destroy"), cursor="hand2", command=lambda: destroy()
     )
-    stop_button.place(relx=0.4, rely=0.80, relwidth=0.2, relheight=0.05)
+    stop_button.place(relx=0.4, rely=0.86, relwidth=0.2, relheight=0.05)
 
     preview_button = ctk.CTkButton(
         root, text=_("Preview"), cursor="hand2", command=lambda: toggle_preview()
     )
-    preview_button.place(relx=0.65, rely=0.80, relwidth=0.2, relheight=0.05)
+    preview_button.place(relx=0.65, rely=0.86, relwidth=0.2, relheight=0.05)
 
     # --- Camera Selection ---
     camera_label = ctk.CTkLabel(root, text=_("Select Camera:"))
-    camera_label.place(relx=0.1, rely=0.86, relwidth=0.2, relheight=0.05)
+    camera_label.place(relx=0.1, rely=0.92, relwidth=0.2, relheight=0.05)
 
     available_cameras = get_available_cameras()
     camera_indices, camera_names = available_cameras
@@ -343,7 +358,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             root, variable=camera_variable, values=camera_names
         )
 
-    camera_optionmenu.place(relx=0.35, rely=0.86, relwidth=0.25, relheight=0.05)
+    camera_optionmenu.place(relx=0.35, rely=0.92, relwidth=0.25, relheight=0.05)
 
     live_button = ctk.CTkButton(
         root,
@@ -363,7 +378,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             else "disabled"
         ),
     )
-    live_button.place(relx=0.65, rely=0.86, relwidth=0.2, relheight=0.05)
+    live_button.place(relx=0.65, rely=0.92, relwidth=0.2, relheight=0.05)
     # --- End Camera Selection ---
 
     # 1) Define a DoubleVar for transparency (0 = fully transparent, 1 = fully opaque)
@@ -387,7 +402,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
 
     # 2) Transparency label and slider (placed ABOVE sharpness)
     transparency_label = ctk.CTkLabel(root, text="Transparency:")
-    transparency_label.place(relx=0.15, rely=0.69, relwidth=0.2, relheight=0.05)
+    transparency_label.place(relx=0.15, rely=0.75, relwidth=0.2, relheight=0.05)
 
     transparency_slider = ctk.CTkSlider(
         root,
@@ -403,7 +418,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         border_width=1,
         corner_radius=3,
     )
-    transparency_slider.place(relx=0.35, rely=0.71, relwidth=0.5, relheight=0.02)
+    transparency_slider.place(relx=0.35, rely=0.77, relwidth=0.5, relheight=0.02)
 
     # 3) Sharpness label & slider
     sharpness_var = ctk.DoubleVar(value=0.0)  # start at 0.0
@@ -412,7 +427,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         update_status(f"Sharpness set to {value:.1f}")
 
     sharpness_label = ctk.CTkLabel(root, text="Sharpness:")
-    sharpness_label.place(relx=0.15, rely=0.74, relwidth=0.2, relheight=0.05)
+    sharpness_label.place(relx=0.15, rely=0.80, relwidth=0.2, relheight=0.05)
 
     sharpness_slider = ctk.CTkSlider(
         root,
@@ -428,17 +443,17 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         border_width=1,
         corner_radius=3,
     )
-    sharpness_slider.place(relx=0.35, rely=0.76, relwidth=0.5, relheight=0.02)
+    sharpness_slider.place(relx=0.35, rely=0.82, relwidth=0.5, relheight=0.02)
 
     # Status and link at the bottom
     global status_label
     status_label = ctk.CTkLabel(root, text=None, justify="center")
-    status_label.place(relx=0.1, rely=0.9, relwidth=0.8)
+    status_label.place(relx=0.1, rely=0.96, relwidth=0.8)
 
     donate_label = ctk.CTkLabel(
         root, text="Deep Live Cam", justify="center", cursor="hand2"
     )
-    donate_label.place(relx=0.1, rely=0.95, relwidth=0.8)
+    donate_label.place(relx=0.1, rely=0.98, relwidth=0.8)
     donate_label.configure(
         text_color=ctk.ThemeManager.theme.get("URL").get("text_color")
     )
