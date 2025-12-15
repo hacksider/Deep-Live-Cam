@@ -29,6 +29,7 @@ from modules.video_capture import VideoCapturer
 from modules.gettext import LanguageManager
 from modules import globals
 import platform
+from numbers import Integral
 
 if platform.system() == "Windows":
     from pygrabber.dshow_graph import FilterGraph
@@ -781,7 +782,11 @@ def check_and_ignore_nsfw(target, destroy: Callable = None) -> bool:
 def fit_image_to_size(image, width: int, height: int):
     if width is None and height is None:
         return image
+    if not isinstance(width, Integral) or not isinstance(height, Integral) or width <= 0 or height <= 0:
+        return image
     h, w, _ = image.shape
+    if h == 0 or w == 0:
+        return image
     ratio_h = 0.0
     ratio_w = 0.0
     if width > height:
@@ -790,6 +795,8 @@ def fit_image_to_size(image, width: int, height: int):
         ratio_w = width / w
     ratio = max(ratio_w, ratio_h)
     new_size = (int(ratio * w), int(ratio * h))
+    if new_size[0] <= 0 or new_size[1] <= 0:
+        return image
     return cv2.resize(image, dsize=new_size)
 
 
