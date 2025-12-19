@@ -114,7 +114,11 @@ This is more likely to work on your computer but will be slower as it utilizes t
 -   git
 -   [ffmpeg](https://www.youtube.com/watch?v=OlNWCpFdVMA) - ```iex (irm ffmpeg.tc.ht)```
 -   [Visual Studio 2022 Runtimes (Windows)](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
-
+    - `Windows Universal C Runtime`
+    - `MSVC v143 - VS 2022 C++ x64/x86 build tools`
+    - `Windows 11 SDK`
+    - `Windows Universal CRT SDK`
+  
 **2. Clone the Repository**
 
 ```bash
