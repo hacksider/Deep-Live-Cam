@@ -32,7 +32,11 @@ IS_APPLE_SILICON = platform.system() == 'Darwin' and platform.machine() == 'arm6
 FRAME_CACHE = deque(maxlen=3)  # Cache for frame reuse
 FACE_DETECTION_CACHE = {}  # Cache face detections
 LAST_DETECTION_TIME = 0
-DETECTION_INTERVAL = 0.08 if IS_APPLE_SILICON else 0.033 # Adaptive detection rate
+# Adaptive detection rate: Configurable via env var, default 0.08 for Apple Silicon, 0.033 otherwise
+try:
+    DETECTION_INTERVAL = float(os.getenv("DLC_DETECTION_INTERVAL", 0.08 if IS_APPLE_SILICON else 0.033))
+except ValueError:
+    DETECTION_INTERVAL = 0.08 if IS_APPLE_SILICON else 0.033
 FRAME_SKIP_COUNTER = 0
 ADAPTIVE_QUALITY = True
 # --- END: Mac M1-M5 Optimizations ---
