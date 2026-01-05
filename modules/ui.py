@@ -975,15 +975,10 @@ def create_webcam_preview(camera_index: int):
         if modules.globals.live_mirror:
             temp_frame = cv2.flip(temp_frame, 1)
 
-        if modules.globals.live_resizable:
-            temp_frame = fit_image_to_size(
-                temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
-            )
-
-        else:
-            temp_frame = fit_image_to_size(
-                temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
-            )
+        # Always resize to fit the preview window to ensure consistent performance
+        temp_frame = fit_image_to_size(
+            temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
+        )
 
         if not modules.globals.map_faces:
             if source_image is None and modules.globals.source_path:
@@ -1025,9 +1020,7 @@ def create_webcam_preview(camera_index: int):
 
         image = cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB)
         image = Image.fromarray(image)
-        image = ImageOps.contain(
-            image, (temp_frame.shape[1], temp_frame.shape[0]), Image.LANCZOS
-        )
+        # Skip ImageOps.contain as frame is already resized
         image = ctk.CTkImage(image, size=image.size)
         preview_label.configure(image=image)
         ROOT.update()
