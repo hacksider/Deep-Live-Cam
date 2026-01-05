@@ -1,5 +1,6 @@
 import os
 import shutil
+import platform
 from typing import Any
 import insightface
 
@@ -20,7 +21,10 @@ def get_face_analyser() -> Any:
 
     if FACE_ANALYSER is None:
         FACE_ANALYSER = insightface.app.FaceAnalysis(name='buffalo_l', providers=modules.globals.execution_providers)
-        FACE_ANALYSER.prepare(ctx_id=0, det_size=(640, 640))
+        det_size = (640, 640)
+        if platform.system().lower() == 'darwin':
+            det_size = (320, 320)
+        FACE_ANALYSER.prepare(ctx_id=0, det_size=det_size)
     return FACE_ANALYSER
 
 

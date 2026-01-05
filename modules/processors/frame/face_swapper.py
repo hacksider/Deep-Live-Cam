@@ -32,7 +32,7 @@ IS_APPLE_SILICON = platform.system() == 'Darwin' and platform.machine() == 'arm6
 FRAME_CACHE = deque(maxlen=3)  # Cache for frame reuse
 FACE_DETECTION_CACHE = {}  # Cache face detections
 LAST_DETECTION_TIME = 0
-DETECTION_INTERVAL = 0.033  # ~30 FPS detection rate for live mode
+DETECTION_INTERVAL = 0.08 if IS_APPLE_SILICON else 0.033 # Adaptive detection rate
 FRAME_SKIP_COUNTER = 0
 ADAPTIVE_QUALITY = True
 # --- END: Mac M1-M5 Optimizations ---
@@ -228,9 +228,12 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
     # Ensure opacity is within valid range [0.0, 1.0]
     opacity = max(0.0, min(1.0, opacity))
 
-    # Blend the original_frame with the (potentially mouth-masked) swapped_frame
-    # Ensure both frames are uint8 before blending
-    final_swapped_frame = cv2.addWeighted(original_frame.astype(np.uint8), 1 - opacity, swapped_frame.astype(np.uint8), opacity, 0)
+    if opacity < 1.0:
+        # Blend the original_frame with the (potentially mouth-masked) swapped_frame
+        # Ensure both frames are uint8 before blending
+        final_swapped_frame = cv2.addWeighted(original_frame.astype(np.uint8), 1 - opacity, swapped_frame.astype(np.uint8), opacity, 0)
+    else:
+        final_swapped_frame = swapped_frame
 
     # Ensure final frame is uint8 after blending (addWeighted should preserve it, but belt-and-suspenders)
     final_swapped_frame = final_swapped_frame.astype(np.uint8)
@@ -472,7 +475,7 @@ def process_frame_v2(temp_frame: Frame, temp_frame_path: str = "") -> Frame:
 
     else:
         # Live stream or webcam processing (analyze faces on the fly)
-        detected_faces = get_many_faces(processed_frame)
+        detected_faces = get_faces_optimized(processed_frame)
         if detected_faces:
             if modules.globals.many_faces:
                  source_face = default_source_face() # Use default source for all detected targets
