@@ -18,7 +18,7 @@ onnxruntime-silicon==1.16.3; sys_platform == 'darwin' and platform_machine == 'a
 onnxruntime-gpu==1.22.0; sys_platform != 'darwin'
 tensorflow; sys_platform != 'darwin'
 opennsfw2==0.10.2
-protobuf==4.25.1
+protobuf==5.29.6
 git+https://github.com/xinntao/BasicSR.git@master
 git+https://github.com/TencentARC/GFPGAN.git@master
 pygrabber
