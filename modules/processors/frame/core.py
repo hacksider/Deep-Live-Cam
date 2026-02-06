@@ -67,13 +67,29 @@ def set_frame_processors_modules_from_ui(frame_processors: List[str]) -> None:
                  print(f"Warning: Error removing frame processor {frame_processor}: {e}")
 
 def multi_process_frame(source_path: str, temp_frame_paths: List[str], process_frames: Callable[[str, List[str], Any], None], progress: Any = None) -> None:
-    with ThreadPoolExecutor(max_workers=modules.globals.execution_threads) as executor:
-        futures = []
-        for path in temp_frame_paths:
-            future = executor.submit(process_frames, source_path, [path], progress)
-            futures.append(future)
-        for future in futures:
-            future.result()
+    """Process frames in parallel with optimized batching and memory management."""
+    max_workers = modules.globals.execution_threads
+    
+    # Determine optimal batch size based on available memory and thread count
+    # Process frames in batches to avoid memory overflow
+    batch_size = max(1, min(32, len(temp_frame_paths) // max(1, max_workers)))
+    
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Process in batches to manage memory better
+        for i in range(0, len(temp_frame_paths), batch_size):
+            batch = temp_frame_paths[i:i + batch_size]
+            futures = []
+            
+            for path in batch:
+                future = executor.submit(process_frames, source_path, [path], progress)
+                futures.append(future)
+            
+            # Wait for batch to complete before starting next batch
+            for future in futures:
+                try:
+                    future.result()
+                except Exception as e:
+                    print(f"Error processing frame: {e}")
 
 
 def process_video(source_path: str, frame_paths: list[str], process_frames: Callable[[str, List[str], Any], None]) -> None:

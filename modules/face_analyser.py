@@ -2,6 +2,7 @@ import os
 import shutil
 from typing import Any
 import insightface
+import threading
 
 import cv2
 import numpy as np
@@ -13,14 +14,22 @@ from modules.utilities import get_temp_directory_path, create_temp, extract_fram
 from pathlib import Path
 
 FACE_ANALYSER = None
+FACE_ANALYSER_LOCK = threading.Lock()
 
 
 def get_face_analyser() -> Any:
+    """Get face analyser with thread-safe initialization."""
     global FACE_ANALYSER
 
     if FACE_ANALYSER is None:
-        FACE_ANALYSER = insightface.app.FaceAnalysis(name='buffalo_l', providers=modules.globals.execution_providers)
-        FACE_ANALYSER.prepare(ctx_id=0, det_size=(640, 640))
+        with FACE_ANALYSER_LOCK:
+            # Double-check after acquiring lock
+            if FACE_ANALYSER is None:
+                FACE_ANALYSER = insightface.app.FaceAnalysis(
+                    name='buffalo_l',
+                    providers=modules.globals.execution_providers
+                )
+                FACE_ANALYSER.prepare(ctx_id=0, det_size=(640, 640))
     return FACE_ANALYSER
 
 

@@ -129,11 +129,22 @@ def suggest_execution_providers() -> List[str]:
 
 
 def suggest_execution_threads() -> int:
+    """Suggest optimal thread count based on hardware and execution provider."""
+    import os
+    
+    # Get CPU count
+    cpu_count = os.cpu_count() or 4
+    
     if 'DmlExecutionProvider' in modules.globals.execution_providers:
         return 1
     if 'ROCMExecutionProvider' in modules.globals.execution_providers:
         return 1
-    return 8
+    if 'CUDAExecutionProvider' in modules.globals.execution_providers:
+        # For CUDA, use more threads for parallel frame processing
+        return min(cpu_count, 16)
+    
+    # For CPU execution, use most cores but leave some for system
+    return max(4, min(cpu_count - 2, 16))
 
 
 def limit_resources() -> None:
@@ -176,10 +187,16 @@ def update_status(message: str, scope: str = 'DLC.CORE') -> None:
         ui.update_status(message)
 
 def start() -> None:
+    """Start processing with performance monitoring."""
+    import time
+    
+    start_time = time.time()
+    
     for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
         if not frame_processor.pre_start():
             return
     update_status('Processing...')
+    
     # process image to image
     if has_image_extension(modules.globals.target_path):
         if modules.globals.nsfw_filter and ui.check_and_ignore_nsfw(modules.globals.target_path, destroy):
@@ -193,26 +210,40 @@ def start() -> None:
             frame_processor.process_image(modules.globals.source_path, modules.globals.output_path, modules.globals.output_path)
             release_resources()
         if is_image(modules.globals.target_path):
-            update_status('Processing to image succeed!')
+            elapsed = time.time() - start_time
+            update_status(f'Processing to image succeed! (Time: {elapsed:.2f}s)')
         else:
             update_status('Processing to image failed!')
         return
+    
     # process image to videos
     if modules.globals.nsfw_filter and ui.check_and_ignore_nsfw(modules.globals.target_path, destroy):
         return
 
+    extraction_start = time.time()
     if not modules.globals.map_faces:
         update_status('Creating temp resources...')
         create_temp(modules.globals.target_path)
         update_status('Extracting frames...')
         extract_frames(modules.globals.target_path)
+    extraction_time = time.time() - extraction_start
+    update_status(f'Frame extraction completed in {extraction_time:.2f}s')
 
     temp_frame_paths = get_temp_frame_paths(modules.globals.target_path)
+    total_frames = len(temp_frame_paths)
+    update_status(f'Processing {total_frames} frames with {modules.globals.execution_threads} threads...')
+    
+    processing_start = time.time()
     for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
         update_status('Progressing...', frame_processor.NAME)
         frame_processor.process_video(modules.globals.source_path, temp_frame_paths)
         release_resources()
+    processing_time = time.time() - processing_start
+    fps_processing = total_frames / processing_time if processing_time > 0 else 0
+    update_status(f'Frame processing completed in {processing_time:.2f}s ({fps_processing:.2f} fps)')
+    
     # handles fps
+    encoding_start = time.time()
     if modules.globals.keep_fps:
         update_status('Detecting fps...')
         fps = detect_fps(modules.globals.target_path)
@@ -221,6 +252,9 @@ def start() -> None:
     else:
         update_status('Creating video with 30.0 fps...')
         create_video(modules.globals.target_path)
+    encoding_time = time.time() - encoding_start
+    update_status(f'Video encoding completed in {encoding_time:.2f}s')
+    
     # handle audio
     if modules.globals.keep_audio:
         if modules.globals.keep_fps:
@@ -230,10 +264,13 @@ def start() -> None:
         restore_audio(modules.globals.target_path, modules.globals.output_path)
     else:
         move_temp(modules.globals.target_path, modules.globals.output_path)
+    
     # clean and validate
     clean_temp(modules.globals.target_path)
+    
+    total_time = time.time() - start_time
     if is_video(modules.globals.target_path):
-        update_status('Processing to video succeed!')
+        update_status(f'Processing to video succeed! Total time: {total_time:.2f}s')
     else:
         update_status('Processing to video failed!')
 

@@ -21,13 +21,14 @@ if platform.system().lower() == "darwin":
 
 
 def run_ffmpeg(args: List[str]) -> bool:
+    """Run ffmpeg with hardware acceleration and optimized settings."""
     commands = [
         "ffmpeg",
         "-hide_banner",
-        "-hwaccel",
-        "auto",
-        "-loglevel",
-        modules.globals.log_level,
+        "-hwaccel", "auto",  # Auto-detect hardware acceleration
+        "-hwaccel_output_format", "auto",  # Use hardware format when possible
+        "-threads", str(modules.globals.execution_threads or 0),  # 0 = auto-detect optimal thread count
+        "-loglevel", modules.globals.log_level,
     ]
     commands.extend(args)
     try:
@@ -61,39 +62,131 @@ def detect_fps(target_path: str) -> float:
 
 
 def extract_frames(target_path: str) -> None:
+    """Extract frames with hardware acceleration and optimized settings."""
     temp_directory_path = get_temp_directory_path(target_path)
+    
+    # Use hardware-accelerated decoding and optimized pixel format
     run_ffmpeg(
         [
-            "-i",
-            target_path,
-            "-pix_fmt",
-            "rgb24",
+            "-i", target_path,
+            "-vf", "format=rgb24",  # Use video filter for format conversion (faster)
+            "-vsync", "0",  # Prevent frame duplication
+            "-frame_pts", "1",  # Preserve frame timing
             os.path.join(temp_directory_path, "%04d.png"),
         ]
     )
 
 
 def create_video(target_path: str, fps: float = 30.0) -> None:
+    """Create video with hardware-accelerated encoding and optimized settings."""
     temp_output_path = get_temp_output_path(target_path)
     temp_directory_path = get_temp_directory_path(target_path)
-    run_ffmpeg(
-        [
-            "-r",
-            str(fps),
-            "-i",
-            os.path.join(temp_directory_path, "%04d.png"),
-            "-c:v",
-            modules.globals.video_encoder,
-            "-crf",
-            str(modules.globals.video_quality),
-            "-pix_fmt",
-            "yuv420p",
-            "-vf",
-            "colorspace=bt709:iall=bt601-6-625:fast=1",
+    
+    # Determine optimal encoder based on available hardware
+    encoder = modules.globals.video_encoder
+    encoder_options = []
+    
+    # GPU-accelerated encoding options
+    if 'CUDAExecutionProvider' in modules.globals.execution_providers:
+        # NVIDIA GPU encoding
+        if encoder == 'libx264':
+            encoder = 'h264_nvenc'
+            encoder_options = [
+                "-preset", "p7",  # Highest quality preset for NVENC
+                "-tune", "hq",  # High quality tuning
+                "-rc", "vbr",  # Variable bitrate
+                "-cq", str(modules.globals.video_quality),  # Quality level
+                "-b:v", "0",  # Let CQ control bitrate
+                "-multipass", "fullres",  # Two-pass encoding for better quality
+            ]
+        elif encoder == 'libx265':
+            encoder = 'hevc_nvenc'
+            encoder_options = [
+                "-preset", "p7",
+                "-tune", "hq",
+                "-rc", "vbr",
+                "-cq", str(modules.globals.video_quality),
+                "-b:v", "0",
+            ]
+    elif 'DmlExecutionProvider' in modules.globals.execution_providers:
+        # AMD/Intel GPU encoding (DirectML on Windows)
+        if encoder == 'libx264':
+            # Try AMD AMF encoder
+            encoder = 'h264_amf'
+            encoder_options = [
+                "-quality", "quality",  # Quality mode
+                "-rc", "vbr_latency",
+                "-qp_i", str(modules.globals.video_quality),
+                "-qp_p", str(modules.globals.video_quality),
+            ]
+        elif encoder == 'libx265':
+            encoder = 'hevc_amf'
+            encoder_options = [
+                "-quality", "quality",
+                "-rc", "vbr_latency",
+                "-qp_i", str(modules.globals.video_quality),
+                "-qp_p", str(modules.globals.video_quality),
+            ]
+    else:
+        # CPU encoding with optimized settings
+        if encoder == 'libx264':
+            encoder_options = [
+                "-preset", "medium",  # Balance speed/quality
+                "-crf", str(modules.globals.video_quality),
+                "-tune", "film",  # Optimize for film content
+            ]
+        elif encoder == 'libx265':
+            encoder_options = [
+                "-preset", "medium",
+                "-crf", str(modules.globals.video_quality),
+                "-x265-params", "log-level=error",
+            ]
+        elif encoder == 'libvpx-vp9':
+            encoder_options = [
+                "-crf", str(modules.globals.video_quality),
+                "-b:v", "0",  # Constant quality mode
+                "-cpu-used", "2",  # Speed vs quality (0-5, lower=slower/better)
+            ]
+    
+    # Build ffmpeg command
+    ffmpeg_args = [
+        "-r", str(fps),
+        "-i", os.path.join(temp_directory_path, "%04d.png"),
+        "-c:v", encoder,
+    ]
+    
+    # Add encoder-specific options
+    ffmpeg_args.extend(encoder_options)
+    
+    # Add common options
+    ffmpeg_args.extend([
+        "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart",  # Enable fast start for web playback
+        "-vf", "colorspace=bt709:iall=bt601-6-625:fast=1",
+        "-y",
+        temp_output_path,
+    ])
+    
+    # Try with hardware encoder first, fallback to software if it fails
+    success = run_ffmpeg(ffmpeg_args)
+    
+    if not success and encoder in ['h264_nvenc', 'hevc_nvenc', 'h264_amf', 'hevc_amf']:
+        # Fallback to software encoding
+        print(f"Hardware encoding with {encoder} failed, falling back to software encoding...")
+        fallback_encoder = 'libx264' if 'h264' in encoder else 'libx265'
+        ffmpeg_args_fallback = [
+            "-r", str(fps),
+            "-i", os.path.join(temp_directory_path, "%04d.png"),
+            "-c:v", fallback_encoder,
+            "-preset", "medium",
+            "-crf", str(modules.globals.video_quality),
+            "-pix_fmt", "yuv420p",
+            "-movflags", "+faststart",
+            "-vf", "colorspace=bt709:iall=bt601-6-625:fast=1",
             "-y",
             temp_output_path,
         ]
-    )
+        run_ffmpeg(ffmpeg_args_fallback)
 
 
 def restore_audio(target_path: str, output_path: str) -> None:

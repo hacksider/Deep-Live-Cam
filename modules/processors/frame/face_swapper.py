@@ -113,6 +113,7 @@ def get_face_swapper() -> Any:
 
 
 def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
+    """Optimized face swapping with better memory management and performance."""
     face_swapper = get_face_swapper()
     if face_swapper is None:
         update_status("Face swapper model not loaded or failed to load. Skipping swap.", NAME)
@@ -127,9 +128,8 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
 
     # Apply the face swap with optimized memory handling
     try:
-        # For Apple Silicon, use optimized inference
-        if IS_APPLE_SILICON:
-            # Ensure contiguous memory layout for better performance
+        # Ensure contiguous memory layout for better performance on all platforms
+        if not temp_frame.flags['C_CONTIGUOUS']:
             temp_frame = np.ascontiguousarray(temp_frame)
         
         swapped_frame_raw = face_swapper.get(
@@ -532,6 +532,7 @@ def process_frames(
 ) -> None:
     """
     Processes a list of frame paths (typically for video).
+    Optimized with better memory management and caching.
     Iterates through frames, applies the appropriate swapping logic based on globals,
     and saves the result back to the frame path. Handles multi-threading via caller.
     """
@@ -555,6 +556,8 @@ def process_frames(
                     if source_face is None:
                         # Specific message for no face detected after successful read
                         update_status(f"Warning: Successfully read source image {source_path}, but no face was detected. Swaps will be skipped.", NAME)
+                    # Free memory immediately after extracting face
+                    del source_img
             except Exception as e:
                 # Print the specific exception caught
                 import traceback
@@ -582,6 +585,7 @@ def process_frames(
         # update_status(f"Processing frame {i+1}/{total_frames}: {os.path.basename(temp_frame_path)}", NAME) # Optional Debug
 
         # Read the target frame
+        temp_frame = None
         try:
             temp_frame = cv2.imread(temp_frame_path)
             if temp_frame is None:
@@ -616,13 +620,19 @@ def process_frames(
             # traceback.print_exc()
             result_frame = temp_frame # Use original frame on processing error
 
-        # Write the result back to the same frame path
+        # Write the result back to the same frame path with optimized compression
         try:
-            write_success = cv2.imwrite(temp_frame_path, result_frame)
+            # Use PNG compression level 3 (faster) instead of default 9
+            write_success = cv2.imwrite(temp_frame_path, result_frame, [cv2.IMWRITE_PNG_COMPRESSION, 3])
             if not write_success:
                 print(f"{NAME}: Error: Failed to write processed frame to {temp_frame_path}")
         except Exception as write_e:
             print(f"{NAME}: Error writing frame {temp_frame_path}: {write_e}")
+        
+        # Free memory immediately after processing
+        del temp_frame
+        if result_frame is not None:
+            del result_frame
 
         # Update progress bar
         if progress:
