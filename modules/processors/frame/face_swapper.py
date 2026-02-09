@@ -1100,7 +1100,7 @@ def create_face_mask(face: Face, frame: Frame) -> np.ndarray:
         # Calculate convex hull of these points
         # Use try-except as convexHull can fail on degenerate input
         try:
-             hull = cv2.convexHull(full_face_poly.astype(np.float32)) # Use float for accuracy
+             hull = cv2.convexHull(face_outline_points.astype(np.float32)) # Use float for accuracy
              if hull is None or len(hull) < 3:
                  # print("Warning: Convex hull calculation failed or returned too few points.")
                  # Fallback: use bounding box of landmarks? Or just return empty mask?
