@@ -542,10 +542,21 @@ def create_source_target_popup(
         )
         x_label.grid(row=id, column=2, padx=10, pady=10)
 
-        image = Image.fromarray(cv2.cvtColor(item["target"]["cv2"], cv2.COLOR_BGR2RGB))
-        image = image.resize(
-            (MAPPER_PREVIEW_MAX_WIDTH, MAPPER_PREVIEW_MAX_HEIGHT), Image.LANCZOS
-        )
+        cv2_target = None
+        try:
+            cv2_target = item.get("target", {}).get("cv2") if isinstance(item.get("target"), dict) else None
+        except Exception:
+            cv2_target = None
+
+        if cv2_target is None or getattr(cv2_target, "size", 0) == 0:
+            image = Image.new(
+                "RGB", (MAPPER_PREVIEW_MAX_WIDTH, MAPPER_PREVIEW_MAX_HEIGHT), (128, 128, 128)
+            )
+        else:
+            image = Image.fromarray(cv2.cvtColor(cv2_target, cv2.COLOR_BGR2RGB))
+            image = image.resize(
+                (MAPPER_PREVIEW_MAX_WIDTH, MAPPER_PREVIEW_MAX_HEIGHT), Image.LANCZOS
+            )
         tk_image = ctk.CTkImage(image, size=image.size)
 
         target_image = ctk.CTkLabel(
