@@ -45,6 +45,7 @@ def create_face_mask(face: Face, frame: Frame) -> np.ndarray:
         )  # 5% of face width
 
         # Create a slightly larger convex hull for padding
+        face_outline = landmarks[0:33]
         hull = cv2.convexHull(face_outline)
         hull_padded = []
         for point in hull:
@@ -70,77 +71,30 @@ def create_lower_mouth_mask(
 ) -> (np.ndarray, np.ndarray, tuple, np.ndarray):
     mask = np.zeros(frame.shape[:2], dtype=np.uint8)
     mouth_cutout = None
+    lower_lip_polygon = None
+    mouth_box = (0,0,0,0)
+
     landmarks = face.landmark_2d_106
     if landmarks is not None:
-        #                  0  1  2  3  4  5  6  7  8  9  10 11 12 13 14 15 16 17 18 19 20
-        lower_lip_order = [
-            65,
-            66,
-            62,
-            70,
-            69,
-            18,
-            19,
-            20,
-            21,
-            22,
-            23,
-            24,
-            0,
-            8,
-            7,
-            6,
-            5,
-            4,
-            3,
-            2,
-            65,
-        ]
-        lower_lip_landmarks = landmarks[lower_lip_order].astype(
-            np.float32
-        )  # Use float for precise calculations
+        # Use outer mouth landmarks (52-63) to capture the lips only
+        lower_lip_order = list(range(52, 64))
+        
+        if max(lower_lip_order) >= landmarks.shape[0]:
+            return mask, mouth_cutout, mouth_box, lower_lip_polygon
+
+        lower_lip_landmarks = landmarks[lower_lip_order].astype(np.float32)
 
         # Calculate the center of the landmarks
         center = np.mean(lower_lip_landmarks, axis=0)
 
         # Expand the landmarks outward using the mouth_mask_size
+        # Use a more conservative expansion to avoid affecting face shape
         expansion_factor = (
             1 + modules.globals.mask_down_size * modules.globals.mouth_mask_size
-        )  # Adjust expansion based on slider
+        )
         expanded_landmarks = (lower_lip_landmarks - center) * expansion_factor + center
 
-        # Extend the top lip part
-        toplip_indices = [
-            20,
-            0,
-            1,
-            2,
-            3,
-            4,
-            5,
-        ]  # Indices for landmarks 2, 65, 66, 62, 70, 69, 18
-        toplip_extension = (
-            modules.globals.mask_size * modules.globals.mouth_mask_size * 0.5
-        )  # Adjust extension based on slider
-        for idx in toplip_indices:
-            direction = expanded_landmarks[idx] - center
-            direction = direction / np.linalg.norm(direction)
-            expanded_landmarks[idx] += direction * toplip_extension
-
-        # Extend the bottom part (chin area)
-        chin_indices = [
-            11,
-            12,
-            13,
-            14,
-            15,
-            16,
-        ]  # Indices for landmarks 21, 22, 23, 24, 0, 8
-        chin_extension = 2 * 0.2  # Adjust this factor to control the extension
-        for idx in chin_indices:
-            expanded_landmarks[idx][1] += (
-                expanded_landmarks[idx][1] - center[1]
-            ) * chin_extension
+        # Removed specific top/chin extensions to preserve face shape
 
         # Convert back to integer coordinates
         expanded_landmarks = expanded_landmarks.astype(np.int32)
@@ -165,7 +119,9 @@ def create_lower_mouth_mask(
 
         # Create the mask
         mask_roi = np.zeros((max_y - min_y, max_x - min_x), dtype=np.uint8)
-        cv2.fillPoly(mask_roi, [expanded_landmarks - [min_x, min_y]], 255)
+        # Shift polygon coordinates relative to the ROI's top-left corner
+        polygon_relative_to_roi = expanded_landmarks - [min_x, min_y]
+        cv2.fillPoly(mask_roi, [polygon_relative_to_roi], 255)
 
         # Apply Gaussian blur to soften the mask edges
         mask_roi = cv2.GaussianBlur(mask_roi, (15, 15), 5)
@@ -178,8 +134,9 @@ def create_lower_mouth_mask(
 
         # Return the expanded lower lip polygon in original frame coordinates
         lower_lip_polygon = expanded_landmarks
+        mouth_box = (min_x, min_y, max_x, max_y)
 
-    return mask, mouth_cutout, (min_x, min_y, max_x, max_y), lower_lip_polygon
+    return mask, mouth_cutout, mouth_box, lower_lip_polygon
 
 def create_eyes_mask(face: Face, frame: Frame) -> (np.ndarray, np.ndarray, tuple, np.ndarray):
     mask = np.zeros(frame.shape[:2], dtype=np.uint8)
@@ -606,4 +563,4 @@ def draw_mask_visualization(
         1,
     )
 
-    return vis_frame 
+    return vis_frame
