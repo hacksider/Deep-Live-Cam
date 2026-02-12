@@ -15,6 +15,7 @@ from modules.utilities import (
     is_video,
 )
 from modules.cluster_analysis import find_closest_centroid
+from modules.gpu_processing import gpu_gaussian_blur, gpu_sharpen, gpu_add_weighted, gpu_resize, gpu_cvt_color
 import os
 from collections import deque
 import time
@@ -158,7 +159,7 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
              # print(f"Warning: Swapped frame shape {swapped_frame_raw.shape} differs from input {temp_frame.shape}.") # Debug
              # Attempt resize (might distort if aspect ratio changed, but better than crashing)
              try:
-                 swapped_frame_raw = cv2.resize(swapped_frame_raw, (temp_frame.shape[1], temp_frame.shape[0]))
+                 swapped_frame_raw = gpu_resize(swapped_frame_raw, (temp_frame.shape[1], temp_frame.shape[0]))
              except Exception as resize_e:
                  # print(f"Error resizing swapped frame: {resize_e}") # Debug
                  return original_frame
@@ -236,7 +237,7 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
 
     # Blend the original_frame with the (potentially mouth-masked) swapped_frame
     # Ensure both frames are uint8 before blending
-    final_swapped_frame = cv2.addWeighted(original_frame.astype(np.uint8), 1 - opacity, swapped_frame.astype(np.uint8), opacity, 0)
+    final_swapped_frame = gpu_add_weighted(original_frame.astype(np.uint8), 1 - opacity, swapped_frame.astype(np.uint8), opacity, 0)
 
     # Ensure final frame is uint8 after blending (addWeighted should preserve it, but belt-and-suspenders)
     final_swapped_frame = final_swapped_frame.astype(np.uint8)
@@ -312,17 +313,10 @@ def apply_post_processing(current_frame: Frame, swapped_face_bboxes: List[np.nda
             face_region = processed_frame[y1:y2, x1:x2]
             if face_region.size == 0: continue
 
-            # Apply sharpening with optimized parameters for Apple Silicon
+            # Apply sharpening (GPU-accelerated when CUDA OpenCV is available)
             try:
-                # Use smaller sigma for faster processing on Apple Silicon
                 sigma = 2 if IS_APPLE_SILICON else 3
-                blurred = cv2.GaussianBlur(face_region, (0, 0), sigma)
-                sharpened_region = cv2.addWeighted(
-                    face_region, 1.0 + sharpness_value,
-                    blurred, -sharpness_value,
-                    0
-                )
-                sharpened_region = np.clip(sharpened_region, 0, 255).astype(np.uint8)
+                sharpened_region = gpu_sharpen(face_region, strength=sharpness_value, sigma=sigma)
                 processed_frame[y1:y2, x1:x2] = sharpened_region
             except cv2.error:
                 pass
@@ -338,7 +332,7 @@ def apply_post_processing(current_frame: Frame, swapped_face_bboxes: List[np.nda
         if PREVIOUS_FRAME_RESULT is not None and PREVIOUS_FRAME_RESULT.shape == processed_frame.shape and PREVIOUS_FRAME_RESULT.dtype == processed_frame.dtype:
             # Perform interpolation
             try:
-                 final_frame = cv2.addWeighted(
+                 final_frame = gpu_add_weighted(
                     PREVIOUS_FRAME_RESULT, 1.0 - interpolation_weight,
                     processed_frame, interpolation_weight,
                     0
@@ -813,10 +807,10 @@ def create_lower_mouth_mask(
             # Draw polygon on the ROI mask
             cv2.fillPoly(mask_roi, [polygon_relative_to_roi], 255)
 
-            # Apply Gaussian blur (ensure kernel size is odd and positive)
+            # Apply Gaussian blur (GPU-accelerated when available)
             blur_k_size = getattr(modules.globals, "mask_blur_kernel", 15) # Default 15
             blur_k_size = max(1, blur_k_size // 2 * 2 + 1) # Ensure odd
-            mask_roi = cv2.GaussianBlur(mask_roi, (blur_k_size, blur_k_size), 0) # Sigma=0 calculates from kernel
+            mask_roi = gpu_gaussian_blur(mask_roi, (blur_k_size, blur_k_size), 0)
 
             # Place the mask ROI in the full-sized mask
             mask[min_y:max_y, min_x:max_x] = mask_roi
@@ -952,7 +946,7 @@ def apply_mouth_area(
         if roi.shape[:2] != mouth_cutout.shape[:2]:
              # Check if mouth_cutout has valid dimensions before resizing
              if mouth_cutout.shape[0] > 0 and mouth_cutout.shape[1] > 0:
-                 resized_mouth_cutout = cv2.resize(mouth_cutout, (box_width, box_height), interpolation=cv2.INTER_LINEAR)
+                  resized_mouth_cutout = gpu_resize(mouth_cutout, (box_width, box_height), interpolation=cv2.INTER_LINEAR)
              else:
                  # print("Warning: mouth_cutout has invalid dimensions, cannot resize.")
                  return frame # Cannot proceed without valid cutout
@@ -1125,14 +1119,10 @@ def create_face_mask(face: Face, frame: Frame) -> np.ndarray:
              return mask # Return empty mask on error
 
 
-        # Apply Gaussian blur to feather the mask edges
-        # Kernel size should be reasonably large, odd, and positive
+        # Apply Gaussian blur to feather the mask edges (GPU-accelerated when available)
         blur_k_size = getattr(modules.globals, "face_mask_blur", 31) # Default 31
         blur_k_size = max(1, blur_k_size // 2 * 2 + 1) # Ensure odd and positive
-
-        # Use sigma=0 to let OpenCV calculate from kernel size
-        # Apply blur to the uint8 mask directly
-        mask = cv2.GaussianBlur(mask, (blur_k_size, blur_k_size), 0)
+        mask = gpu_gaussian_blur(mask, (blur_k_size, blur_k_size), 0)
 
         # --- Optional: Return float mask for apply_mouth_area ---
         # mask = mask.astype(float) / 255.0

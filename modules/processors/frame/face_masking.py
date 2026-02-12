@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 from modules.typing import Face, Frame
 import modules.globals
+from modules.gpu_processing import gpu_gaussian_blur, gpu_resize, gpu_cvt_color
 
 def apply_color_transfer(source, target):
     """
@@ -61,8 +62,8 @@ def create_face_mask(face: Face, frame: Frame) -> np.ndarray:
         # Fill the padded convex hull
         cv2.fillConvexPoly(mask, hull_padded, 255)
 
-        # Smooth the mask edges
-        mask = cv2.GaussianBlur(mask, (5, 5), 3)
+        # Smooth the mask edges (GPU-accelerated when available)
+        mask = gpu_gaussian_blur(mask, (5, 5), 3)
 
     return mask
 
@@ -123,8 +124,8 @@ def create_lower_mouth_mask(
         polygon_relative_to_roi = expanded_landmarks - [min_x, min_y]
         cv2.fillPoly(mask_roi, [polygon_relative_to_roi], 255)
 
-        # Apply Gaussian blur to soften the mask edges
-        mask_roi = cv2.GaussianBlur(mask_roi, (15, 15), 5)
+        # Apply Gaussian blur to soften the mask edges (GPU-accelerated when available)
+        mask_roi = gpu_gaussian_blur(mask_roi, (15, 15), 5)
 
         # Place the mask ROI in the full-sized mask
         mask[min_y:max_y, min_x:max_x] = mask_roi
@@ -192,8 +193,8 @@ def create_eyes_mask(face: Face, frame: Frame) -> (np.ndarray, np.ndarray, tuple
         cv2.ellipse(mask_roi, left_center, left_axes, 0, 0, 360, 255, -1)
         cv2.ellipse(mask_roi, right_center, right_axes, 0, 0, 360, 255, -1)
         
-        # Apply Gaussian blur to soften mask edges
-        mask_roi = cv2.GaussianBlur(mask_roi, (15, 15), 5)
+        # Apply Gaussian blur to soften mask edges (GPU-accelerated when available)
+        mask_roi = gpu_gaussian_blur(mask_roi, (15, 15), 5)
         
         # Place the mask ROI in the full-sized mask
         mask[min_y:max_y, min_x:max_x] = mask_roi
@@ -374,15 +375,15 @@ def create_eyebrows_mask(face: Face, frame: Frame) -> (np.ndarray, np.ndarray, t
             left_shape = create_curved_eyebrow(left_local)
             right_shape = create_curved_eyebrow(right_local)
             
-            # Apply multi-stage blurring for natural feathering
+            # Apply multi-stage blurring for natural feathering (GPU-accelerated when available)
             # First, strong Gaussian blur for initial softening
-            mask_roi = cv2.GaussianBlur(mask_roi, (21, 21), 7)
+            mask_roi = gpu_gaussian_blur(mask_roi, (21, 21), 7)
             
             # Second, medium blur for transition areas
-            mask_roi = cv2.GaussianBlur(mask_roi, (11, 11), 3)
+            mask_roi = gpu_gaussian_blur(mask_roi, (11, 11), 3)
             
             # Finally, light blur for fine details
-            mask_roi = cv2.GaussianBlur(mask_roi, (5, 5), 1)
+            mask_roi = gpu_gaussian_blur(mask_roi, (5, 5), 1)
             
             # Normalize mask values
             mask_roi = cv2.normalize(mask_roi, None, 0, 255, cv2.NORM_MINMAX)
@@ -405,7 +406,7 @@ def create_eyebrows_mask(face: Face, frame: Frame) -> (np.ndarray, np.ndarray, t
             right_local = right_eyebrow - [min_x, min_y]
             cv2.fillPoly(mask_roi, [left_local.astype(np.int32)], 255)
             cv2.fillPoly(mask_roi, [right_local.astype(np.int32)], 255)
-            mask_roi = cv2.GaussianBlur(mask_roi, (21, 21), 7)
+            mask_roi = gpu_gaussian_blur(mask_roi, (21, 21), 7)
             mask[min_y:max_y, min_x:max_x] = mask_roi
             eyebrows_cutout = frame[min_y:max_y, min_x:max_x].copy()
             eyebrows_polygon = np.vstack([left_eyebrow, right_eyebrow]).astype(np.int32)
@@ -433,11 +434,11 @@ def apply_mask_area(
         return frame
 
     try:
-        resized_cutout = cv2.resize(cutout, (box_width, box_height))
+        resized_cutout = gpu_resize(cutout, (box_width, box_height))
         roi = frame[min_y:max_y, min_x:max_x]
 
         if roi.shape != resized_cutout.shape:
-            resized_cutout = cv2.resize(
+            resized_cutout = gpu_resize(
                 resized_cutout, (roi.shape[1], roi.shape[0])
             )
 
@@ -457,8 +458,8 @@ def apply_mask_area(
             adjusted_polygon = polygon - [min_x, min_y]
             cv2.fillPoly(polygon_mask, [adjusted_polygon], 255)
 
-        # Apply strong initial feathering
-        polygon_mask = cv2.GaussianBlur(polygon_mask, (21, 21), 7)
+        # Apply strong initial feathering (GPU-accelerated when available)
+        polygon_mask = gpu_gaussian_blur(polygon_mask, (21, 21), 7)
 
         # Apply additional feathering
         feather_amount = min(

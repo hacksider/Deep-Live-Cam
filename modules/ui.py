@@ -4,6 +4,7 @@ import customtkinter as ctk
 from typing import Callable, Tuple
 import cv2
 from cv2_enumerate_cameras import enumerate_cameras  # Add this import
+from modules.gpu_processing import gpu_cvt_color, gpu_resize, gpu_flip
 from PIL import Image, ImageOps
 import time
 import json
@@ -546,7 +547,7 @@ def create_source_target_popup(
         )
         x_label.grid(row=id, column=2, padx=10, pady=10)
 
-        image = Image.fromarray(cv2.cvtColor(item["target"]["cv2"], cv2.COLOR_BGR2RGB))
+        image = Image.fromarray(gpu_cvt_color(item["target"]["cv2"], cv2.COLOR_BGR2RGB))
         image = image.resize(
             (MAPPER_PREVIEW_MAX_WIDTH, MAPPER_PREVIEW_MAX_HEIGHT), Image.LANCZOS
         )
@@ -601,7 +602,7 @@ def update_popup_source(
             }
 
             image = Image.fromarray(
-                cv2.cvtColor(map[button_num]["source"]["cv2"], cv2.COLOR_BGR2RGB)
+                gpu_cvt_color(map[button_num]["source"]["cv2"], cv2.COLOR_BGR2RGB)
             )
             image = image.resize(
                 (MAPPER_PREVIEW_MAX_WIDTH, MAPPER_PREVIEW_MAX_HEIGHT), Image.LANCZOS
@@ -794,7 +795,7 @@ def fit_image_to_size(image, width: int, height: int):
         ratio_w = width / w
     ratio = max(ratio_w, ratio_h)
     new_size = (int(ratio * w), int(ratio * h))
-    return cv2.resize(image, dsize=new_size)
+    return gpu_resize(image, dsize=new_size)
 
 
 def render_image_preview(image_path: str, size: Tuple[int, int]) -> ctk.CTkImage:
@@ -812,7 +813,7 @@ def render_video_preview(
         capture.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
     has_frame, frame = capture.read()
     if has_frame:
-        image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+        image = Image.fromarray(gpu_cvt_color(frame, cv2.COLOR_BGR2RGB))
         if size:
             image = ImageOps.fit(image, size, Image.LANCZOS)
         return ctk.CTkImage(image, size=image.size)
@@ -850,7 +851,7 @@ def update_preview(frame_number: int = 0) -> None:
             temp_frame = frame_processor.process_frame(
                 get_one_face(cv2.imread(modules.globals.source_path)), temp_frame
             )
-        image = Image.fromarray(cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB))
+        image = Image.fromarray(gpu_cvt_color(temp_frame, cv2.COLOR_BGR2RGB))
         image = ImageOps.contain(
             image, (PREVIEW_MAX_WIDTH, PREVIEW_MAX_HEIGHT), Image.LANCZOS
         )
@@ -1007,7 +1008,7 @@ def _processing_thread_func(capture_queue, processed_queue, stop_event):
         proc_frame_index += 1
 
         if modules.globals.live_mirror:
-            temp_frame = cv2.flip(temp_frame, 1)
+            temp_frame = gpu_flip(temp_frame, 1)
 
         if not modules.globals.map_faces:
             if source_image is None and modules.globals.source_path:
@@ -1136,7 +1137,7 @@ def create_webcam_preview(camera_index: int):
                 temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
             )
 
-        image = cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB)
+        image = gpu_cvt_color(temp_frame, cv2.COLOR_BGR2RGB)
         image = Image.fromarray(image)
         image = ImageOps.contain(
             image, (temp_frame.shape[1], temp_frame.shape[0]), Image.LANCZOS
@@ -1263,7 +1264,7 @@ def refresh_data(map: list):
 
         if "source" in item:
             image = Image.fromarray(
-                cv2.cvtColor(item["source"]["cv2"], cv2.COLOR_BGR2RGB)
+                gpu_cvt_color(item["source"]["cv2"], cv2.COLOR_BGR2RGB)
             )
             image = image.resize(
                 (MAPPER_PREVIEW_MAX_WIDTH, MAPPER_PREVIEW_MAX_HEIGHT), Image.LANCZOS
@@ -1281,7 +1282,7 @@ def refresh_data(map: list):
 
         if "target" in item:
             image = Image.fromarray(
-                cv2.cvtColor(item["target"]["cv2"], cv2.COLOR_BGR2RGB)
+                gpu_cvt_color(item["target"]["cv2"], cv2.COLOR_BGR2RGB)
             )
             image = image.resize(
                 (MAPPER_PREVIEW_MAX_WIDTH, MAPPER_PREVIEW_MAX_HEIGHT), Image.LANCZOS
@@ -1329,7 +1330,7 @@ def update_webcam_source(
             }
 
             image = Image.fromarray(
-                cv2.cvtColor(map[button_num]["source"]["cv2"], cv2.COLOR_BGR2RGB)
+                gpu_cvt_color(map[button_num]["source"]["cv2"], cv2.COLOR_BGR2RGB)
             )
             image = image.resize(
                 (MAPPER_PREVIEW_MAX_WIDTH, MAPPER_PREVIEW_MAX_HEIGHT), Image.LANCZOS
@@ -1381,7 +1382,7 @@ def update_webcam_target(
             }
 
             image = Image.fromarray(
-                cv2.cvtColor(map[button_num]["target"]["cv2"], cv2.COLOR_BGR2RGB)
+                gpu_cvt_color(map[button_num]["target"]["cv2"], cv2.COLOR_BGR2RGB)
             )
             image = image.resize(
                 (MAPPER_PREVIEW_MAX_WIDTH, MAPPER_PREVIEW_MAX_HEIGHT), Image.LANCZOS

@@ -3,6 +3,7 @@ import opennsfw2
 from PIL import Image
 import cv2  # Add OpenCV import
 import modules.globals  # Import globals to access the color correction toggle
+from modules.gpu_processing import gpu_cvt_color
 
 from modules.typing import Frame
 
@@ -14,7 +15,7 @@ model = None
 def predict_frame(target_frame: Frame) -> bool:
     # Convert the frame to RGB before processing if color correction is enabled
     if modules.globals.color_correction:
-        target_frame = cv2.cvtColor(target_frame, cv2.COLOR_BGR2RGB)
+        target_frame = gpu_cvt_color(target_frame, cv2.COLOR_BGR2RGB)
         
     image = Image.fromarray(target_frame)
     image = opennsfw2.preprocess_image(image, opennsfw2.Preprocessing.YAHOO)
