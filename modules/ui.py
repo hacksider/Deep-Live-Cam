@@ -7,6 +7,8 @@ from cv2_enumerate_cameras import enumerate_cameras  # Add this import
 from PIL import Image, ImageOps
 import time
 import json
+import queue
+import threading
 import modules.globals
 import modules.metadata
 from modules.face_analyser import (
@@ -947,17 +949,32 @@ def get_available_cameras():
         return camera_indices, camera_names
 
 
-def create_webcam_preview(camera_index: int):
-    global preview_label, PREVIEW
+def _capture_thread_func(cap, capture_queue, stop_event):
+    """Capture thread: reads frames from camera and puts them into the queue.
+    Drops frames when the queue is full to avoid backpressure on the camera."""
+    while not stop_event.is_set():
+        ret, frame = cap.read()
+        if not ret:
+            stop_event.set()
+            break
+        try:
+            capture_queue.put_nowait(frame)
+        except queue.Full:
+            # Drop the oldest frame and enqueue the new one
+            try:
+                capture_queue.get_nowait()
+            except queue.Empty:
+                pass
+            try:
+                capture_queue.put_nowait(frame)
+            except queue.Full:
+                pass
 
-    cap = VideoCapturer(camera_index)
-    if not cap.start(PREVIEW_DEFAULT_WIDTH, PREVIEW_DEFAULT_HEIGHT, 60):
-        update_status("Failed to start camera")
-        return
 
-    preview_label.configure(width=PREVIEW_DEFAULT_WIDTH, height=PREVIEW_DEFAULT_HEIGHT)
-    PREVIEW.deiconify()
-
+def _processing_thread_func(capture_queue, processed_queue, stop_event):
+    """Processing thread: takes raw frames from capture_queue, applies face
+    processing, and puts results into processed_queue. Drops processed frames
+    when the output queue is full so the UI always gets the latest result."""
     frame_processors = get_frame_processors_modules(modules.globals.frame_processors)
     source_image = None
     prev_time = time.time()
@@ -965,25 +982,16 @@ def create_webcam_preview(camera_index: int):
     frame_count = 0
     fps = 0
 
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
+    while not stop_event.is_set():
+        try:
+            frame = capture_queue.get(timeout=0.05)
+        except queue.Empty:
+            continue
 
         temp_frame = frame.copy()
 
         if modules.globals.live_mirror:
             temp_frame = cv2.flip(temp_frame, 1)
-
-        if modules.globals.live_resizable:
-            temp_frame = fit_image_to_size(
-                temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
-            )
-
-        else:
-            temp_frame = fit_image_to_size(
-                temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
-            )
 
         if not modules.globals.map_faces:
             if source_image is None and modules.globals.source_path:
@@ -1023,6 +1031,70 @@ def create_webcam_preview(camera_index: int):
                 2,
             )
 
+        # Put processed frame into output queue, dropping old frames if full
+        try:
+            processed_queue.put_nowait(temp_frame)
+        except queue.Full:
+            try:
+                processed_queue.get_nowait()
+            except queue.Empty:
+                pass
+            try:
+                processed_queue.put_nowait(temp_frame)
+            except queue.Full:
+                pass
+
+
+def create_webcam_preview(camera_index: int):
+    global preview_label, PREVIEW
+
+    cap = VideoCapturer(camera_index)
+    if not cap.start(PREVIEW_DEFAULT_WIDTH, PREVIEW_DEFAULT_HEIGHT, 60):
+        update_status("Failed to start camera")
+        return
+
+    preview_label.configure(width=PREVIEW_DEFAULT_WIDTH, height=PREVIEW_DEFAULT_HEIGHT)
+    PREVIEW.deiconify()
+
+    # Queues for decoupling capture from processing and processing from display.
+    # Small maxsize ensures we always work on recent frames and drop stale ones.
+    capture_queue = queue.Queue(maxsize=2)
+    processed_queue = queue.Queue(maxsize=2)
+    stop_event = threading.Event()
+
+    # Start capture thread
+    cap_thread = threading.Thread(
+        target=_capture_thread_func,
+        args=(cap, capture_queue, stop_event),
+        daemon=True,
+    )
+    cap_thread.start()
+
+    # Start processing thread
+    proc_thread = threading.Thread(
+        target=_processing_thread_func,
+        args=(capture_queue, processed_queue, stop_event),
+        daemon=True,
+    )
+    proc_thread.start()
+
+    # Main (UI) thread: pull processed frames and update the display
+    while not stop_event.is_set():
+        try:
+            temp_frame = processed_queue.get(timeout=0.03)
+        except queue.Empty:
+            ROOT.update()
+            continue
+
+        if modules.globals.live_resizable:
+            temp_frame = fit_image_to_size(
+                temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
+            )
+        else:
+            temp_frame = fit_image_to_size(
+                temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
+            )
+
         image = cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB)
         image = Image.fromarray(image)
         image = ImageOps.contain(
@@ -1035,6 +1107,10 @@ def create_webcam_preview(camera_index: int):
         if PREVIEW.state() == "withdrawn":
             break
 
+    # Signal threads to stop and wait for them
+    stop_event.set()
+    cap_thread.join(timeout=2.0)
+    proc_thread.join(timeout=2.0)
     cap.release()
     PREVIEW.withdraw()
 
