@@ -9,10 +9,12 @@ import time
 import json
 import queue
 import threading
+import numpy as np
 import modules.globals
 import modules.metadata
 from modules.face_analyser import (
     get_one_face,
+    get_many_faces,
     get_unique_faces_from_target_image,
     get_unique_faces_from_target_video,
     add_blank_map,
@@ -971,16 +973,28 @@ def _capture_thread_func(cap, capture_queue, stop_event):
                 pass
 
 
+# How often to run full face detection. On intermediate frames the last
+# detected face positions are reused, which significantly reduces the
+# per-frame cost of the processing thread.
+DETECT_EVERY_N = 2
+
+
 def _processing_thread_func(capture_queue, processed_queue, stop_event):
     """Processing thread: takes raw frames from capture_queue, applies face
     processing, and puts results into processed_queue. Drops processed frames
-    when the output queue is full so the UI always gets the latest result."""
+    when the output queue is full so the UI always gets the latest result.
+
+    Uses DETECT_EVERY_N to skip expensive face detection on intermediate
+    frames, reusing cached face positions instead."""
     frame_processors = get_frame_processors_modules(modules.globals.frame_processors)
     source_image = None
     prev_time = time.time()
     fps_update_interval = 0.5
     frame_count = 0
     fps = 0
+    proc_frame_index = 0
+    cached_target_face = None  # cached single-face result
+    cached_many_faces = None   # cached many-faces result
 
     while not stop_event.is_set():
         try:
@@ -989,6 +1003,8 @@ def _processing_thread_func(capture_queue, processed_queue, stop_event):
             continue
 
         temp_frame = frame.copy()
+        run_detection = (proc_frame_index % DETECT_EVERY_N == 0)
+        proc_frame_index += 1
 
         if modules.globals.live_mirror:
             temp_frame = cv2.flip(temp_frame, 1)
@@ -997,10 +1013,35 @@ def _processing_thread_func(capture_queue, processed_queue, stop_event):
             if source_image is None and modules.globals.source_path:
                 source_image = get_one_face(cv2.imread(modules.globals.source_path))
 
+            # Update face detection cache on detection frames
+            if run_detection or (cached_target_face is None and cached_many_faces is None):
+                if modules.globals.many_faces:
+                    cached_many_faces = get_many_faces(temp_frame)
+                    cached_target_face = None
+                else:
+                    cached_target_face = get_one_face(temp_frame)
+                    cached_many_faces = None
+
             for frame_processor in frame_processors:
                 if frame_processor.NAME == "DLC.FACE-ENHANCER":
                     if modules.globals.fp_ui["face_enhancer"]:
                         temp_frame = frame_processor.process_frame(None, temp_frame)
+                elif frame_processor.NAME == "DLC.FACE-SWAPPER":
+                    # Use cached face positions to skip redundant detection
+                    swapped_bboxes = []
+                    if modules.globals.many_faces and cached_many_faces:
+                        result = temp_frame.copy()
+                        for t_face in cached_many_faces:
+                            result = frame_processor.swap_face(source_image, t_face, result)
+                            if hasattr(t_face, 'bbox') and t_face.bbox is not None:
+                                swapped_bboxes.append(t_face.bbox.astype(int))
+                        temp_frame = result
+                    elif cached_target_face is not None:
+                        temp_frame = frame_processor.swap_face(source_image, cached_target_face, temp_frame)
+                        if hasattr(cached_target_face, 'bbox') and cached_target_face.bbox is not None:
+                            swapped_bboxes.append(cached_target_face.bbox.astype(int))
+                    # Apply post-processing (sharpening, interpolation)
+                    temp_frame = frame_processor.apply_post_processing(temp_frame, swapped_bboxes)
                 else:
                     temp_frame = frame_processor.process_frame(source_image, temp_frame)
         else:
