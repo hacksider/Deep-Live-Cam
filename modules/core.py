@@ -4,7 +4,11 @@ import sys
 if any(arg.startswith('--execution-provider') for arg in sys.argv):
     os.environ['OMP_NUM_THREADS'] = '1'
 # reduce tensorflow log level
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+# disable GPU for tensorflow when using CPU provider
+if '--execution-provider' in sys.argv and 'cpu' in sys.argv[sys.argv.index('--execution-provider') + 1]:
+    os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+
 import warnings
 from typing import List
 import platform
@@ -80,6 +84,13 @@ def parse_args() -> None:
     modules.globals.execution_providers = decode_execution_providers(args.execution_provider)
     modules.globals.execution_threads = args.execution_threads
     modules.globals.lang = args.lang
+
+    # If using CPU provider, ensure we're not using any GPU features
+    if 'cpu' in args.execution_provider:
+        os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.set_device('cpu')
 
     #for ENHANCER tumbler:
     if 'face_enhancer' in args.frame_processor:
