@@ -1,0 +1,28 @@
+# Deep-Live-Cam Requirements for macOS (Apple Silicon M1/M2/M3)
+# Optimized for MacBook M1 Pro Max
+
+# Core dependencies
+numpy>=1.23.5,<2
+opencv-python==4.8.1.78
+cv2_enumerate_cameras==1.1.15
+onnx==1.16.0
+insightface==0.7.3
+psutil==5.9.8
+tk==0.1.0
+customtkinter==5.2.2
+pillow==9.5.0
+
+# PyTorch for macOS (no CUDA)
+torch==2.0.1
+torchvision==0.15.2
+
+# ONNX Runtime for Apple Silicon
+# Note: onnxruntime-silicon will be installed separately in setup script
+# to ensure compatibility with CoreML
+
+# Other dependencies
+opennsfw2==0.10.2
+protobuf==4.23.2
+tqdm==4.66.4
+gfpgan==1.3.8
+tkinterdnd2==0.4.2
