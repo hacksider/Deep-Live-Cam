@@ -167,7 +167,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-** In case something goes wrong and you need to reinstall the virtual environment **
+**In case something goes wrong and you need to reinstall the virtual environment**
 
 ```bash
 # Deactivate the virtual environment
