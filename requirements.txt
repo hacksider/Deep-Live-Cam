@@ -9,7 +9,7 @@ insightface==0.7.3
 psutil==5.9.8
 tk==0.1.0
 customtkinter==5.2.2
-pillow==11.1.0
+pillow==12.1.1
 torch; sys_platform != 'darwin'
 torch==2.8.0+cu128; sys_platform == 'darwin'
 torchvision; sys_platform != 'darwin'
