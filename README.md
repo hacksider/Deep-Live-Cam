@@ -30,7 +30,7 @@ By using this software, you agree to these terms and commit to using it in a man
 
 Users are expected to use this software responsibly and legally. If using a real person's face, obtain their consent and clearly label any output as a deepfake when sharing online. We are not responsible for end-user actions.
 
-## Exclusive v2.6 Quick Start - Pre-built (Windows/Mac Silicon)
+## Exclusive v2.6d Quick Start - Pre-built (Windows/Mac Silicon)
 
   <a href="https://deeplivecam.net/index.php/quickstart"> <img src="media/Download.png" width="285" height="77" />
 
