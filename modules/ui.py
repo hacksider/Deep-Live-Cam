@@ -165,11 +165,7 @@ def load_switch_states():
         pass
 
 
-def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.CTk:
-    global source_label, target_label, status_label, show_fps_switch
-
-    load_switch_states()
-
+def _setup_window(destroy: Callable) -> ctk.CTk:
     ctk.deactivate_automatic_dpi_awareness()
     ctk.set_appearance_mode("system")
     ctk.set_default_color_theme(resolve_relative_path("ui.json"))
@@ -182,12 +178,20 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     root.configure()
     root.protocol("WM_DELETE_WINDOW", lambda: destroy())
 
+    return root
+
+
+def _add_image_labels(root: ctk.CTk) -> None:
+    global source_label, target_label
+
     source_label = ctk.CTkLabel(root, text=None)
     source_label.place(relx=0.1, rely=0.05, relwidth=0.275, relheight=0.225)
 
     target_label = ctk.CTkLabel(root, text=None)
     target_label.place(relx=0.6, rely=0.05, relwidth=0.275, relheight=0.225)
 
+
+def _add_file_buttons(root: ctk.CTk) -> None:
     select_face_button = ctk.CTkButton(
         root, text=_("Select a face"), cursor="hand2", command=lambda: select_source_path()
     )
@@ -206,6 +210,8 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     )
     select_target_button.place(relx=0.6, rely=0.30, relwidth=0.3, relheight=0.1)
 
+
+def _add_toggle_switches(root: ctk.CTk) -> None:
     keep_fps_value = ctk.BooleanVar(value=modules.globals.keep_fps)
     keep_fps_checkbox = ctk.CTkSwitch(
         root,
@@ -376,6 +382,8 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     )
     show_mouth_mask_box_switch.place(relx=0.6, rely=0.45)
 
+
+def _add_action_buttons(root: ctk.CTk, start: Callable, destroy: Callable) -> None:
     start_button = ctk.CTkButton(
         root, text=_("Start"), cursor="hand2", command=lambda: analyze_target(start, root)
     )
@@ -391,6 +399,8 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     )
     preview_button.place(relx=0.65, rely=0.86, relwidth=0.2, relheight=0.05)
 
+
+def _add_camera_row(root: ctk.CTk) -> None:
     # --- Camera Selection ---
     camera_label = ctk.CTkLabel(root, text=_("Select Camera:"))
     camera_label.place(relx=0.1, rely=0.92, relwidth=0.2, relheight=0.05)
@@ -435,6 +445,8 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     live_button.place(relx=0.65, rely=0.92, relwidth=0.2, relheight=0.05)
     # --- End Camera Selection ---
 
+
+def _add_sliders(root: ctk.CTk) -> None:
     # 1) Define a DoubleVar for transparency (0 = fully transparent, 1 = fully opaque)
     transparency_var = ctk.DoubleVar(value=1.0)
 
@@ -499,8 +511,11 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     )
     sharpness_slider.place(relx=0.35, rely=0.82, relwidth=0.5, relheight=0.02)
 
-    # Status and link at the bottom
+
+def _add_status_bar(root: ctk.CTk) -> None:
     global status_label
+
+    # Status and link at the bottom
     status_label = ctk.CTkLabel(root, text=None, justify="center")
     status_label.place(relx=0.1, rely=0.96, relwidth=0.8)
 
@@ -515,6 +530,17 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         "<Button>", lambda event: webbrowser.open("https://deeplivecam.net")
     )
 
+
+def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.CTk:
+    load_switch_states()
+    root = _setup_window(destroy)
+    _add_image_labels(root)
+    _add_file_buttons(root)
+    _add_toggle_switches(root)
+    _add_action_buttons(root, start, destroy)
+    _add_camera_row(root)
+    _add_sliders(root)
+    _add_status_bar(root)
     return root
 
 
@@ -534,7 +560,8 @@ def analyze_target(start: Callable[[], None], root: ctk.CTk):
         return
 
     if modules.globals.map_faces:
-        modules.globals.source_target_map = []
+        with modules.globals.MAP_LOCK:
+            modules.globals.source_target_map = []
 
         if is_image(modules.globals.target_path):
             update_status("Getting unique faces")
@@ -924,7 +951,8 @@ def webcam_preview(root: ctk.CTk, camera_index: int):
             return
         create_webcam_preview(camera_index)
     else:
-        modules.globals.source_target_map = []
+        with modules.globals.MAP_LOCK:
+            modules.globals.source_target_map = []
         create_source_target_popup_for_webcam(
             root, modules.globals.source_target_map, camera_index
         )
