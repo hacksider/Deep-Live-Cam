@@ -498,7 +498,7 @@ def apply_mask_area(
 
         frame[min_y:max_y, min_x:max_x] = final_blend.astype(np.uint8)
     except Exception as e:
-        pass
+        print(f"face_masking: blending failed, returning unmodified frame: {e}")
 
     return frame
 

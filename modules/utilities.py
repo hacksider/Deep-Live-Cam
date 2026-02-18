@@ -1,9 +1,9 @@
 import glob
+import hashlib
 import mimetypes
 import os
 import platform
 import shutil
-import ssl
 import subprocess
 import urllib
 from pathlib import Path
@@ -15,9 +15,14 @@ import modules.globals
 TEMP_FILE = "temp.mp4"
 TEMP_DIRECTORY = "temp"
 
-# monkey patch ssl for mac
-if platform.system().lower() == "darwin":
-    ssl._create_default_https_context = ssl._create_unverified_context
+
+def _compute_sha256(file_path: str) -> str:
+    """Compute SHA-256 hash of a file, reading in 1 MiB chunks to handle large models."""
+    h = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def run_ffmpeg(args: List[str]) -> bool:
@@ -34,8 +39,8 @@ def run_ffmpeg(args: List[str]) -> bool:
     try:
         subprocess.check_output(commands, stderr=subprocess.STDOUT)
         return True
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"run_ffmpeg: command failed: {e}")
     return False
 
 
@@ -56,8 +61,8 @@ def detect_fps(target_path: str) -> float:
     try:
         numerator, denominator = map(int, output)
         return numerator / denominator
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"detect_fps: could not parse frame rate from {target_path!r}: {e}, defaulting to 30.0")
     return 30.0
 
 
@@ -278,7 +283,7 @@ def is_video(video_path: str) -> bool:
     return False
 
 
-def conditional_download(download_directory_path: str, urls: List[str]) -> None:
+def conditional_download(download_directory_path: str, urls: List[str], expected_checksums: dict | None = None) -> None:
     if not os.path.exists(download_directory_path):
         os.makedirs(download_directory_path)
     for url in urls:
@@ -296,6 +301,19 @@ def conditional_download(download_directory_path: str, urls: List[str]) -> None:
                 unit_divisor=1024,
             ) as progress:
                 urllib.request.urlretrieve(url, download_file_path, reporthook=lambda count, block_size, total_size: progress.update(block_size))  # type: ignore[attr-defined]
+            # Verify checksum if one was registered for this file
+            filename = os.path.basename(url)
+            if expected_checksums and filename in expected_checksums:
+                expected = expected_checksums[filename]
+                actual = _compute_sha256(download_file_path)
+                if actual != expected:
+                    os.remove(download_file_path)
+                    raise ValueError(
+                        f"Checksum mismatch for {filename!r}: "
+                        f"expected {expected!r}, got {actual!r}. "
+                        f"File deleted — please retry the download."
+                    )
+                print(f"conditional_download: checksum verified for {filename!r}")
 
 
 def resolve_relative_path(path: str) -> str:
