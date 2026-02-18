@@ -6,6 +6,13 @@ from typing import List, Dict, Any
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 WORKFLOW_DIR = os.path.join(ROOT_DIR, "workflow")
 
+# Processing Constants
+FACE_CONFIDENCE_THRESHOLD: float = 0.5    # Minimum confidence score to accept a detected face
+DETECTION_INTERVAL: float = 0.033          # Face detection cache TTL in seconds (~30 FPS)
+DETECTION_CACHE_SIZE: int = 128            # Max entries in face detection LRU cache
+FPS_CAP: int = 30                          # Maximum preview frame rate for live mode
+MOUTH_FEATHER_RADIUS: int = 10             # Pixel radius for mouth mask edge feathering
+
 file_types = [
     ("Image", ("*.png", "*.jpg", "*.jpeg", "*.gif", "*.bmp")),
     ("Video", ("*.mp4", "*.mkv")),
