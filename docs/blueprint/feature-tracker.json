@@ -1,0 +1,211 @@
+{
+  "version": "1.0.0",
+  "source_document": "docs/prds/deep-live-cam-overview.md",
+  "last_sync": "2026-02-18T00:00:00Z",
+  "features": [
+    {
+      "id": "FR-001",
+      "title": "Real-Time Face Swapping",
+      "description": "Replace detected faces in live webcam feed using ONNX inswapper_128_fp16 model",
+      "scope": "core",
+      "status": "implemented",
+      "source_files": [
+        "modules/processors/frame/face_swapper.py",
+        "modules/face_analyser.py"
+      ],
+      "acceptance_criteria": [
+        "Single source image drives swap",
+        "InsightFace detects faces per frame",
+        "ONNX inswapper_128_fp16 applies replacement",
+        "Real-time preview at 30-60 FPS on target GPU"
+      ],
+      "version_introduced": "0.x (Sep 2023)",
+      "notes": "Core feature; continuously optimized across all versions"
+    },
+    {
+      "id": "FR-002",
+      "title": "Face Detection & Analysis",
+      "description": "Detect and analyze faces using InsightFace buffalo_l model with embedding extraction",
+      "scope": "core",
+      "status": "implemented",
+      "source_files": [
+        "modules/face_analyser.py"
+      ],
+      "acceptance_criteria": [
+        "Multi-face detection (>2 faces per frame)",
+        "Face embedding extraction for similarity matching",
+        "Adaptive quality on Apple Silicon",
+        "Time-based detection cache (~30 FPS)"
+      ],
+      "version_introduced": "0.x (Sep 2023)",
+      "notes": "Optimized in Feb 2026 for Apple Silicon performance"
+    },
+    {
+      "id": "FR-003",
+      "title": "Face Enhancement (GFPGAN)",
+      "description": "Optional face restoration/enhancement post-swap using GFPGAN v1.4",
+      "scope": "optional",
+      "status": "implemented",
+      "source_files": [
+        "modules/processors/frame/face_enhancer.py"
+      ],
+      "acceptance_criteria": [
+        "GFPGAN v1.4 restores facial detail",
+        "Conditional device support (CUDA, CoreML/MPS on macOS ARM)",
+        "Toggleable via UI checkbox and --frame-processor CLI flag",
+        "Performance <15ms per face on GPU"
+      ],
+      "version_introduced": "1.x (2024)",
+      "notes": "Refined for Apple Silicon (device-conditional loading)"
+    },
+    {
+      "id": "FR-004",
+      "title": "Mouth Masking",
+      "description": "Preserve original mouth region to maintain natural speech lip-sync",
+      "scope": "optional",
+      "status": "implemented",
+      "source_files": [
+        "modules/processors/frame/face_masking.py"
+      ],
+      "acceptance_criteria": [
+        "Mouth region detected from face landmarks",
+        "Poisson blending for smooth mask boundaries",
+        "Toggleable via --mouth-mask CLI flag and UI",
+        "Minimal performance impact (<5ms per face)"
+      ],
+      "version_introduced": "1.x (Oct 2024)",
+      "notes": "Improved with Poisson blending in v2.0.2c (Dec 2025)"
+    },
+    {
+      "id": "FR-005",
+      "title": "Face Mapping (Multi-Person Swap)",
+      "description": "Map different source faces to specific subjects in a multi-person scene",
+      "scope": "optional",
+      "status": "implemented",
+      "source_files": [
+        "modules/cluster_analysis.py",
+        "modules/ui.py"
+      ],
+      "acceptance_criteria": [
+        "Drag-and-drop UI for source-target face matching",
+        "K-means clustering for centroid-based face matching",
+        "Embedding storage for live mode persistence",
+        "Support for 2+ source faces per scene"
+      ],
+      "version_introduced": "1.x (Sep 2024)",
+      "notes": "Fixed live-mode face count mismatch (>maps available) in PR #572"
+    },
+    {
+      "id": "FR-006",
+      "title": "Live Webcam Streaming",
+      "description": "Real-time webcam preview with face swap applied",
+      "scope": "core",
+      "status": "implemented",
+      "source_files": [
+        "modules/video_capture.py",
+        "modules/ui.py"
+      ],
+      "acceptance_criteria": [
+        "30-60 FPS preview at target GPU spec",
+        "Resizable preview window",
+        "Mirror option for self-view correction",
+        "Cross-platform camera enumeration",
+        "Clean stop when preview window is closed"
+      ],
+      "version_introduced": "1.x (Aug 2024)",
+      "notes": "Mirror + resizable options added; live-stop-on-close fixed (PR #321)"
+    },
+    {
+      "id": "FR-007",
+      "title": "Batch Video Processing",
+      "description": "CLI headless mode to process saved video files with face swap output",
+      "scope": "core",
+      "status": "implemented",
+      "source_files": [
+        "modules/core.py",
+        "modules/utilities.py",
+        "modules/processors/frame/core.py"
+      ],
+      "acceptance_criteria": [
+        "Headless CLI: run.py -s source.jpg -t input.mp4 -o output.mp4",
+        "Frame extraction via ffmpeg",
+        "Parallel processing with ThreadPoolExecutor",
+        "Audio passthrough to output",
+        "Hardware-accelerated encoding (h264_nvenc, hevc_videotoolbox)"
+      ],
+      "version_introduced": "0.x (Sep 2023)",
+      "notes": "Supports multiple video codecs; ThreadPoolExecutor batch size configurable"
+    },
+    {
+      "id": "FR-008",
+      "title": "GPU Acceleration",
+      "description": "Platform-specific GPU optimization via ONNX Runtime provider selection",
+      "scope": "core-enabler",
+      "status": "implemented",
+      "source_files": [
+        "modules/core.py",
+        "modules/gpu_processing.py",
+        "pyproject.toml"
+      ],
+      "acceptance_criteria": [
+        "NVIDIA CUDA (onnxruntime-gpu) default on non-Apple machines",
+        "Apple Silicon CoreML/MPS (onnxruntime-silicon) on darwin/arm64",
+        "TensorRT opt-in for NVIDIA high-performance",
+        "CPU fallback when no GPU available",
+        "GPU-accelerated OpenCV ops on compatible hardware"
+      ],
+      "version_introduced": "1.x (Jul 2024)",
+      "notes": "GPU-accelerated OpenCV added v2.0.3c (Feb 2026). TensorRT Apr 2025."
+    },
+    {
+      "id": "FR-009",
+      "title": "NSFW Content Filtering",
+      "description": "Optional OpenNSFW2-based frame filtering to prevent processing inappropriate content",
+      "scope": "optional",
+      "status": "implemented",
+      "source_files": [
+        "modules/predicter.py",
+        "modules/core.py"
+      ],
+      "acceptance_criteria": [
+        "OpenNSFW2 model detects inappropriate frames",
+        "Frame skipped (not processed) when NSFW detected",
+        "Off by default; enabled via --nsfw-filter flag",
+        "Performance <50ms per frame on GPU"
+      ],
+      "version_introduced": "1.x (Aug 2024)",
+      "notes": "Re-enabled Aug 2024 after initial false-positive issues; off by default"
+    },
+    {
+      "id": "FR-010",
+      "title": "Internationalization (i18n)",
+      "description": "Multi-language UI support with locale JSON files",
+      "scope": "optional",
+      "status": "implemented",
+      "source_files": [
+        "modules/gettext.py",
+        "locales/"
+      ],
+      "acceptance_criteria": [
+        "8 supported languages (Indonesian, Japanese, Chinese, Korean, Russian, German, Spanish, French)",
+        "Locale auto-detection or manual selection",
+        "Fallback to English when translation missing",
+        "Community-contributed translations accepted"
+      ],
+      "version_introduced": "1.x (Jan 2025)",
+      "notes": "8 languages added Jan-May 2025; community-driven contributions"
+    }
+  ],
+  "sync_config": {
+    "targets": ["README.md"],
+    "auto_sync": false,
+    "source_document": "docs/prds/deep-live-cam-overview.md"
+  },
+  "stats": {
+    "total_features": 10,
+    "completed": 10,
+    "in_progress": 0,
+    "blocked": 0,
+    "not_started": 0
+  }
+}

@@ -1,0 +1,174 @@
+{
+  "format_version": "3.2.0",
+  "created_at": "2026-02-18T00:00:00Z",
+  "updated_at": "2026-02-18T00:00:00Z",
+  "created_by": {
+    "blueprint_plugin": "3.18.0",
+    "workflow": "derive-plans"
+  },
+  "project": {
+    "name": "Deep-Live-Cam",
+    "version": "2.0.3c",
+    "description": "Real-time face swap and video deepfake application",
+    "detected_stack": [
+      "Python 3.10",
+      "ONNX Runtime (multi-platform)",
+      "PyTorch (face enhancement)",
+      "CustomTkinter (GUI)",
+      "InsightFace (face detection)",
+      "FFmpeg (video processing)",
+      "OpenCV 4.10+",
+      "GFPGAN + BasicSR"
+    ]
+  },
+  "structure": {
+    "has_prds": true,
+    "has_adrs": true,
+    "has_prps": true,
+    "has_work_orders": true,
+    "has_ai_docs": false,
+    "has_modular_rules": true,
+    "has_feature_tracker": true,
+    "has_document_detection": true,
+    "claude_md_mode": "both"
+  },
+  "feature_tracker": {
+    "file": "feature-tracker.json",
+    "source_document": "README.md",
+    "sync_targets": ["TODO.md"]
+  },
+  "generated": {
+    "rules": {},
+    "commands": {}
+  },
+  "custom_overrides": {
+    "skills": [],
+    "commands": []
+  },
+  "task_registry": {
+    "derive-prd": {
+      "enabled": true,
+      "auto_run": false,
+      "last_completed_at": "2026-02-18T00:00:00Z",
+      "last_result": "success",
+      "schedule": "on-demand",
+      "stats": {
+        "runs_total": 1,
+        "documents_created": 1,
+        "features_documented": 10
+      },
+      "context": {
+        "user_purpose": "Open-source research/education",
+        "primary_users": "Technical + non-technical"
+      }
+    },
+    "derive-plans": {
+      "enabled": true,
+      "auto_run": false,
+      "last_completed_at": "2026-02-18T00:00:00Z",
+      "last_result": "success",
+      "schedule": "weekly",
+      "stats": {
+        "runs_total": 1,
+        "commits_analyzed": 508,
+        "documents_created": 11,
+        "features_extracted": 10,
+        "decisions_extracted": 10
+      },
+      "context": {
+        "git_quality_score": 2,
+        "conventional_commits_percentage": 3.3,
+        "analysis_scope": "full_history",
+        "date_range": "2023-09-24 to 2026-02-18"
+      }
+    },
+    "derive-rules": {
+      "enabled": true,
+      "auto_run": false,
+      "last_completed_at": "2026-02-18T00:00:00Z",
+      "last_result": "success",
+      "schedule": "weekly",
+      "stats": {
+        "runs_total": 1,
+        "commits_analyzed": 508,
+        "rules_created": 3,
+        "rules_updated": 0
+      },
+      "context": {
+        "new_rule_files": [
+          ".claude/rules/gpu-acceleration.md",
+          ".claude/rules/face-processing.md",
+          ".claude/rules/cross-platform.md"
+        ],
+        "existing_rules_reviewed": [
+          ".claude/rules/development.md",
+          ".claude/rules/testing.md",
+          ".claude/rules/document-management.md"
+        ],
+        "conflicts_found": 0
+      }
+    },
+    "generate-rules": {
+      "enabled": true,
+      "auto_run": false,
+      "last_completed_at": null,
+      "last_result": null,
+      "schedule": "on-change",
+      "stats": {},
+      "context": {}
+    },
+    "adr-validate": {
+      "enabled": true,
+      "auto_run": false,
+      "last_completed_at": null,
+      "last_result": null,
+      "schedule": "weekly",
+      "stats": {},
+      "context": {}
+    },
+    "feature-tracker-sync": {
+      "enabled": true,
+      "auto_run": false,
+      "last_completed_at": "2026-02-18T00:00:00Z",
+      "last_result": "success",
+      "schedule": "daily",
+      "stats": {
+        "runs_total": 1,
+        "features_synced": 10,
+        "features_added": 10
+      },
+      "context": {
+        "source_document": "docs/prds/deep-live-cam-overview.md",
+        "features_implemented": 10,
+        "features_in_progress": 0
+      }
+    },
+    "sync-ids": {
+      "enabled": true,
+      "auto_run": false,
+      "last_completed_at": null,
+      "last_result": null,
+      "schedule": "on-change",
+      "stats": {},
+      "context": {}
+    },
+    "claude-md": {
+      "enabled": true,
+      "auto_run": false,
+      "last_completed_at": null,
+      "last_result": null,
+      "schedule": "on-change",
+      "stats": {},
+      "context": {}
+    },
+    "curate-docs": {
+      "enabled": false,
+      "auto_run": false,
+      "last_completed_at": null,
+      "last_result": null,
+      "schedule": "on-demand",
+      "stats": {},
+      "context": {}
+    }
+  }
+}
