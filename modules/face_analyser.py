@@ -25,9 +25,15 @@ def get_face_analyser() -> Any:
         with FACE_ANALYSER_LOCK:
             # Double-check after acquiring lock
             if FACE_ANALYSER is None:
+                # CoreML provider fails with InsightFace detection models due to
+                # dynamic output shape incompatibility, so always use CPU for face analysis
+                providers = [
+                    p for p in modules.globals.execution_providers
+                    if p != 'CoreMLExecutionProvider'
+                ] or ['CPUExecutionProvider']
                 FACE_ANALYSER = insightface.app.FaceAnalysis(
                     name='buffalo_l',
-                    providers=modules.globals.execution_providers,
+                    providers=providers,
                     allowed_modules=['detection', 'recognition']
                 )
                 FACE_ANALYSER.prepare(ctx_id=0, det_size=(320, 320))

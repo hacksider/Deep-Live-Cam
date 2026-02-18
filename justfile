@@ -1,26 +1,37 @@
-# Deep-Live-Cam justfile
+# Deep-Live-Cam justfile — run `just` or `just help` to see recipes
 
+set positional-arguments
 set windows-shell := ["bash", "-cu"]
 
-python_version := "3.10"
-venv := ".venv"
 models_dir := "models"
+default_provider := if os() == "macos" { "coreml" } else if os() == "windows" { "cuda" } else { "cuda" }
+
+# Tcl/Tk library path for standalone Python builds (needed for tkinter)
+export TCL_LIBRARY := `python3 -c "import os, sys, glob; c=glob.glob(os.path.join(sys.prefix,'lib','tcl*','init.tcl')); print(os.path.dirname(c[0]) if c else '')" 2>/dev/null || echo ""`
+export TK_LIBRARY := `python3 -c "import os, sys, glob; c=glob.glob(os.path.join(sys.prefix,'lib','tk*')); print(c[0] if c else '')" 2>/dev/null || echo ""`
 
 # Show available recipes
 default:
     @just --list
 
+##########
+# Setup
+##########
+
 # Full setup: install dependencies and download models
+[group: "setup"]
 setup: install models
 
 # Install Python dependencies using uv
+[group: "setup"]
 install:
-    uv venv --python {{ python_version }} {{ venv }}
-    uv pip install --python {{ venv }}/Scripts/python.exe -r requirements.txt
+    uv sync
 
 # Download required models
+[group: "setup"]
 models:
     #!/usr/bin/env bash
+    set -euo pipefail
     mkdir -p {{ models_dir }}
     if [ ! -f "{{ models_dir }}/inswapper_128_fp16.onnx" ]; then
         echo "Downloading inswapper_128_fp16.onnx..."
@@ -37,14 +48,31 @@ models:
         echo "GFPGANv1.4.pth already exists, skipping."
     fi
 
-# Run with CUDA GPU acceleration (default)
+##########
+# Run
+##########
+
+# Run with platform-default GPU acceleration (coreml on macOS, cuda on Linux/Windows)
+[group: "run"]
 start:
-    {{ venv }}/Scripts/python.exe run.py --execution-provider cuda
+    uv run run.py --execution-provider {{ default_provider }}
 
 # Run with CPU only
+[group: "run"]
 start-cpu:
-    {{ venv }}/Scripts/python.exe run.py
+    uv run run.py
 
-# Clean up virtual environment
+# Run with specific execution provider
+[group: "run"]
+start-with provider:
+    uv run run.py --execution-provider {{ provider }}
+
+##########
+# Maintenance
+##########
+
+# Clean up virtual environment and lock file
+[group: "maintenance"]
+[confirm("Remove virtual environment?")]
 clean:
-    rm -rf {{ venv }}
+    rm -rf .venv uv.lock

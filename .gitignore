@@ -26,3 +26,6 @@ faceswap/
 .vscode/
 switch_states.json
 /models
+
+# Blueprint work orders (task-specific, may contain sensitive details)
+docs/blueprint/work-orders/

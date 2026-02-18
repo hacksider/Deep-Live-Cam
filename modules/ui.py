@@ -972,20 +972,18 @@ def get_available_cameras():
         camera_names = []
 
         if platform.system() == "Darwin":  # macOS specific handling
-            # Try to open the default FaceTime camera first
-            cap = cv2.VideoCapture(0)
-            if cap.isOpened():
-                camera_indices.append(0)
-                camera_names.append("FaceTime Camera")
-                cap.release()
-
-            # On macOS, additional cameras typically use indices 1 and 2
-            for i in [1, 2]:
-                cap = cv2.VideoCapture(i)
-                if cap.isOpened():
-                    camera_indices.append(i)
-                    camera_names.append(f"Camera {i}")
-                    cap.release()
+            try:
+                for cam in enumerate_cameras(cv2.CAP_AVFOUNDATION):
+                    camera_indices.append(cam.index)
+                    camera_names.append(cam.name if cam.name else f"Camera {cam.index}")
+            except Exception:
+                # Fallback: probe indices 0 and 1 only
+                for i in range(2):
+                    cap = cv2.VideoCapture(i)
+                    if cap.isOpened():
+                        camera_indices.append(i)
+                        camera_names.append(f"Camera {i}")
+                        cap.release()
         else:
             # Linux camera detection - test first 10 indices
             for i in range(10):
