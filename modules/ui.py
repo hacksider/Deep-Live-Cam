@@ -24,28 +24,41 @@ import platform
 if platform.system() == "Windows":
     from pygrabber.dshow_graph import FilterGraph
 
-# --- Tk 9.0 compatibility patch ---
-# In Tk 9.0, Menu.index("end") returns "" instead of raising TclError
-# when the menu is empty. CustomTkinter's CTkOptionMenu doesn't handle
-# this, causing crashes. This patch adds the missing guard.
-try:
-    from customtkinter.windows.widgets.core_widget_classes import DropdownMenu as _DropdownMenu
+# Monkey-patch CustomTkinter DropdownMenu for Tk 9.0 compatibility.
+# Tk 9.0 returns "" from Menu.index("end") on an empty menu, causing TclError
+# in DropdownMenu._add_menu_commands when it calls self.delete(0, "end").
+import tkinter as _tk
 
-    _original_add_menu_commands = _DropdownMenu._add_menu_commands
+if _tk.TkVersion >= 9.0:
+    from customtkinter.windows.widgets.core_widget_classes.dropdown_menu import (
+        DropdownMenu as _DropdownMenu,
+    )
 
-    def _patched_add_menu_commands(self, *args, **kwargs):
+    _orig_add_menu_commands = _DropdownMenu._add_menu_commands
+
+    def _patched_add_menu_commands(self):
         try:
-            end_index = self._menu.index("end")
-            if end_index == "" or end_index is None:
-                return
-        except Exception:
-            pass
-        _original_add_menu_commands(self, *args, **kwargs)
+            _orig_add_menu_commands(self)
+        except _tk.TclError:
+            # Empty menu — just add commands without deleting first
+            import sys
+
+            if sys.platform.startswith("linux"):
+                for value in self._values:
+                    self.add_command(
+                        label="  " + value.ljust(self._min_character_width) + "  ",
+                        command=lambda v=value: self._button_callback(v),
+                        compound="left",
+                    )
+            else:
+                for value in self._values:
+                    self.add_command(
+                        label=value.ljust(self._min_character_width),
+                        command=lambda v=value: self._button_callback(v),
+                        compound="left",
+                    )
 
     _DropdownMenu._add_menu_commands = _patched_add_menu_commands
-except (ImportError, AttributeError):
-    pass  # CustomTkinter version doesn't have this class path
-# --- End Tk 9.0 patch ---
 
 # Re-export moved functions for backward compatibility
 from modules.ui_analysis import analyze_target, check_and_ignore_nsfw  # noqa: F401
