@@ -191,7 +191,9 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
         return temp_frame
 
     # Store a copy of the original frame before swapping for opacity blending
-    original_frame = temp_frame.copy()
+    opacity = getattr(modules.globals, "opacity", 1.0)
+    opacity = max(0.0, min(1.0, opacity))
+    original_frame = temp_frame if opacity >= 1.0 else temp_frame.copy()
 
     # Pre-swap Input Check with optimization
     if temp_frame.dtype != np.uint8:
@@ -245,19 +247,13 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
     swapped_frame = _apply_mouth_mask(swapped_frame, target_face, temp_frame)
     swapped_frame = _apply_poisson_blend(swapped_frame, target_face, temp_frame, original_frame)
 
-            # Apply opacity blend between the original frame and the swapped frame
-    opacity = getattr(modules.globals, "opacity", 1.0)
-    # Ensure opacity is within valid range [0.0, 1.0]
-    opacity = max(0.0, min(1.0, opacity))
+    # Apply opacity blend between the original frame and the swapped frame
+    if opacity >= 1.0:
+        return swapped_frame.astype(np.uint8)
 
     # Blend the original_frame with the (potentially mouth-masked) swapped_frame
-    # Ensure both frames are uint8 before blending
     final_swapped_frame = gpu_add_weighted(original_frame.astype(np.uint8), 1 - opacity, swapped_frame.astype(np.uint8), opacity, 0)
-
-    # Ensure final frame is uint8 after blending (addWeighted should preserve it, but belt-and-suspenders)
-    final_swapped_frame = final_swapped_frame.astype(np.uint8)
-
-    return final_swapped_frame
+    return final_swapped_frame.astype(np.uint8)
 
 
 # --- START: Mac M1-M5 Optimized Face Detection ---
@@ -368,10 +364,8 @@ def apply_post_processing(current_frame: Frame, swapped_face_bboxes: List[np.nda
                 pass
             PREVIOUS_FRAME_RESULT = processed_frame.copy()
     else:
-         # If interpolation is off or weight is invalid, just use the current frame
-         # Update state with the current (potentially sharpened) frame
-         # Reset previous frame state if interpolation was just turned off or weight is invalid
-         PREVIOUS_FRAME_RESULT = processed_frame.copy()
+         # Interpolation is off or weight is invalid — no need to cache
+         PREVIOUS_FRAME_RESULT = None
 
 
     return final_frame
