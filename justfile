@@ -7,8 +7,8 @@ models_dir := "models"
 default_provider := if os() == "macos" { "coreml" } else if os() == "windows" { "cuda" } else { "cuda" }
 
 # Tcl/Tk library path for standalone Python builds (needed for tkinter)
-export TCL_LIBRARY := `python3 -c "import os, sys, glob; c=glob.glob(os.path.join(sys.prefix,'lib','tcl*','init.tcl')); print(os.path.dirname(c[0]) if c else '')" 2>/dev/null || echo ""`
-export TK_LIBRARY := `python3 -c "import os, sys, glob; c=glob.glob(os.path.join(sys.prefix,'lib','tk*')); print(c[0] if c else '')" 2>/dev/null || echo ""`
+export TCL_LIBRARY := `python3 -c "import os, sys, glob; c=glob.glob(os.path.join(sys.base_prefix,'lib','tcl*','init.tcl')); print(os.path.dirname(c[0]) if c else '')" 2>/dev/null || echo ""`
+export TK_LIBRARY := `python3 -c "import os, sys, glob; c=glob.glob(os.path.join(sys.base_prefix,'lib','tk*')); print(c[0] if c else '')" 2>/dev/null || echo ""`
 
 # Show available recipes
 default:
