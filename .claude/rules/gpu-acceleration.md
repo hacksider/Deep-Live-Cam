@@ -43,7 +43,10 @@ Apply optimizations incrementally, per component:
 
 ## Face Analyzer Performance
 
-- Reduce input resolution for Apple Silicon if FPS drops below target (evidence: e544889)
+- Reduce `det_size` to `(160, 160)` on Apple Silicon in live mode for ~4x fewer detection FLOPs;
+  restore `(320, 320)` for image/video processing where accuracy matters more than latency
+- To change `det_size` at runtime, **recreate the `FaceAnalysis` instance** — `prepare()` is
+  silently ignored after the first call (InsightFace singleton behavior)
 - Cache detection results with time-based invalidation (≈0.033 s = 30 FPS interval)
 - Use `DETECTION_INTERVAL` constant — do not inline magic numbers for frame-skip logic
 

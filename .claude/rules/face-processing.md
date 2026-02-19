@@ -10,6 +10,14 @@ Derived from recurring fix commits: None embeddings crash (PR #980), source_targ
 - Log a clear message when no faces are found — do not silently skip frames
 - Return the unmodified input frame when no face is detected; never return `None`
 
+## InsightFace Singleton Behavior
+
+- `FaceAnalysis.prepare()` sets `det_size` **only on the first call** — subsequent calls are
+  silently ignored with `"warning: det_size is already set in detection model, ignore"`
+- To change `det_size` at runtime (e.g., switching between live mode and video mode), you must
+  **recreate the `FaceAnalysis` instance entirely** — calling `prepare()` again is a no-op
+- Protect the singleton with a lock when recreating it from multiple threads
+
 ## Embedding Validation
 
 - Validate face embedding shape and dtype before passing to ONNX swap model
