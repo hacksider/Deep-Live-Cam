@@ -40,8 +40,12 @@ def get_face_analyser() -> Any:
     return FACE_ANALYSER
 
 
+def _detect_all_faces(frame: Frame) -> list:
+    return get_face_analyser().get(frame)
+
+
 def get_one_face(frame: Frame) -> Any:
-    face = get_face_analyser().get(frame)
+    face = _detect_all_faces(frame)
     try:
         return min(face, key=lambda x: x.bbox[0])
     except ValueError:
@@ -50,7 +54,7 @@ def get_one_face(frame: Frame) -> Any:
 
 def get_many_faces(frame: Frame) -> Any:
     try:
-        return get_face_analyser().get(frame)
+        return _detect_all_faces(frame)
     except IndexError:
         return None
 

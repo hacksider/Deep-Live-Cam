@@ -468,7 +468,7 @@ def apply_mask_area(
 
         # Apply additional feathering
         feather_amount = min(
-            30,
+            modules.globals.MOUTH_FEATHER_RADIUS * 3,  # MOUTH_FEATHER_RADIUS * 3 = 30, preserving original cap
             box_width // modules.globals.mask_feather_ratio,
             box_height // modules.globals.mask_feather_ratio,
         )

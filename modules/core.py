@@ -253,7 +253,7 @@ def start() -> None:
         update_status(f'Creating video with {fps} fps...')
         create_video(modules.globals.target_path, fps)
     else:
-        update_status('Creating video with 30.0 fps...')
+        update_status(f'Creating video with {modules.globals.FPS_CAP:.1f} fps...')
         create_video(modules.globals.target_path)
     encoding_time = time.time() - encoding_start
     update_status(f'Video encoding completed in {encoding_time:.2f}s')

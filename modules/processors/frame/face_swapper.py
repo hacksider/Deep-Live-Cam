@@ -120,6 +120,63 @@ def get_face_swapper() -> Any:
     return FACE_SWAPPER
 
 
+def _apply_mouth_mask(swapped: Frame, target_face: Face, original: Frame) -> Frame:
+    if not getattr(modules.globals, "mouth_mask", False):
+        return swapped
+
+    face_mask = create_face_mask(target_face, original)
+    mouth_mask, mouth_cutout, mouth_box, lower_lip_polygon = (
+        create_lower_mouth_mask(target_face, original)
+    )
+
+    if mouth_cutout is not None and mouth_box != (0, 0, 0, 0):
+        swapped = apply_mouth_area(
+            swapped, mouth_cutout, mouth_box, face_mask, lower_lip_polygon
+        )
+
+        if getattr(modules.globals, "show_mouth_mask_box", False):
+            mouth_mask_data = (mouth_mask, mouth_cutout, mouth_box, lower_lip_polygon)
+            swapped = draw_mouth_mask_visualization(
+                swapped, target_face, mouth_mask_data
+            )
+
+    return swapped
+
+
+def _apply_poisson_blend(swapped: Frame, target_face: Face, original: Frame, pre_swap: Frame) -> Frame:
+    if not getattr(modules.globals, "poisson_blend", False):
+        return swapped
+
+    face_mask = create_face_mask(target_face, original)
+    if face_mask is None:
+        return swapped
+
+    y_indices, x_indices = np.where(face_mask > 0)
+    if len(x_indices) == 0 or len(y_indices) == 0:
+        return swapped
+
+    x_min, x_max = np.min(x_indices), np.max(x_indices)
+    y_min, y_max = np.min(y_indices), np.max(y_indices)
+
+    center = (int((x_min + x_max) / 2), int((y_min + y_max) / 2))
+
+    src_crop = swapped[y_min : y_max + 1, x_min : x_max + 1]
+    mask_crop = face_mask[y_min : y_max + 1, x_min : x_max + 1]
+
+    try:
+        swapped = cv2.seamlessClone(
+            src_crop,
+            pre_swap,
+            mask_crop,
+            center,
+            cv2.NORMAL_CLONE,
+        )
+    except Exception as e:
+        print(f"Poisson blending failed: {e}")
+
+    return swapped
+
+
 def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
     """Optimized face swapping with better memory management and performance."""
     face_swapper = get_face_swapper()
@@ -185,58 +242,9 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
     # --- Post-swap Processing (Masking, Opacity, etc.) ---
     # Now, work with the guaranteed uint8 'swapped_frame'
 
-    if getattr(modules.globals, "mouth_mask", False): # Check if mouth_mask is enabled
-        # Create a mask for the target face
-        face_mask = create_face_mask(target_face, temp_frame) # Use temp_frame (original shape) for mask creation geometry
+    swapped_frame = _apply_mouth_mask(swapped_frame, target_face, temp_frame)
+    swapped_frame = _apply_poisson_blend(swapped_frame, target_face, temp_frame, original_frame)
 
-        # Create the mouth mask using original geometry
-        mouth_mask, mouth_cutout, mouth_box, lower_lip_polygon = (
-            create_lower_mouth_mask(target_face, temp_frame) # Use temp_frame (original) for cutout
-        )
-
-        # Apply the mouth area only if mouth_cutout exists
-        if mouth_cutout is not None and mouth_box != (0,0,0,0): # Add check for valid box
-             # Apply mouth area (from original) onto the 'swapped_frame'
-            swapped_frame = apply_mouth_area(
-                swapped_frame, mouth_cutout, mouth_box, face_mask, lower_lip_polygon
-            )
-
-            if getattr(modules.globals, "show_mouth_mask_box", False):
-                        mouth_mask_data = (mouth_mask, mouth_cutout, mouth_box, lower_lip_polygon)
-                        # Draw visualization on the swapped_frame *before* opacity blending
-                        swapped_frame = draw_mouth_mask_visualization(
-                            swapped_frame, target_face, mouth_mask_data
-                        )
-        
-    # --- Poisson Blending ---
-    if getattr(modules.globals, "poisson_blend", False):
-        face_mask = create_face_mask(target_face, temp_frame)
-        if face_mask is not None:
-            # Find bounding box of the mask
-            y_indices, x_indices = np.where(face_mask > 0)
-            if len(x_indices) > 0 and len(y_indices) > 0:
-                x_min, x_max = np.min(x_indices), np.max(x_indices)
-                y_min, y_max = np.min(y_indices), np.max(y_indices)
-
-                # Calculate center
-                center = (int((x_min + x_max) / 2), int((y_min + y_max) / 2))
-
-                # Crop src and mask
-                src_crop = swapped_frame[y_min : y_max + 1, x_min : x_max + 1]
-                mask_crop = face_mask[y_min : y_max + 1, x_min : x_max + 1]
-
-                try:
-                    # Use original_frame as destination to blend the swapped face onto it
-                    swapped_frame = cv2.seamlessClone(
-                        src_crop,
-                        original_frame,
-                        mask_crop,
-                        center,
-                        cv2.NORMAL_CLONE,
-                    )
-                except Exception as e:
-                    print(f"Poisson blending failed: {e}")
-        
             # Apply opacity blend between the original frame and the swapped frame
     opacity = getattr(modules.globals, "opacity", 1.0)
     # Ensure opacity is within valid range [0.0, 1.0]

@@ -82,7 +82,7 @@ def extract_frames(target_path: str) -> None:
     )
 
 
-def create_video(target_path: str, fps: float = 30.0) -> None:
+def create_video(target_path: str, fps: float = modules.globals.FPS_CAP) -> None:
     """Create video with hardware-accelerated encoding and optimized settings."""
     temp_output_path = get_temp_output_path(target_path)
     temp_directory_path = get_temp_directory_path(target_path)
