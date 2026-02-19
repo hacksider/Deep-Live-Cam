@@ -2,12 +2,12 @@ import cv2
 import time
 import queue
 import threading
-from PIL import Image, ImageOps
+from PIL import Image
 import customtkinter as ctk
 
 import modules.globals
 from modules.gpu_processing import gpu_cvt_color, gpu_flip
-from modules.face_analyser import get_one_face, get_many_faces
+from modules.face_analyser import get_one_face, get_many_faces, set_det_size, _LIVE_DET_SIZE, _DEFAULT_DET_SIZE
 from modules.processors.frame.core import get_frame_processors_modules
 from modules.video_capture import VideoCapturer
 
@@ -49,6 +49,7 @@ def _processing_thread_func(capture_queue, processed_queue, stop_event):
     frames, reusing cached face positions instead."""
     frame_processors = get_frame_processors_modules(modules.globals.frame_processors)
     source_image = None
+    last_source_path = None
     prev_time = time.time()
     fps_update_interval = 0.5
     frame_count = 0
@@ -63,7 +64,7 @@ def _processing_thread_func(capture_queue, processed_queue, stop_event):
         except queue.Empty:
             continue
 
-        temp_frame = frame.copy()
+        temp_frame = frame
         run_detection = (proc_frame_index % DETECT_EVERY_N == 0)
         proc_frame_index += 1
 
@@ -71,7 +72,8 @@ def _processing_thread_func(capture_queue, processed_queue, stop_event):
             temp_frame = gpu_flip(temp_frame, 1)
 
         if not modules.globals.map_faces:
-            if source_image is None and modules.globals.source_path:
+            if modules.globals.source_path and modules.globals.source_path != last_source_path:
+                last_source_path = modules.globals.source_path
                 source_image = get_one_face(cv2.imread(modules.globals.source_path))
 
             # Update face detection cache on detection frames
@@ -91,7 +93,8 @@ def _processing_thread_func(capture_queue, processed_queue, stop_event):
                     # Use cached face positions to skip redundant detection
                     swapped_bboxes = []
                     if modules.globals.many_faces and cached_many_faces:
-                        result = temp_frame.copy()
+                        opacity = getattr(modules.globals, "opacity", 1.0)
+                        result = temp_frame if opacity >= 1.0 else temp_frame.copy()
                         for t_face in cached_many_faces:
                             result = frame_processor.swap_face(source_image, t_face, result)
                             if hasattr(t_face, 'bbox') and t_face.bbox is not None:
@@ -154,8 +157,11 @@ def create_webcam_preview(camera_index: int):
         update_status, fit_image_to_size,
     )
 
+    set_det_size(_LIVE_DET_SIZE)
+
     cap = VideoCapturer(camera_index)
     if not cap.start(PREVIEW_DEFAULT_WIDTH, PREVIEW_DEFAULT_HEIGHT, 60):
+        set_det_size(_DEFAULT_DET_SIZE)
         update_status("Failed to start camera")
         return
 
@@ -203,9 +209,6 @@ def create_webcam_preview(camera_index: int):
 
         image = gpu_cvt_color(temp_frame, cv2.COLOR_BGR2RGB)
         image = Image.fromarray(image)
-        image = ImageOps.contain(
-            image, (temp_frame.shape[1], temp_frame.shape[0]), Image.LANCZOS
-        )
         image = ctk.CTkImage(image, size=image.size)
         preview_label.configure(image=image)
         ROOT.update()
@@ -218,6 +221,7 @@ def create_webcam_preview(camera_index: int):
     cap_thread.join(timeout=2.0)
     proc_thread.join(timeout=2.0)
     cap.release()
+    set_det_size(_DEFAULT_DET_SIZE)
     PREVIEW.withdraw()
 
 

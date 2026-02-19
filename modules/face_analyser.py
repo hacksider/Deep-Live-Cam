@@ -1,6 +1,7 @@
 import os
+import platform
 import shutil
-from typing import Any
+from typing import Any, Tuple
 import insightface
 import threading
 
@@ -15,6 +16,12 @@ from pathlib import Path
 
 FACE_ANALYSER = None
 FACE_ANALYSER_LOCK = threading.Lock()
+_CURRENT_DET_SIZE: Tuple[int, int] = (320, 320)
+_IS_APPLE_SILICON = platform.system() == 'Darwin' and platform.machine() == 'arm64'
+
+# Smaller detection size for Apple Silicon live mode (~4x fewer FLOPs)
+_LIVE_DET_SIZE = (160, 160) if _IS_APPLE_SILICON else (320, 320)
+_DEFAULT_DET_SIZE = (320, 320)
 
 
 def get_face_analyser() -> Any:
@@ -36,8 +43,37 @@ def get_face_analyser() -> Any:
                     providers=providers,
                     allowed_modules=['detection', 'recognition']
                 )
-                FACE_ANALYSER.prepare(ctx_id=0, det_size=(320, 320))
+                FACE_ANALYSER.prepare(ctx_id=0, det_size=_CURRENT_DET_SIZE)
     return FACE_ANALYSER
+
+
+def set_det_size(det_size: Tuple[int, int]) -> None:
+    """Recreate the face analyser with a different detection size.
+
+    InsightFace ignores ``prepare()`` after the first call, so the only
+    way to change ``det_size`` is to build a fresh ``FaceAnalysis`` instance.
+
+    Call with ``_LIVE_DET_SIZE`` when entering live mode and
+    ``_DEFAULT_DET_SIZE`` when leaving it so that image/video processing
+    keeps full detection resolution.
+    """
+    global FACE_ANALYSER, _CURRENT_DET_SIZE
+
+    if det_size == _CURRENT_DET_SIZE:
+        return
+
+    with FACE_ANALYSER_LOCK:
+        _CURRENT_DET_SIZE = det_size
+        providers = [
+            p for p in modules.globals.execution_providers
+            if p != 'CoreMLExecutionProvider'
+        ] or ['CPUExecutionProvider']
+        FACE_ANALYSER = insightface.app.FaceAnalysis(
+            name='buffalo_l',
+            providers=providers,
+            allowed_modules=['detection', 'recognition']
+        )
+        FACE_ANALYSER.prepare(ctx_id=0, det_size=det_size)
 
 
 def _detect_all_faces(frame: Frame) -> list:
