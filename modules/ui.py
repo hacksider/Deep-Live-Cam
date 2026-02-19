@@ -3,7 +3,6 @@ import webbrowser
 import customtkinter as ctk
 from typing import Callable, Tuple
 import cv2
-from cv2_enumerate_cameras import enumerate_cameras
 from modules.gpu_processing import gpu_cvt_color, gpu_resize, gpu_flip
 from PIL import Image, ImageOps
 import json
@@ -803,17 +802,15 @@ def get_available_cameras():
         camera_names = []
 
         if platform.system() == "Darwin":
-            try:
-                for cam in enumerate_cameras(cv2.CAP_AVFOUNDATION):
-                    camera_indices.append(cam.index)
-                    camera_names.append(cam.name if cam.name else f"Camera {cam.index}")
-            except Exception:
-                for i in range(2):
-                    cap = cv2.VideoCapture(i)
-                    if cap.isOpened():
-                        camera_indices.append(i)
-                        camera_names.append(f"Camera {i}")
-                        cap.release()
+            # Avoid enumerate_cameras(CAP_AVFOUNDATION) — it probes indices
+            # 0-99 through OpenCV's AVFoundation backend which intermittently
+            # segfaults on macOS when invalid device indices are probed.
+            for i in range(10):
+                cap = cv2.VideoCapture(i)
+                if cap.isOpened():
+                    camera_indices.append(i)
+                    camera_names.append(f"Camera {i}")
+                    cap.release()
         else:
             for i in range(10):
                 cap = cv2.VideoCapture(i)
