@@ -91,63 +91,64 @@ def pre_start() -> bool:
 def get_face_swapper() -> Any:
     global FACE_SWAPPER
 
-    with THREAD_LOCK:
-        if FACE_SWAPPER is None:
-            model_name = "inswapper_128_fp16.onnx"
-            model_path = os.path.join(models_dir, model_name)
-            update_status(f"Loading face swapper model from: {model_path}", NAME)
-            try:
-                # Optimized provider configuration for Apple Silicon
-                providers_config = []
-                for p in modules.globals.execution_providers:
-                    if p == "CoreMLExecutionProvider" and IS_APPLE_SILICON:
-                        # Enhanced CoreML configuration for M1-M5
-                        providers_config.append((
-                            "CoreMLExecutionProvider",
-                            {
-                                "ModelFormat": "MLProgram",
-                                "MLComputeUnits": "ALL",  # Use Neural Engine + GPU + CPU
-                                "SpecializationStrategy": "FastPrediction",
-                                "AllowLowPrecisionAccumulationOnGPU": 1,
-                                "EnableOnSubgraphs": 1,
-                                "RequireStaticShapes": 1,
-                                "MaximumCacheSize": 1024 * 1024 * 512,  # 512MB cache
+    if FACE_SWAPPER is None:
+        with THREAD_LOCK:
+            if FACE_SWAPPER is None:
+                model_name = "inswapper_128_fp16.onnx"
+                model_path = os.path.join(models_dir, model_name)
+                update_status(f"Loading face swapper model from: {model_path}", NAME)
+                try:
+                    # Optimized provider configuration for Apple Silicon
+                    providers_config = []
+                    for p in modules.globals.execution_providers:
+                        if p == "CoreMLExecutionProvider" and IS_APPLE_SILICON:
+                            # Enhanced CoreML configuration for M1-M5
+                            providers_config.append((
+                                "CoreMLExecutionProvider",
+                                {
+                                    "ModelFormat": "MLProgram",
+                                    "MLComputeUnits": "ALL",  # Use Neural Engine + GPU + CPU
+                                    "SpecializationStrategy": "FastPrediction",
+                                    "AllowLowPrecisionAccumulationOnGPU": 1,
+                                    "EnableOnSubgraphs": 1,
+                                    "RequireStaticShapes": 1,
+                                    "MaximumCacheSize": 1024 * 1024 * 512,  # 512MB cache
+                                }
+                            ))
+                        else:
+                            providers_config.append(p)
+
+                    FACE_SWAPPER = insightface.model_zoo.get_model(
+                        model_path,
+                        providers=providers_config,
+                    )
+                    update_status("Face swapper model loaded successfully.", NAME)
+                    # Warmup inference: trigger CoreML JIT compilation and compute plan
+                    # caching so the first real inference call has no latency spike.
+                    if any(
+                        (p[0] if isinstance(p, tuple) else p) == "CoreMLExecutionProvider"
+                        for p in providers_config
+                    ):
+                        try:
+                            session = FACE_SWAPPER.session
+                            input_feed = {
+                                inp.name: np.zeros(
+                                    [d if isinstance(d, int) and d > 0 else 1
+                                     for d in inp.shape],
+                                    dtype=np.float32,
+                                )
+                                for inp in session.get_inputs()
                             }
-                        ))
-                    else:
-                        providers_config.append(p)
-                
-                FACE_SWAPPER = insightface.model_zoo.get_model(
-                    model_path,
-                    providers=providers_config,
-                )
-                update_status("Face swapper model loaded successfully.", NAME)
-                # Warmup inference: trigger CoreML JIT compilation and compute plan
-                # caching so the first real inference call has no latency spike.
-                if any(
-                    (p[0] if isinstance(p, tuple) else p) == "CoreMLExecutionProvider"
-                    for p in providers_config
-                ):
-                    try:
-                        session = FACE_SWAPPER.session
-                        input_feed = {
-                            inp.name: np.zeros(
-                                [d if isinstance(d, int) and d > 0 else 1
-                                 for d in inp.shape],
-                                dtype=np.float32,
+                            session.run(None, input_feed)
+                            update_status("CoreML warmup inference complete.", NAME)
+                        except Exception as warmup_err:
+                            update_status(
+                                f"CoreML warmup skipped (non-fatal): {warmup_err}", NAME
                             )
-                            for inp in session.get_inputs()
-                        }
-                        session.run(None, input_feed)
-                        update_status("CoreML warmup inference complete.", NAME)
-                    except Exception as warmup_err:
-                        update_status(
-                            f"CoreML warmup skipped (non-fatal): {warmup_err}", NAME
-                        )
-            except Exception as e:
-                update_status(f"Error loading face swapper model: {e}", NAME)
-                FACE_SWAPPER = None
-                return None
+                except Exception as e:
+                    update_status(f"Error loading face swapper model: {e}", NAME)
+                    FACE_SWAPPER = None
+                    return None
     return FACE_SWAPPER
 
 
