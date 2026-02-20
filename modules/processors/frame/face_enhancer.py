@@ -313,7 +313,22 @@ def enhance_face(temp_frame: Frame) -> Frame:
 
 
 def process_frame(source_face: Face | None, temp_frame: Frame) -> Frame:
-    """Processes a frame: enhances face if detected."""
+    """Processes a frame: enhances face if detected.
+
+    We run a lightweight InsightFace detection before calling GFPGAN to avoid
+    paying the full GFPGAN inference cost on frames that contain no face.
+    GFPGAN runs its own internal detection, so this is a redundant detection,
+    but it is cheap compared to the full enhancement pass and allows early-exit
+    on face-free frames.
+
+    TODO: if the frame processor pipeline is ever refactored to pass detected
+    face bounding boxes between stages, the InsightFace call here can be
+    replaced by reusing the bboxes produced by face_swapper, eliminating the
+    redundancy entirely.
+    """
+    target_face = get_one_face(temp_frame)
+    if target_face is None:
+        return temp_frame
     temp_frame = enhance_face(temp_frame)
     return temp_frame
 
