@@ -103,6 +103,8 @@ def get_face_swapper() -> Any:
                     for p in modules.globals.execution_providers:
                         if p == "CoreMLExecutionProvider" and IS_APPLE_SILICON:
                             # Enhanced CoreML configuration for M1-M5
+                            coreml_cache_dir = os.path.join(os.path.expanduser("~"), ".cache", "deep-live-cam", "coreml")
+                            os.makedirs(coreml_cache_dir, exist_ok=True)
                             providers_config.append((
                                 "CoreMLExecutionProvider",
                                 {
@@ -113,6 +115,7 @@ def get_face_swapper() -> Any:
                                     "EnableOnSubgraphs": 1,
                                     "RequireStaticShapes": 1,
                                     "MaximumCacheSize": 1024 * 1024 * 512,  # 512MB cache
+                                    "ModelCacheDirectory": coreml_cache_dir,
                                 }
                             ))
                         else:
