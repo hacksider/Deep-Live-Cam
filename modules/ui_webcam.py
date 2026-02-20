@@ -12,9 +12,9 @@ from modules.processors.frame.core import get_frame_processors_modules
 from modules.video_capture import VideoCapturer
 
 
-# How often to run full face detection. On intermediate frames the last
-# detected face positions are reused, which significantly reduces the
-# per-frame cost of the processing thread.
+# DETECT_EVERY_N is kept for backward-compatibility with any external imports
+# but is no longer used by the processing thread — detection now runs in its
+# own dedicated thread.
 DETECT_EVERY_N = 2
 
 
@@ -40,13 +40,45 @@ def _capture_thread_func(cap, capture_queue, stop_event):
                 pass
 
 
-def _processing_thread_func(capture_queue, processed_queue, stop_event):
-    """Processing thread: takes raw frames from capture_queue, applies face
-    processing, and puts results into processed_queue. Drops processed frames
-    when the output queue is full so the UI always gets the latest result.
+def _detection_thread_func(latest_frame_holder, detection_result, detection_lock, stop_event):
+    """Detection thread (producer): continuously reads the most recently
+    captured raw frame and runs face detection on it, storing results in
+    *detection_result* under *detection_lock*.
 
-    Uses DETECT_EVERY_N to skip expensive face detection on intermediate
-    frames, reusing cached face positions instead."""
+    latest_frame_holder is a one-element list [frame | None] written by the
+    processing thread so the detection thread always works on the newest frame
+    without queuing overhead.  The detection thread never touches Tkinter
+    widgets — all UI updates go through ROOT.after() in the display loop.
+    """
+    while not stop_event.is_set():
+        with detection_lock:
+            frame = latest_frame_holder[0]
+
+        if frame is None:
+            time.sleep(0.005)
+            continue
+
+        if modules.globals.many_faces:
+            many = get_many_faces(frame)
+            with detection_lock:
+                detection_result['target_face'] = None
+                detection_result['many_faces'] = many
+        else:
+            face = get_one_face(frame)
+            with detection_lock:
+                detection_result['target_face'] = face
+                detection_result['many_faces'] = None
+
+
+def _processing_thread_func(capture_queue, processed_queue, stop_event,
+                             latest_frame_holder, detection_result, detection_lock):
+    """Processing thread (consumer): takes raw frames from capture_queue,
+    reads the latest detection result from the shared detection_result dict,
+    applies face swap/enhancement, and puts results into processed_queue.
+
+    Face detection is no longer performed here — it runs concurrently in
+    _detection_thread_func and the most recent result is consumed lock-free
+    (under a brief lock copy) so the swap loop never blocks on detection."""
     frame_processors = get_frame_processors_modules(modules.globals.frame_processors)
     source_image = None
     last_source_path = None
@@ -54,9 +86,6 @@ def _processing_thread_func(capture_queue, processed_queue, stop_event):
     fps_update_interval = 0.5
     frame_count = 0
     fps = 0
-    proc_frame_index = 0
-    cached_target_face = None  # cached single-face result
-    cached_many_faces = None   # cached many-faces result
 
     while not stop_event.is_set():
         try:
@@ -65,25 +94,24 @@ def _processing_thread_func(capture_queue, processed_queue, stop_event):
             continue
 
         temp_frame = frame
-        run_detection = (proc_frame_index % DETECT_EVERY_N == 0)
-        proc_frame_index += 1
 
         if modules.globals.live_mirror:
             temp_frame = gpu_flip(temp_frame, 1)
+
+        # Publish the mirrored frame for the detection thread to pick up
+        with detection_lock:
+            latest_frame_holder[0] = temp_frame
 
         if not modules.globals.map_faces:
             if modules.globals.source_path and modules.globals.source_path != last_source_path:
                 last_source_path = modules.globals.source_path
                 source_image = get_one_face(cv2.imread(modules.globals.source_path))
 
-            # Update face detection cache on detection frames
-            if run_detection or (cached_target_face is None and cached_many_faces is None):
-                if modules.globals.many_faces:
-                    cached_many_faces = get_many_faces(temp_frame)
-                    cached_target_face = None
-                else:
-                    cached_target_face = get_one_face(temp_frame)
-                    cached_many_faces = None
+            # Read latest detection results — brief lock copy so we don't
+            # block the detection thread longer than necessary
+            with detection_lock:
+                cached_target_face = detection_result.get('target_face')
+                cached_many_faces = detection_result.get('many_faces')
 
             for frame_processor in frame_processors:
                 if frame_processor.NAME == "DLC.FACE-ENHANCER":
@@ -174,6 +202,14 @@ def create_webcam_preview(camera_index: int):
     processed_queue = queue.Queue(maxsize=2)
     stop_event = threading.Event()
 
+    # Shared state for the producer-consumer detection pipeline.
+    # latest_frame_holder[0] is the most recent raw frame for the detection
+    # thread to consume; detection_result holds the last detected faces for
+    # the processing thread to read.  Both are guarded by detection_lock.
+    detection_lock = threading.Lock()
+    latest_frame_holder = [None]  # one-element list so inner functions can rebind
+    detection_result = {'target_face': None, 'many_faces': None}
+
     # Start capture thread
     cap_thread = threading.Thread(
         target=_capture_thread_func,
@@ -182,10 +218,20 @@ def create_webcam_preview(camera_index: int):
     )
     cap_thread.start()
 
+    # Start detection thread — runs face detection asynchronously on the
+    # latest raw frame so the processing/swap thread never blocks on it.
+    det_thread = threading.Thread(
+        target=_detection_thread_func,
+        args=(latest_frame_holder, detection_result, detection_lock, stop_event),
+        daemon=True,
+    )
+    det_thread.start()
+
     # Start processing thread
     proc_thread = threading.Thread(
         target=_processing_thread_func,
-        args=(capture_queue, processed_queue, stop_event),
+        args=(capture_queue, processed_queue, stop_event,
+              latest_frame_holder, detection_result, detection_lock),
         daemon=True,
     )
     proc_thread.start()
@@ -193,6 +239,7 @@ def create_webcam_preview(camera_index: int):
     def _cleanup():
         stop_event.set()
         cap_thread.join(timeout=2.0)
+        det_thread.join(timeout=2.0)
         proc_thread.join(timeout=2.0)
         cap.release()
         set_det_size(_DEFAULT_DET_SIZE)
