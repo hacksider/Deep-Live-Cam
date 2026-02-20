@@ -46,9 +46,10 @@ def check_and_ignore_nsfw(target, destroy=None):
     from modules.predicter import predict_image, predict_video, predict_frame
     from modules.ui import update_status
 
-    if type(target) is str:  # image/video file path
+    check_nsfw = None
+    if isinstance(target, str):  # image/video file path
         check_nsfw = predict_image if has_image_extension(target) else predict_video
-    elif type(target) is ndarray:  # frame object
+    elif isinstance(target, ndarray):  # frame object
         check_nsfw = predict_frame
     if check_nsfw and check_nsfw(target):
         if destroy:

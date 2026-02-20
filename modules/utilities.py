@@ -4,8 +4,10 @@ import mimetypes
 import os
 import platform
 import shutil
+import ssl
 import subprocess
 import urllib
+import urllib.request
 from pathlib import Path
 from typing import List, Any
 from tqdm import tqdm
@@ -23,6 +25,15 @@ def _compute_sha256(file_path: str) -> str:
         for chunk in iter(lambda: f.read(1024 * 1024), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def _validate_path_for_subprocess(path: str) -> None:
+    """Raise ValueError if a file path basename starts with '-', preventing argument injection."""
+    if os.path.basename(path).startswith("-"):
+        raise ValueError(
+            f"Unsafe file path rejected: basename of {path!r} starts with '-'. "
+            "Rename the file to use it with this application."
+        )
 
 
 def run_ffmpeg(args: List[str]) -> bool:
@@ -233,10 +244,14 @@ def get_temp_output_path(target_path: str) -> str:
 
 
 def normalize_output_path(source_path: str, target_path: str, output_path: str) -> Any:
+    if source_path:
+        _validate_path_for_subprocess(source_path)
+    if target_path:
+        _validate_path_for_subprocess(target_path)
     if source_path and target_path:
         source_name, _ = os.path.splitext(os.path.basename(source_path))
         target_name, target_extension = os.path.splitext(os.path.basename(target_path))
-        if os.path.isdir(output_path):
+        if output_path and os.path.isdir(output_path):
             return os.path.join(
                 output_path, source_name + "-" + target_name + target_extension
             )
@@ -266,7 +281,7 @@ def clean_temp(target_path: str) -> None:
 
 
 def has_image_extension(image_path: str) -> bool:
-    return image_path.lower().endswith(("png", "jpg", "jpeg"))
+    return image_path.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".bmp"))
 
 
 def is_image(image_path: str) -> bool:
@@ -291,7 +306,8 @@ def conditional_download(download_directory_path: str, urls: List[str], expected
             download_directory_path, os.path.basename(url)
         )
         if not os.path.exists(download_file_path):
-            request = urllib.request.urlopen(url)  # type: ignore[attr-defined]
+            ssl_context = ssl.create_default_context()
+            request = urllib.request.urlopen(url, context=ssl_context)  # type: ignore[attr-defined]
             total = int(request.headers.get("Content-Length", 0))
             with tqdm(
                 total=total,

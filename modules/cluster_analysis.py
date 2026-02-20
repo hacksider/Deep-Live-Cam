@@ -5,6 +5,9 @@ from typing import Any
 
 
 def find_cluster_centroids(embeddings, max_k=10) -> Any:
+    if len(embeddings) <= 1:
+        return embeddings
+
     inertia = []
     cluster_centroids = []
     K = range(1, max_k+1)
@@ -16,6 +19,8 @@ def find_cluster_centroids(embeddings, max_k=10) -> Any:
         cluster_centroids.append({"k": k, "centroids": kmeans.cluster_centers_})
 
     diffs = [inertia[i] - inertia[i+1] for i in range(len(inertia)-1)]
+    if not diffs:
+        return cluster_centroids[0]['centroids']
     optimal_centroids = cluster_centroids[diffs.index(max(diffs)) + 1]['centroids']
 
     return optimal_centroids

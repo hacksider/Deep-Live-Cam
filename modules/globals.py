@@ -11,7 +11,7 @@ WORKFLOW_DIR = os.path.join(ROOT_DIR, "workflow")
 FACE_CONFIDENCE_THRESHOLD: float = 0.5    # Minimum confidence score to accept a detected face
 DETECTION_INTERVAL: float = 0.033          # Face detection cache TTL in seconds (~30 FPS)
 DETECTION_CACHE_SIZE: int = 128            # Max entries in face detection LRU cache
-FPS_CAP: int = 30                          # Maximum preview frame rate for live mode
+FPS_CAP: float = 30.0                      # Maximum preview frame rate for live mode
 MOUTH_FEATHER_RADIUS: int = 10             # Pixel radius for mouth mask edge feathering
 
 file_types = [
@@ -74,6 +74,9 @@ show_mouth_mask_box: bool = False  # Visualize the mouth mask area (for debuggin
 mask_feather_ratio: int = 12       # Denominator for feathering calculation (higher = smaller feather)
 mask_down_size: float = 0.1        # Expansion factor for lower lip mask (relative)
 mask_size: float = 1.0             # Expansion factor for upper lip mask (relative)
+mouth_mask_size: float = 1.0       # Scale factor for mouth mask region
+eyes_mask_size: float = 1.0        # Scale factor for eyes mask region
+eyebrows_mask_size: float = 1.0    # Scale factor for eyebrows mask region
 
 # --- START: Added for Frame Interpolation ---
 enable_interpolation: bool = True # Toggle temporal smoothing

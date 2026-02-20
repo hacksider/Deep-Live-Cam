@@ -68,6 +68,59 @@ start-with provider:
     uv run run.py --execution-provider {{ provider }}
 
 ##########
+# Debug
+##########
+
+# Run with Python fault handler — prints Python stack on SIGSEGV/SIGFPE
+[group: "debug"]
+start-faulthandler:
+    PYTHONFAULTHANDLER=1 uv run run.py --execution-provider {{ default_provider }}
+
+# Run under lldb — attach debugger, type `run` then `bt` after crash
+[group: "debug"]
+start-lldb:
+    lldb -- uv run run.py --execution-provider {{ default_provider }}
+
+# Show most recent macOS crash report for this process (parsed summary)
+[group: "debug"]
+crash-report:
+    #!/usr/bin/env python3
+    import glob, json, os, sys
+    reports = sorted(glob.glob(os.path.expanduser("~/Library/Logs/DiagnosticReports/python3.10-*.ips")), reverse=True)
+    if not reports:
+        print("No crash reports found"); sys.exit(1)
+    report = reports[0]
+    print(f"=== {report} ===")
+    with open(report) as f:
+        content = f.read()
+    _, body = content.split("\n", 1)
+    data = json.loads(body)
+    exc = data.get("exception", {})
+    print(f"Exception : {exc.get('type', '?')} {exc.get('subtype', '')} (signal {exc.get('signal', '?')})")
+    print(f"Codes     : {exc.get('codes', '?')}")
+    for t in data.get("threads", []):
+        if t.get("triggered"):
+            print(f"Crashed thread {t['id']} {t.get('name', '')}:")
+            for frame in t.get("frames", [])[:20]:
+                print(f"  {frame.get('symbol', '???')}  +{frame.get('symbolLocation', '?')}")
+            break
+
+# List recent crash reports for this process
+[group: "debug"]
+crash-list:
+    ls -lt ~/Library/Logs/DiagnosticReports/ | grep python3 | head -20
+
+# Trace which dylib is loaded last before a crash (macOS only)
+[group: "debug"]
+start-dyld-trace:
+    DYLD_PRINT_LIBRARIES=1 uv run run.py --execution-provider {{ default_provider }} 2>&1 | tail -30
+
+# Run tests
+[group: "debug"]
+test *args:
+    uv run pytest {{ args }}
+
+##########
 # Maintenance
 ##########
 

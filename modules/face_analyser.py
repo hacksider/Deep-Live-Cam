@@ -95,24 +95,24 @@ def get_many_faces(frame: Frame) -> Any:
         return None
 
 def has_valid_map() -> bool:
-    for map in modules.globals.source_target_map:
-        if "source" in map and "target" in map:
+    for face_map in modules.globals.source_target_map:
+        if "source" in face_map and "target" in face_map:
             return True
     return False
 
 def default_source_face() -> Any:
-    for map in modules.globals.source_target_map:
-        if "source" in map:
-            return map['source']['face']
+    for face_map in modules.globals.source_target_map:
+        if "source" in face_map:
+            return face_map['source']['face']
     return None
 
 def simplify_maps() -> Any:
     centroids = []
     faces = []
-    for map in modules.globals.source_target_map:
-        if "source" in map and "target" in map:
-            centroids.append(map['target']['face'].normed_embedding)
-            faces.append(map['source']['face'])
+    for face_map in modules.globals.source_target_map:
+        if "source" in face_map and "target" in face_map:
+            centroids.append(face_map['target']['face'].normed_embedding)
+            faces.append(face_map['source']['face'])
 
     with modules.globals.MAP_LOCK:
         modules.globals.simple_map = {'source_faces': faces, 'target_embeddings': centroids}
@@ -207,16 +207,19 @@ def get_unique_faces_from_target_video() -> Any:
     
 
 def default_target_face():
-    for map in modules.globals.source_target_map:
+    for face_map in modules.globals.source_target_map:
         best_face = None
         best_frame = None
-        for frame in map['target_faces_in_frame']:
+        for frame in face_map['target_faces_in_frame']:
             if len(frame['faces']) > 0:
                 best_face = frame['faces'][0]
                 best_frame = frame
                 break
 
-        for frame in map['target_faces_in_frame']:
+        if best_face is None:
+            continue
+
+        for frame in face_map['target_faces_in_frame']:
             for face in frame['faces']:
                 if face['det_score'] > best_face['det_score']:
                     best_face = face
@@ -225,7 +228,7 @@ def default_target_face():
         x_min, y_min, x_max, y_max = best_face['bbox']
 
         target_frame = cv2.imread(best_frame['location'])
-        map['target'] = {
+        face_map['target'] = {
                         'cv2' : target_frame[int(y_min):int(y_max), int(x_min):int(x_max)],
                         'face' : best_face
                         }

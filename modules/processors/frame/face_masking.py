@@ -148,6 +148,8 @@ def create_eyes_mask(face: Face, frame: Frame) -> (np.ndarray, np.ndarray, tuple
     mask = np.zeros(frame.shape[:2], dtype=np.uint8)
     eyes_cutout = None
     landmarks = face.landmark_2d_106
+    if landmarks is None:
+        return mask, None, (0, 0, 0, 0), None
     if landmarks is not None:
         # Left eye landmarks (87-96) and right eye landmarks (33-42)
         left_eye = landmarks[87:96]
@@ -286,6 +288,8 @@ def create_eyebrows_mask(face: Face, frame: Frame) -> (np.ndarray, np.ndarray, t
     mask = np.zeros(frame.shape[:2], dtype=np.uint8)
     eyebrows_cutout = None
     landmarks = face.landmark_2d_106
+    if landmarks is None:
+        return mask, None, (0, 0, 0, 0), None
     if landmarks is not None:
         # Left eyebrow landmarks (97-105) and right eyebrow landmarks (43-51)
         left_eyebrow = landmarks[97:105].astype(np.float32)

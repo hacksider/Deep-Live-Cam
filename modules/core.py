@@ -159,12 +159,12 @@ def limit_resources() -> None:
     if modules.globals.max_memory:
         memory = modules.globals.max_memory * 1024 ** 3
         if platform.system().lower() == 'darwin':
-            memory = modules.globals.max_memory * 1024 ** 6
+            memory = modules.globals.max_memory * 1024 ** 3
         if platform.system().lower() == 'windows':
             import ctypes
             kernel32 = ctypes.windll.kernel32
             kernel32.SetProcessWorkingSetSize(-1, ctypes.c_size_t(memory), ctypes.c_size_t(memory))
-        else:
+        elif platform.system().lower() == 'linux':
             import resource
             resource.setrlimit(resource.RLIMIT_DATA, (memory, memory))
 

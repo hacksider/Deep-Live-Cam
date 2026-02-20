@@ -23,12 +23,12 @@ popup_status_label_live = None
 # Popup geometry constants
 POPUP_WIDTH = 750
 POPUP_HEIGHT = 810
-POPUP_SCROLL_WIDTH = (740,)
+POPUP_SCROLL_WIDTH = 740
 POPUP_SCROLL_HEIGHT = 700
 
 POPUP_LIVE_WIDTH = 900
 POPUP_LIVE_HEIGHT = 820
-POPUP_LIVE_SCROLL_WIDTH = (890,)
+POPUP_LIVE_SCROLL_WIDTH = 890
 POPUP_LIVE_SCROLL_HEIGHT = 700
 
 MAPPER_PREVIEW_MAX_HEIGHT = 100
@@ -48,7 +48,7 @@ def close_mapper_window():
         POPUP_LIVE = None
 
 
-def create_source_target_popup(start, root, map):
+def create_source_target_popup(start, root, source_map):
     global POPUP, popup_status_label
     from modules.ui import _, select_output_path, RECENT_DIRECTORY_SOURCE, img_ft
 
@@ -69,16 +69,16 @@ def create_source_target_popup(start, root, map):
     )
     scrollable_frame.grid(row=0, column=0, padx=0, pady=0, sticky="nsew")
 
-    def on_button_click(map, button_num):
-        map = update_popup_source(scrollable_frame, map, button_num)
+    def on_button_click(source_map, button_num):
+        source_map = update_popup_source(scrollable_frame, source_map, button_num)
 
-    for item in map:
+    for item in source_map:
         id = item["id"]
 
         button = ctk.CTkButton(
             scrollable_frame,
             text=_("Select source image"),
-            command=lambda id=id: on_button_click(map, id),
+            command=lambda id=id: on_button_click(source_map, id),
             width=DEFAULT_BUTTON_WIDTH,
             height=DEFAULT_BUTTON_HEIGHT,
         )
@@ -116,7 +116,7 @@ def create_source_target_popup(start, root, map):
     close_button.grid(row=2, column=0, pady=10)
 
 
-def update_popup_source(scrollable_frame, map, button_num):
+def update_popup_source(scrollable_frame, source_map, button_num):
     global source_label_dict
     from modules.ui import _, RECENT_DIRECTORY_SOURCE, img_ft
 
@@ -126,13 +126,13 @@ def update_popup_source(scrollable_frame, map, button_num):
         filetypes=[img_ft],
     )
 
-    if "source" in map[button_num]:
-        map[button_num].pop("source")
+    if "source" in source_map[button_num]:
+        source_map[button_num].pop("source")
         source_label_dict[button_num].destroy()
         del source_label_dict[button_num]
 
     if source_path == "":
-        return map
+        return source_map
     else:
         cv2_img = cv2.imread(source_path)
         face = get_one_face(cv2_img)
@@ -140,13 +140,13 @@ def update_popup_source(scrollable_frame, map, button_num):
         if face:
             x_min, y_min, x_max, y_max = face["bbox"]
 
-            map[button_num]["source"] = {
+            source_map[button_num]["source"] = {
                 "cv2": cv2_img[int(y_min): int(y_max), int(x_min): int(x_max)],
                 "face": face,
             }
 
             image = Image.fromarray(
-                gpu_cvt_color(map[button_num]["source"]["cv2"], cv2.COLOR_BGR2RGB)
+                gpu_cvt_color(source_map[button_num]["source"]["cv2"], cv2.COLOR_BGR2RGB)
             )
             image = image.resize(
                 (MAPPER_PREVIEW_MAX_WIDTH, MAPPER_PREVIEW_MAX_HEIGHT), Image.LANCZOS
@@ -164,7 +164,7 @@ def update_popup_source(scrollable_frame, map, button_num):
             source_label_dict[button_num] = source_image
         else:
             update_pop_status("Face could not be detected in last upload!")
-        return map
+        return source_map
 
 
 def update_pop_status(text):
@@ -177,7 +177,7 @@ def update_pop_live_status(text):
     popup_status_label_live.configure(text=_(text))
 
 
-def create_source_target_popup_for_webcam(root, map, camera_index):
+def create_source_target_popup_for_webcam(root, source_map, camera_index):
     global POPUP_LIVE, popup_status_label_live
     from modules.ui import _
     from modules.ui_webcam import create_webcam_preview
@@ -197,12 +197,12 @@ def create_source_target_popup_for_webcam(root, map, camera_index):
 
     def on_add_click():
         add_blank_map()
-        refresh_data(map)
+        refresh_data(source_map)
         update_pop_live_status("Please provide mapping!")
 
     def on_clear_click():
-        clear_source_target_images(map)
-        refresh_data(map)
+        clear_source_target_images(source_map)
+        refresh_data(source_map)
         update_pop_live_status("All mappings cleared!")
 
     popup_status_label_live = ctk.CTkLabel(POPUP_LIVE, text=None, justify="center")
@@ -220,10 +220,10 @@ def create_source_target_popup_for_webcam(root, map, camera_index):
     close_button.place(relx=0.7, rely=0.92, relwidth=0.2, relheight=0.05)
 
 
-def clear_source_target_images(map):
+def clear_source_target_images(source_map):
     global source_label_dict_live, target_label_dict_live
 
-    for item in map:
+    for item in source_map:
         if "source" in item:
             del item["source"]
         if "target" in item:
@@ -238,7 +238,7 @@ def clear_source_target_images(map):
         del target_label_dict_live[button_num]
 
 
-def refresh_data(map):
+def refresh_data(source_map):
     global POPUP_LIVE
     from modules.ui import _
 
@@ -247,19 +247,19 @@ def refresh_data(map):
     )
     scrollable_frame.grid(row=0, column=0, padx=0, pady=0, sticky="nsew")
 
-    def on_sbutton_click(map, button_num):
-        map = update_webcam_source(scrollable_frame, map, button_num)
+    def on_sbutton_click(source_map, button_num):
+        source_map = update_webcam_source(scrollable_frame, source_map, button_num)
 
-    def on_tbutton_click(map, button_num):
-        map = update_webcam_target(scrollable_frame, map, button_num)
+    def on_tbutton_click(source_map, button_num):
+        source_map = update_webcam_target(scrollable_frame, source_map, button_num)
 
-    for item in map:
+    for item in source_map:
         id = item["id"]
 
         button = ctk.CTkButton(
             scrollable_frame,
             text=_("Select source image"),
-            command=lambda id=id: on_sbutton_click(map, id),
+            command=lambda id=id: on_sbutton_click(source_map, id),
             width=DEFAULT_BUTTON_WIDTH,
             height=DEFAULT_BUTTON_HEIGHT,
         )
@@ -276,7 +276,7 @@ def refresh_data(map):
         button = ctk.CTkButton(
             scrollable_frame,
             text=_("Select target image"),
-            command=lambda id=id: on_tbutton_click(map, id),
+            command=lambda id=id: on_tbutton_click(source_map, id),
             width=DEFAULT_BUTTON_WIDTH,
             height=DEFAULT_BUTTON_HEIGHT,
         )
@@ -319,7 +319,7 @@ def refresh_data(map):
             target_image.configure(image=tk_image)
 
 
-def update_webcam_source(scrollable_frame, map, button_num):
+def update_webcam_source(scrollable_frame, source_map, button_num):
     global source_label_dict_live
     from modules.ui import _, RECENT_DIRECTORY_SOURCE, img_ft
 
@@ -329,13 +329,13 @@ def update_webcam_source(scrollable_frame, map, button_num):
         filetypes=[img_ft],
     )
 
-    if "source" in map[button_num]:
-        map[button_num].pop("source")
+    if "source" in source_map[button_num]:
+        source_map[button_num].pop("source")
         source_label_dict_live[button_num].destroy()
         del source_label_dict_live[button_num]
 
     if source_path == "":
-        return map
+        return source_map
     else:
         cv2_img = cv2.imread(source_path)
         face = get_one_face(cv2_img)
@@ -343,13 +343,13 @@ def update_webcam_source(scrollable_frame, map, button_num):
         if face:
             x_min, y_min, x_max, y_max = face["bbox"]
 
-            map[button_num]["source"] = {
+            source_map[button_num]["source"] = {
                 "cv2": cv2_img[int(y_min): int(y_max), int(x_min): int(x_max)],
                 "face": face,
             }
 
             image = Image.fromarray(
-                gpu_cvt_color(map[button_num]["source"]["cv2"], cv2.COLOR_BGR2RGB)
+                gpu_cvt_color(source_map[button_num]["source"]["cv2"], cv2.COLOR_BGR2RGB)
             )
             image = image.resize(
                 (MAPPER_PREVIEW_MAX_WIDTH, MAPPER_PREVIEW_MAX_HEIGHT), Image.LANCZOS
@@ -367,10 +367,10 @@ def update_webcam_source(scrollable_frame, map, button_num):
             source_label_dict_live[button_num] = source_image
         else:
             update_pop_live_status("Face could not be detected in last upload!")
-        return map
+        return source_map
 
 
-def update_webcam_target(scrollable_frame, map, button_num):
+def update_webcam_target(scrollable_frame, source_map, button_num):
     global target_label_dict_live
     from modules.ui import _, RECENT_DIRECTORY_SOURCE, img_ft
 
@@ -380,13 +380,13 @@ def update_webcam_target(scrollable_frame, map, button_num):
         filetypes=[img_ft],
     )
 
-    if "target" in map[button_num]:
-        map[button_num].pop("target")
+    if "target" in source_map[button_num]:
+        source_map[button_num].pop("target")
         target_label_dict_live[button_num].destroy()
         del target_label_dict_live[button_num]
 
     if target_path == "":
-        return map
+        return source_map
     else:
         cv2_img = cv2.imread(target_path)
         face = get_one_face(cv2_img)
@@ -394,13 +394,13 @@ def update_webcam_target(scrollable_frame, map, button_num):
         if face:
             x_min, y_min, x_max, y_max = face["bbox"]
 
-            map[button_num]["target"] = {
+            source_map[button_num]["target"] = {
                 "cv2": cv2_img[int(y_min): int(y_max), int(x_min): int(x_max)],
                 "face": face,
             }
 
             image = Image.fromarray(
-                gpu_cvt_color(map[button_num]["target"]["cv2"], cv2.COLOR_BGR2RGB)
+                gpu_cvt_color(source_map[button_num]["target"]["cv2"], cv2.COLOR_BGR2RGB)
             )
             image = image.resize(
                 (MAPPER_PREVIEW_MAX_WIDTH, MAPPER_PREVIEW_MAX_HEIGHT), Image.LANCZOS
@@ -418,4 +418,4 @@ def update_webcam_target(scrollable_frame, map, button_num):
             target_label_dict_live[button_num] = target_image
         else:
             update_pop_live_status("Face could not be detected in last upload!")
-        return map
+        return source_map

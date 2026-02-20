@@ -368,5 +368,10 @@ def process_video(
         source_path, temp_frame_paths, process_frames
     )
 
+def process_frame_v2(temp_frame: Frame) -> Frame:
+    target_face = get_one_face(temp_frame)
+    if target_face:
+        temp_frame = enhance_face(temp_frame)
+    return temp_frame
 
 # --- END OF FILE face_enhancer.py ---

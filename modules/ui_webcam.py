@@ -115,7 +115,7 @@ def _processing_thread_func(capture_queue, processed_queue, stop_event):
                     if modules.globals.fp_ui["face_enhancer"]:
                         temp_frame = frame_processor.process_frame_v2(temp_frame)
                 else:
-                    temp_frame = frame_processor.process_frame_v2(temp_frame)
+                    temp_frame = frame_processor.process_frame(None, temp_frame)
 
         # Calculate and display FPS
         current_time = time.time()
@@ -190,39 +190,41 @@ def create_webcam_preview(camera_index: int):
     )
     proc_thread.start()
 
-    # Main (UI) thread: pull processed frames and update the display
-    while not stop_event.is_set():
+    def _cleanup():
+        stop_event.set()
+        cap_thread.join(timeout=2.0)
+        proc_thread.join(timeout=2.0)
+        cap.release()
+        set_det_size(_DEFAULT_DET_SIZE)
+        PREVIEW.withdraw()
+
+    def _display_next_frame():
+        """Non-blocking display step — reschedules itself via ROOT.after()."""
+        if stop_event.is_set() or PREVIEW.state() == "withdrawn":
+            _cleanup()
+            return
+
         try:
-            temp_frame = processed_queue.get(timeout=0.03)
+            temp_frame = processed_queue.get_nowait()
         except queue.Empty:
-            ROOT.update()
-            continue
+            ROOT.after(1, _display_next_frame)
+            return
 
         if modules.globals.live_resizable:
             temp_frame = fit_image_to_size(
                 temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
             )
-        else:
-            temp_frame = fit_image_to_size(
-                temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
-            )
+        # live_resizable=False: display at native camera resolution
 
         image = gpu_cvt_color(temp_frame, cv2.COLOR_BGR2RGB)
         image = Image.fromarray(image)
         image = ctk.CTkImage(image, size=image.size)
         preview_label.configure(image=image)
-        ROOT.update()
 
-        if PREVIEW.state() == "withdrawn":
-            break
+        ROOT.after(1, _display_next_frame)
 
-    # Signal threads to stop and wait for them
-    stop_event.set()
-    cap_thread.join(timeout=2.0)
-    proc_thread.join(timeout=2.0)
-    cap.release()
-    set_det_size(_DEFAULT_DET_SIZE)
-    PREVIEW.withdraw()
+    # Kick off the non-blocking display loop
+    ROOT.after(1, _display_next_frame)
 
 
 def webcam_preview(root: ctk.CTk, camera_index: int):
