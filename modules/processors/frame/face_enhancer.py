@@ -348,7 +348,6 @@ def process_video(
     """Processes video frames using the frame processor core."""
     modules.processors.frame.core.process_video(source_path, temp_frame_paths, process_frames)
 
-
 def process_frame_v2(temp_frame: Frame) -> Frame:
     target_face = get_one_face(temp_frame)
     if target_face:
