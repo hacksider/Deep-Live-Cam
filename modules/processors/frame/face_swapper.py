@@ -327,7 +327,7 @@ def get_faces_optimized(frame: Frame, use_cache: bool = True) -> Optional[List[F
 # --- START: Helper function for interpolation and sharpening ---
 def apply_post_processing(current_frame: Frame, swapped_face_bboxes: List[np.ndarray]) -> Frame:
     """Applies sharpening and interpolation with Apple Silicon optimizations."""
-    processed_frame = current_frame.copy()
+    processed_frame = current_frame
 
     # 1. Apply Sharpening (if enabled) with optimized kernel for Apple Silicon
     sharpness_value = getattr(modules.globals, "sharpness", 0.0)
