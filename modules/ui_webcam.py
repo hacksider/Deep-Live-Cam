@@ -207,7 +207,7 @@ def create_webcam_preview(camera_index: int):
         try:
             temp_frame = processed_queue.get_nowait()
         except queue.Empty:
-            ROOT.after(1, _display_next_frame)
+            ROOT.after(16, _display_next_frame)
             return
 
         if modules.globals.live_resizable:
@@ -221,10 +221,10 @@ def create_webcam_preview(camera_index: int):
         image = ctk.CTkImage(image, size=image.size)
         preview_label.configure(image=image)
 
-        ROOT.after(1, _display_next_frame)
+        ROOT.after(16, _display_next_frame)
 
     # Kick off the non-blocking display loop
-    ROOT.after(1, _display_next_frame)
+    ROOT.after(16, _display_next_frame)
 
 
 def webcam_preview(root: ctk.CTk, camera_index: int):
