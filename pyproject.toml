@@ -47,10 +47,18 @@ url = "https://download.pytorch.org/whl/cu128"
 name = "pytorch-cu128"
 explicit = true
 
+[tool.uv]
+no-binary-package = ["numpy"]
+
 [tool.uv.sources]
 torch = [
     { index = "pytorch-cu128", marker = "sys_platform != 'darwin'" },
 ]
 torchvision = [
     { index = "pytorch-cu128", marker = "sys_platform != 'darwin'" },
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
 ]
