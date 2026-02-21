@@ -1,12 +1,12 @@
 import sys
 import importlib
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 from types import ModuleType
 from typing import Any, List, Callable
 from tqdm import tqdm
 
 import modules
-import modules.globals                   
+import modules.globals
 
 FRAME_PROCESSORS_MODULES: List[ModuleType] = []
 FRAME_PROCESSORS_INTERFACE = [
@@ -66,14 +66,39 @@ def set_frame_processors_modules_from_ui(frame_processors: List[str]) -> None:
                  print(f"Warning: Error removing frame processor {frame_processor}: {e}")
 
 def multi_process_frame(source_path: str, temp_frame_paths: List[str], process_frames: Callable[[str, List[str], Any], None], progress: Any = None) -> None:
-    """Process frames in parallel using all workers continuously.
+    """Process video frames in parallel using ProcessPoolExecutor.
 
-    ThreadPoolExecutor is intentional here: ONNX Runtime releases the GIL
-    during inference, so threads get true parallelism on the dominant cost.
-    ProcessPoolExecutor would require re-loading models in each worker process
-    (2-5s × N workers startup overhead) and has documented ONNX Runtime
-    multiprocessing issues (onnxruntime#10786). For typical video lengths the
-    per-process model loading cost exceeds any GIL-relief benefit.
+    Uses separate processes for video batch mode to bypass the GIL and fully
+    utilise multiple CPU cores. Each worker process loads its own ONNX model
+    (~2-5s startup overhead per worker), which is amortised over thousands of
+    frames in a typical video.
+
+    For live/webcam mode, use multi_process_frame_live() instead which uses
+    ThreadPoolExecutor to avoid per-process model loading latency.
+    """
+    max_workers = modules.globals.execution_threads
+
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(process_frames, source_path, [path], None): path
+            for path in temp_frame_paths
+        }
+        for future in as_completed(futures):
+            try:
+                future.result()
+            except Exception as e:
+                print(f"Error processing frame {futures[future]}: {e}")
+            if progress:
+                progress.update(1)
+
+
+def multi_process_frame_live(source_path: str, temp_frame_paths: List[str], process_frames: Callable[[str, List[str], Any], None], progress: Any = None) -> None:
+    """Process frames in parallel using ThreadPoolExecutor for live mode.
+
+    ThreadPoolExecutor avoids the ~2-5s per-worker model loading overhead of
+    ProcessPoolExecutor, which is critical for live/webcam mode where latency
+    matters. ONNX Runtime releases the GIL during inference, so threads still
+    get reasonable parallelism on the dominant cost (model inference).
     """
     max_workers = modules.globals.execution_threads
 
