@@ -239,10 +239,29 @@ crash-list:
 start-dyld-trace:
     DYLD_PRINT_LIBRARIES=1 uv run run.py --execution-provider {{ default_provider }} 2>&1 | tail -30
 
-# Run tests
-[group: "debug"]
+##########
+# Test
+##########
+
+# Run fast unit tests — after every change
+[group: "test"]
+test-quick *args:
+    uv run pytest tests/ -x -q {{ args }}
+
+# Run full test suite with verbose output — before commit/PR
+[group: "test"]
 test *args:
-    uv run pytest {{ args }}
+    uv run pytest tests/ -v {{ args }}
+
+# Run tests with coverage report
+[group: "test"]
+test-cov *args:
+    uv run pytest tests/ --cov=modules --cov-report=term-missing {{ args }}
+
+# Verify NumPy BLAS configuration (Apple Accelerate on macOS ARM)
+[group: "test"]
+test-blas:
+    uv run pytest tests/test_numpy_blas.py -v
 
 ##########
 # Maintenance
