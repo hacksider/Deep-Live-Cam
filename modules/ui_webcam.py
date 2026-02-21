@@ -115,7 +115,13 @@ def _processing_thread_func(capture_queue, processed_queue, stop_event,
 
             for frame_processor in frame_processors:
                 if frame_processor.NAME == "DLC.FACE-ENHANCER":
-                    if modules.globals.fp_ui["face_enhancer"]:
+                    if modules.globals.fp_ui.get("face_enhancer"):
+                        temp_frame = frame_processor.process_frame(None, temp_frame)
+                elif frame_processor.NAME == "DLC.FACE-ENHANCER-GPEN256":
+                    if modules.globals.fp_ui.get("face_enhancer_gpen256"):
+                        temp_frame = frame_processor.process_frame(None, temp_frame)
+                elif frame_processor.NAME == "DLC.FACE-ENHANCER-GPEN512":
+                    if modules.globals.fp_ui.get("face_enhancer_gpen512"):
                         temp_frame = frame_processor.process_frame(None, temp_frame)
                 elif frame_processor.NAME == "DLC.FACE-SWAPPER":
                     # Use cached face positions to skip redundant detection
@@ -140,7 +146,11 @@ def _processing_thread_func(capture_queue, processed_queue, stop_event,
             modules.globals.target_path = None
             for frame_processor in frame_processors:
                 if frame_processor.NAME == "DLC.FACE-ENHANCER":
-                    if modules.globals.fp_ui["face_enhancer"]:
+                    if modules.globals.fp_ui.get("face_enhancer"):
+                        temp_frame = frame_processor.process_frame_v2(temp_frame)
+                elif frame_processor.NAME in ("DLC.FACE-ENHANCER-GPEN256", "DLC.FACE-ENHANCER-GPEN512"):
+                    fp_key = "face_enhancer_gpen256" if "256" in frame_processor.NAME else "face_enhancer_gpen512"
+                    if modules.globals.fp_ui.get(fp_key):
                         temp_frame = frame_processor.process_frame_v2(temp_frame)
                 else:
                     temp_frame = frame_processor.process_frame(None, temp_frame)

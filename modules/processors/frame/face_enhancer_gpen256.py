@@ -1,8 +1,7 @@
-"""GPEN-BFR-256 face enhancer — ONNX-based face restoration at 256x256."""
+"""GPEN-BFR-256 face enhancer — ONNX-based face restoration at 256×256."""
 
 from typing import Any, List
 import os
-import threading
 
 import cv2
 import numpy as np
@@ -11,11 +10,10 @@ import modules.globals
 import modules.processors.frame.core
 from modules.core import update_status
 from modules.face_analyser import get_one_face
+from modules.model_loader import ModelHolder
+from modules.paths import MODELS_DIR
 from modules.typing import Frame, Face
-from modules.utilities import (
-    is_image,
-    is_video,
-)
+from modules.utilities import conditional_download, is_image, is_video
 from modules.processors.frame._onnx_enhancer import (
     create_onnx_session,
     warmup_session,
@@ -27,21 +25,28 @@ INPUT_SIZE = 256
 MODEL_URL = "https://github.com/harisreedhar/Face-Upscalers-ONNX/releases/download/GPEN-BFR/GPEN-BFR-256.onnx"
 MODEL_FILE = "GPEN-BFR-256.onnx"
 
-ENHANCER = None
-THREAD_LOCK = threading.Lock()
+_model = ModelHolder()
 
-abs_dir = os.path.dirname(os.path.abspath(__file__))
-models_dir = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(abs_dir))), "models"
-)
+
+def _load_model() -> Any:
+    model_path = os.path.join(MODELS_DIR, MODEL_FILE)
+    print(f"{NAME}: Loading ONNX model from {model_path}")
+    session = create_onnx_session(model_path)
+    print(f"{NAME}: Model loaded successfully.")
+    return session
+
+
+def _warmup(session: Any) -> None:
+    warmup_session(session)
+    print(f"{NAME}: Warmup inference complete.")
+
+
+def get_enhancer() -> Any:
+    return _model.get(loader_fn=_load_model, warmup_fn=_warmup)
 
 
 def pre_check() -> bool:
-    model_path = os.path.join(models_dir, MODEL_FILE)
-    if not os.path.exists(model_path):
-        update_status(f"Downloading {MODEL_FILE}...", NAME)
-        from modules.utilities import conditional_download
-        conditional_download(models_dir, [MODEL_URL])
+    conditional_download(MODELS_DIR, [MODEL_URL])
     return True
 
 
@@ -50,23 +55,6 @@ def pre_start() -> bool:
         update_status("Select an image or video for target path.", NAME)
         return False
     return True
-
-
-def get_enhancer() -> Any:
-    global ENHANCER
-    with THREAD_LOCK:
-        if ENHANCER is None:
-            model_path = os.path.join(models_dir, MODEL_FILE)
-            if not os.path.exists(model_path):
-                from modules.utilities import conditional_download
-                conditional_download(models_dir, [MODEL_URL])
-            if not os.path.exists(model_path):
-                raise FileNotFoundError(f"Model file not found: {model_path}")
-            print(f"{NAME}: Loading ONNX model from {model_path}")
-            ENHANCER = create_onnx_session(model_path)
-            warmup_session(ENHANCER)
-            print(f"{NAME}: Model loaded successfully.")
-    return ENHANCER
 
 
 def enhance_face(temp_frame: Frame, face: Face) -> Frame:
@@ -89,26 +77,14 @@ def process_frame(source_face: Face | None, temp_frame: Frame) -> Frame:
     return enhance_face(temp_frame, target_face)
 
 
-def process_frame_v2(temp_frame: Frame) -> Frame:
-    target_face = get_one_face(temp_frame)
-    if target_face:
-        temp_frame = enhance_face(temp_frame, target_face)
-    return temp_frame
-
-
 def process_frames(
     source_path: str | None, temp_frame_paths: List[str], progress: Any = None
 ) -> None:
-    for temp_frame_path in temp_frame_paths:
-        temp_frame = cv2.imread(temp_frame_path)
-        if temp_frame is None:
-            if progress:
-                progress.update(1)
-            continue
-        result = process_frame(None, temp_frame)
-        cv2.imwrite(temp_frame_path, result)
-        if progress:
-            progress.update(1)
+    modules.processors.frame.core.process_frames_io(
+        temp_frame_paths,
+        process_fn=lambda frame: process_frame(None, frame),
+        progress=progress,
+    )
 
 
 def process_image(source_path: str | None, target_path: str, output_path: str) -> None:
@@ -123,3 +99,10 @@ def process_image(source_path: str | None, target_path: str, output_path: str) -
 
 def process_video(source_path: str | None, temp_frame_paths: List[str]) -> None:
     modules.processors.frame.core.process_video(source_path, temp_frame_paths, process_frames)
+
+
+def process_frame_v2(temp_frame: Frame) -> Frame:
+    target_face = get_one_face(temp_frame)
+    if target_face:
+        temp_frame = enhance_face(temp_frame, target_face)
+    return temp_frame
