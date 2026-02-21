@@ -88,7 +88,7 @@ def extract_frames(target_path: str) -> None:
             "-vf", "format=rgb24",  # Use video filter for format conversion (faster)
             "-vsync", "0",  # Prevent frame duplication
             "-frame_pts", "1",  # Preserve frame timing
-            os.path.join(temp_directory_path, "%04d.png"),
+            os.path.join(temp_directory_path, "%04d.bmp"),
         ]
     )
 
@@ -167,7 +167,7 @@ def create_video(target_path: str, fps: float = modules.globals.FPS_CAP) -> None
     # Build ffmpeg command
     ffmpeg_args = [
         "-r", str(fps),
-        "-i", os.path.join(temp_directory_path, "%04d.png"),
+        "-i", os.path.join(temp_directory_path, "%04d.bmp"),
         "-c:v", encoder,
     ]
     
@@ -192,7 +192,7 @@ def create_video(target_path: str, fps: float = modules.globals.FPS_CAP) -> None
         fallback_encoder = 'libx264' if 'h264' in encoder else 'libx265'
         ffmpeg_args_fallback = [
             "-r", str(fps),
-            "-i", os.path.join(temp_directory_path, "%04d.png"),
+            "-i", os.path.join(temp_directory_path, "%04d.bmp"),
             "-c:v", fallback_encoder,
             "-preset", "medium",
             "-crf", str(modules.globals.video_quality),
@@ -229,7 +229,7 @@ def restore_audio(target_path: str, output_path: str) -> None:
 
 def get_temp_frame_paths(target_path: str) -> List[str]:
     temp_directory_path = get_temp_directory_path(target_path)
-    return glob.glob((os.path.join(glob.escape(temp_directory_path), "*.png")))
+    return glob.glob((os.path.join(glob.escape(temp_directory_path), "*.bmp")))
 
 
 def get_temp_directory_path(target_path: str) -> str:

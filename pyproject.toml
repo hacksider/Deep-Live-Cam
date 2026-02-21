@@ -27,6 +27,9 @@ dependencies = [
     "basicsr @ git+https://github.com/xinntao/BasicSR.git@master",
     "gfpgan @ git+https://github.com/TencentARC/GFPGAN.git@master",
     "pygrabber; sys_platform == 'win32'",
+    "coremltools>=9.0 ; sys_platform == 'darwin'",
+    "onnx2torch>=1.5.15 ; sys_platform == 'darwin'",
+    "mlx>=0.20.0 ; sys_platform == 'darwin' and platform_machine == 'arm64'",
 ]
 
 [build-system]

@@ -251,6 +251,7 @@ def create_webcam_preview(camera_index: int):
             _cleanup()
             return
 
+
         try:
             temp_frame = processed_queue.get_nowait()
         except queue.Empty:

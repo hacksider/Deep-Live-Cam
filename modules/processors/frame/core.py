@@ -1,6 +1,6 @@
 import sys
 import importlib
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from types import ModuleType
 from typing import Any, List, Callable
 from tqdm import tqdm
@@ -66,29 +66,27 @@ def set_frame_processors_modules_from_ui(frame_processors: List[str]) -> None:
                  print(f"Warning: Error removing frame processor {frame_processor}: {e}")
 
 def multi_process_frame(source_path: str, temp_frame_paths: List[str], process_frames: Callable[[str, List[str], Any], None], progress: Any = None) -> None:
-    """Process frames in parallel with optimized batching and memory management."""
+    """Process frames in parallel using all workers continuously.
+
+    ThreadPoolExecutor is intentional here: ONNX Runtime releases the GIL
+    during inference, so threads get true parallelism on the dominant cost.
+    ProcessPoolExecutor would require re-loading models in each worker process
+    (2-5s × N workers startup overhead) and has documented ONNX Runtime
+    multiprocessing issues (onnxruntime#10786). For typical video lengths the
+    per-process model loading cost exceeds any GIL-relief benefit.
+    """
     max_workers = modules.globals.execution_threads
-    
-    # Determine optimal batch size based on available memory and thread count
-    # Process frames in batches to avoid memory overflow
-    batch_size = max(1, min(32, len(temp_frame_paths) // max(1, max_workers)))
-    
+
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # Process in batches to manage memory better
-        for i in range(0, len(temp_frame_paths), batch_size):
-            batch = temp_frame_paths[i:i + batch_size]
-            futures = []
-            
-            for path in batch:
-                future = executor.submit(process_frames, source_path, [path], progress)
-                futures.append(future)
-            
-            # Wait for batch to complete before starting next batch
-            for future in futures:
-                try:
-                    future.result()
-                except Exception as e:
-                    print(f"Error processing frame: {e}")
+        futures = {
+            executor.submit(process_frames, source_path, [path], progress): path
+            for path in temp_frame_paths
+        }
+        for future in as_completed(futures):
+            try:
+                future.result()
+            except Exception as e:
+                print(f"Error processing frame {futures[future]}: {e}")
 
 
 def process_video(source_path: str, frame_paths: list[str], process_frames: Callable[[str, List[str], Any], None]) -> None:

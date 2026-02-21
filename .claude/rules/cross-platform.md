@@ -15,15 +15,37 @@ pygrabber dependency, Linux camera enumeration, macOS Tcl/Tk path issues (2024-2
 
 ## Camera Enumeration
 
-- **Do NOT use `cv2_enumerate_cameras(cv2.CAP_AVFOUNDATION)` on macOS** — it probes indices
-  0–99 through AVFoundation's native backend, which intermittently segfaults (exit code 139)
-  when invalid device indices are probed. The crash is non-deterministic and has no Python-level
-  catch.
-- Use `cv2.VideoCapture(i)` in a bounded loop (e.g., `range(10)`) on macOS and Linux to safely
-  enumerate available cameras
+- **Do NOT probe cameras with `cv2.VideoCapture(i)` on macOS** — any probe of an invalid index
+  (one beyond the number of attached cameras) triggers the OBSENSOR (OrbbecSDK) backend, which
+  corrupts global OpenCV state and causes SIGSEGV (exit 139). This happens with all backends
+  including `CAP_ANY` and `CAP_AVFOUNDATION`. Even one probe is enough to crash.
+- **Do NOT run camera enumeration in a subprocess on macOS** — `subprocess.run()` calls `fork()`
+  internally; forking after cv2/AVFoundation is initialised in a multithreaded process is unsafe
+  on macOS (Objective-C runtime) and crashes the **parent** process.
+- **macOS solution**: skip `cv2.VideoCapture` probing entirely. Default to `[0, 1]` (Camera 0,
+  Camera 1) which covers FaceTime and a common USB webcam. The user can select the correct index
+  from the UI dropdown if they have more cameras.
+- Use `cv2.VideoCapture(i)` in a bounded loop on **Linux only** — break after 3 consecutive
+  failures to avoid probing large index ranges and virtual cameras gaps.
 - Use `pygrabber` on Windows (inside `if sys.platform == 'win32'` guard)
 - Do not assume camera index 0 is the built-in webcam on macOS — FaceTime Camera may have
   a different index (evidence: "FaceTime Camera Index to 0" commit)
+
+## Tkinter Thread Safety
+
+- **Never call tkinter widget methods from background threads** — Tcl/Tk is single-threaded.
+  Calling `widget.configure()`, `ROOT.update()`, or any Tcl function from a non-main thread
+  causes SIGSEGV (exit 139) via Tcl heap corruption or SIGTRAP (exit 133) via `Tcl_Panic`
+  after `TclpFree` detects an invalid block (`alloc: invalid block`).
+- Use `ROOT.after(0, lambda: widget.configure(...))` to schedule UI updates from background
+  threads — this posts the call to the main thread's event queue.
+- Use a default argument capture (`lambda t=text: ...`) to avoid late-binding closure bugs
+  when scheduling inside a loop.
+- **Do NOT call `ROOT.update()` from within event handlers or `after()` callbacks** — it
+  re-enters the event loop and can cause recursive processing. Let the event loop handle
+  redraws on its own schedule.
+- Common offenders: status label updates from model-loading threads (`get_face_swapper`,
+  `get_face_enhancer`), progress messages from frame processing threads.
 
 ## Tcl/Tk Environment
 

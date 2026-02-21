@@ -513,6 +513,7 @@ def _add_camera_row(root: ctk.CTk) -> None:
     threading.Thread(target=_enumerate_cameras, daemon=True).start()
     root.after(100, _poll_camera_queue)
 
+
     live_button = ctk.CTkButton(
         root,
         text=_("Live"),

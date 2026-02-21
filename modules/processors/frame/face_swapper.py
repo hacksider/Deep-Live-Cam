@@ -126,12 +126,41 @@ def get_face_swapper() -> Any:
                         providers=providers_config,
                     )
                     update_status("Face swapper model loaded successfully.", NAME)
-                    # Warmup inference: trigger CoreML JIT compilation and compute plan
-                    # caching so the first real inference call has no latency spike.
-                    if any(
+
+                    # Prefer MLX over ONNX Runtime on Apple Silicon — runs the full graph
+                    # natively on the Metal GPU (8–9× faster than CoreML EP in benchmarks).
+                    # Falls through to CoreML .mlpackage, then ONNX Runtime CoreML EP.
+                    mlx_session_loaded = False
+                    if IS_APPLE_SILICON:
+                        try:
+                            from modules.mlx_inswapper import MLXSessionWrapper
+                            mlx_session = MLXSessionWrapper.load(model_path)
+                            if mlx_session is not None:
+                                FACE_SWAPPER.session = mlx_session
+                                update_status("Using MLX inference (native Metal GPU).", NAME)
+                                mlx_session_loaded = True
+                        except Exception as mlx_err:
+                            update_status(f"MLX session load failed, trying CoreML: {mlx_err}", NAME)
+
+                    # Fallback: direct CoreML model (.mlpackage) over ONNX Runtime CoreML EP.
+                    # Generate with: uv run scripts/convert_to_coreml.py
+                    mlpackage_path = os.path.join(models_dir, "inswapper_128.mlpackage")
+                    if IS_APPLE_SILICON and not mlx_session_loaded and os.path.exists(mlpackage_path):
+                        try:
+                            from modules.coreml_session import CoreMLSessionWrapper
+                            coreml_session = CoreMLSessionWrapper.load(mlpackage_path)
+                            if coreml_session is not None:
+                                FACE_SWAPPER.session = coreml_session
+                                update_status("Using direct CoreML model (bypassing ONNX Runtime).", NAME)
+                        except Exception as cml_err:
+                            update_status(f"CoreML session load failed, using ONNX Runtime: {cml_err}", NAME)
+
+                    # Warmup inference: trigger JIT compilation / compute plan caching
+                    # so the first real inference call has no latency spike.
+                    if mlx_session_loaded or any(
                         (p[0] if isinstance(p, tuple) else p) == "CoreMLExecutionProvider"
                         for p in providers_config
-                    ):
+                    ) or (IS_APPLE_SILICON and os.path.exists(mlpackage_path)):
                         try:
                             session = FACE_SWAPPER.session
                             input_feed = {
@@ -143,10 +172,10 @@ def get_face_swapper() -> Any:
                                 for inp in session.get_inputs()
                             }
                             session.run(None, input_feed)
-                            update_status("CoreML warmup inference complete.", NAME)
+                            update_status("Warmup inference complete.", NAME)
                         except Exception as warmup_err:
                             update_status(
-                                f"CoreML warmup skipped (non-fatal): {warmup_err}", NAME
+                                f"Warmup skipped (non-fatal): {warmup_err}", NAME
                             )
                 except Exception as e:
                     update_status(f"Error loading face swapper model: {e}", NAME)
@@ -655,10 +684,9 @@ def process_frames(
             # traceback.print_exc()
             result_frame = temp_frame # Use original frame on processing error
 
-        # Write the result back to the same frame path with optimized compression
+        # Write the result back to the same frame path
         try:
-            # Use PNG compression level 3 (faster) instead of default 9
-            write_success = cv2.imwrite(temp_frame_path, result_frame, [cv2.IMWRITE_PNG_COMPRESSION, 3])
+            write_success = cv2.imwrite(temp_frame_path, result_frame)
             if not write_success:
                 print(f"{NAME}: Error: Failed to write processed frame to {temp_frame_path}")
         except Exception as write_e:

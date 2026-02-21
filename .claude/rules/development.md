@@ -78,6 +78,20 @@ uv run run.py -s source.jpg -t target.mp4 -o output.mp4
 - If diagnosis is corrected, fully re-investigate rather than patching
 - Use systematic debugging approaches
 
+### Crash Investigation (macOS)
+
+Use the justfile debug recipes in order:
+
+1. `just start-faulthandler` — `PYTHONFAULTHANDLER=1`; prints Python-level stack at SIGSEGV/SIGFPE
+   before the interpreter dies. Best first step for any exit 139 or 133 crash.
+2. `just crash-report` — parses the most recent `.ips` crash report from
+   `~/Library/Logs/DiagnosticReports/python3.10-*.ips` and prints exception type, signal,
+   and the crashing thread's native backtrace. Essential when Python-level stack is empty.
+3. `just crash-list` — lists recent crash reports to pick a specific one.
+4. `just start-lldb` — launches under lldb for interactive `bt`/`frame` inspection.
+5. `just start-dyld-trace` — shows last shared library loaded before crash (useful for
+   import-time segfaults in C extensions).
+
 ## Security
 
 - Never commit API tokens or secrets
