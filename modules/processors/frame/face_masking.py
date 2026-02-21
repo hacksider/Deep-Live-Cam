@@ -9,6 +9,11 @@ def apply_color_transfer(source, target):
     Apply color transfer from target to source image using LAB color space.
     Uses float32 throughout for performance (sufficient precision for 8-bit images).
     """
+    if source is None or target is None:
+        return source
+    if source.size == 0 or target.size == 0:
+        return source
+
     # Convert to float32 [0,1] range for proper LAB conversion
     source_f32 = source.astype(np.float32) / 255.0
     target_f32 = target.astype(np.float32) / 255.0
