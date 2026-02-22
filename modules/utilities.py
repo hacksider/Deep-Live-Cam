@@ -235,6 +235,10 @@ def normalize_output_path(source_path: str, target_path: str, output_path: str) 
             return os.path.join(
                 output_path, source_name + "-" + target_name + target_extension
             )
+    if output_path and os.path.basename(output_path).startswith("-"):
+        raise ValueError(
+            f"Output filename must not start with '-': {os.path.basename(output_path)}"
+        )
     return output_path
 
 
