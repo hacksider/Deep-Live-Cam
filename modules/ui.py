@@ -359,7 +359,7 @@ def _create_switch(parent: ctk.CTkFrame, label: str, attr: str) -> ctk.CTkSwitch
     return switch
 
 
-def _add_settings_tabview(root: ctk.CTk, start: Callable, destroy: Callable) -> None:
+def _add_settings_tabview(root: ctk.CTk, live_button: ctk.CTkButton) -> None:
     tabview = ctk.CTkTabview(root)
     tabview.grid(row=1, column=0, sticky="nsew", padx=10, pady=5)
 
@@ -380,9 +380,9 @@ def _add_settings_tabview(root: ctk.CTk, start: Callable, destroy: Callable) -> 
     enhancement_tab = tabview.tab("Enhancement")
     _add_sliders_to_tab(enhancement_tab, len(switch_defs["Enhancement"]))
 
-    # Live Mode tab: add camera row
+    # Live Mode tab: add camera dropdown (live button is in action bar)
     live_tab = tabview.tab("Live Mode")
-    _add_camera_to_tab(live_tab, root, len(switch_defs["Live Mode"]))
+    _add_camera_to_tab(live_tab, root, len(switch_defs["Live Mode"]), live_button)
 
 
 def _add_sliders_to_tab(tab: ctk.CTkFrame, num_switches: int) -> None:
@@ -440,7 +440,9 @@ def _add_sliders_to_tab(tab: ctk.CTkFrame, num_switches: int) -> None:
     )
 
 
-def _add_camera_to_tab(tab: ctk.CTkFrame, root: ctk.CTk, num_switches: int) -> None:
+def _add_camera_to_tab(
+    tab: ctk.CTkFrame, root: ctk.CTk, num_switches: int, live_button: ctk.CTkButton,
+) -> None:
     start_row = (num_switches + 1) // 2 + 1
 
     camera_label = ctk.CTkLabel(tab, text=_("Select Camera:"))
@@ -458,8 +460,8 @@ def _add_camera_to_tab(tab: ctk.CTkFrame, root: ctk.CTk, num_switches: int) -> N
     camera_indices: list = []
     camera_names: list = []
 
-    live_button = ctk.CTkButton(
-        tab, text=_("Live"), cursor="hand2",
+    # Wire up the live button command to use the camera selection from this tab
+    live_button.configure(
         command=lambda: webcam_preview(
             root,
             (
@@ -468,10 +470,6 @@ def _add_camera_to_tab(tab: ctk.CTkFrame, root: ctk.CTk, num_switches: int) -> N
                 else None
             ),
         ),
-        state="disabled",
-    )
-    live_button.grid(
-        row=start_row + 1, column=0, columnspan=2, pady=(5, 10), padx=15, sticky="ew",
     )
 
     def _finish_camera_probe(indices, names):
@@ -508,12 +506,14 @@ def _add_camera_to_tab(tab: ctk.CTkFrame, root: ctk.CTk, num_switches: int) -> N
     root.after(100, _poll_camera_queue)
 
 
-def _add_action_buttons(root: ctk.CTk, start: Callable, destroy: Callable) -> None:
+def _add_action_buttons(root: ctk.CTk, start: Callable, destroy: Callable) -> ctk.CTkButton:
+    """Create action bar with Start, Stop, Preview, Live buttons. Returns the Live button."""
     action_frame = ctk.CTkFrame(root, fg_color="transparent")
     action_frame.grid(row=2, column=0, sticky="ew", padx=10, pady=5)
     action_frame.columnconfigure(0, weight=1)
     action_frame.columnconfigure(1, weight=1)
     action_frame.columnconfigure(2, weight=1)
+    action_frame.columnconfigure(3, weight=1)
 
     start_button = ctk.CTkButton(
         action_frame, text=_("Start"), cursor="hand2",
@@ -532,6 +532,14 @@ def _add_action_buttons(root: ctk.CTk, start: Callable, destroy: Callable) -> No
         command=lambda: toggle_preview(),
     )
     preview_button.grid(row=0, column=2, sticky="ew", padx=5)
+
+    # Live button — command and state wired up by _add_camera_to_tab after detection
+    live_button = ctk.CTkButton(
+        action_frame, text=_("Live"), cursor="hand2", state="disabled",
+    )
+    live_button.grid(row=0, column=3, sticky="ew", padx=5)
+
+    return live_button
 
 
 def _add_status_bar(root: ctk.CTk) -> None:
@@ -561,8 +569,8 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     load_switch_states()
     root = _setup_window(destroy)
     _add_top_frame(root)
-    _add_settings_tabview(root, start, destroy)
-    _add_action_buttons(root, start, destroy)
+    live_button = _add_action_buttons(root, start, destroy)
+    _add_settings_tabview(root, live_button)
     _add_status_bar(root)
     _restore_recent_paths()
     return root
