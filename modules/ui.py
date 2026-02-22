@@ -3,7 +3,6 @@ import webbrowser
 import customtkinter as ctk
 from typing import Callable, Tuple
 import cv2
-from cv2_enumerate_cameras import enumerate_cameras  # Add this import
 from modules.gpu_processing import gpu_cvt_color, gpu_resize, gpu_flip
 from PIL import Image, ImageOps
 import time
@@ -945,16 +944,11 @@ def get_available_cameras():
         camera_indices = []
         camera_names = []
 
-        if platform.system() == "Darwin":  # macOS specific handling
-            # Try to open the default FaceTime camera first
-            cap = cv2.VideoCapture(0)
-            if cap.isOpened():
-                camera_indices.append(0)
-                camera_names.append("FaceTime Camera")
-                cap.release()
-
-            # On macOS, additional cameras typically use indices 1 and 2
-            for i in [1, 2]:
+        if platform.system() == "Darwin":
+            # Avoid enumerate_cameras(CAP_AVFOUNDATION) — it probes indices
+            # 0-99 through OpenCV's AVFoundation backend which intermittently
+            # segfaults on macOS when invalid device indices are probed.
+            for i in range(10):
                 cap = cv2.VideoCapture(i)
                 if cap.isOpened():
                     camera_indices.append(i)
