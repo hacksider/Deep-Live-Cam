@@ -1,9 +1,12 @@
 """Virtual camera output — sends processed frames to a system virtual camera device.
 
 Requires pyvirtualcam (optional dependency). Platform backends:
-  - macOS: OBS Virtual Camera (OBS 30+ must be installed and started once)
-  - Linux: v4l2loopback kernel module
-  - Windows: OBS Virtual Camera (OBS 26+)
+  - macOS: OBS Virtual Camera — OBS 30+ must be installed once and its
+    Virtual Camera started once to register the system plugin, but OBS
+    does not need to be running during use.
+  - Linux: v4l2loopback kernel module (no OBS required)
+  - Windows: OBS Virtual Camera (OBS 26+), or Unity Capture as an
+    OBS-free alternative.
 """
 
 import logging
@@ -65,7 +68,11 @@ def start(width: int, height: int, fps: float = 30.0) -> bool:
         import sys
 
         if sys.platform == "darwin":
-            hint = "Install OBS 30+, launch it, start Virtual Camera once, then close OBS."
+            hint = (
+                "Install OBS 30+, launch it once, click 'Start Virtual Camera' "
+                "then 'Stop Virtual Camera', and close OBS. This registers the "
+                "system camera plugin — OBS does not need to be running after that."
+            )
         elif sys.platform == "linux":
             hint = ("Install v4l2loopback: "
                     "sudo apt install v4l2loopback-dkms && "
