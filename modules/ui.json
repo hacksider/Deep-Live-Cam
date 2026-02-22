@@ -130,6 +130,17 @@
   "CTkScrollableFrame": {
     "label_fg_color": ["gray80", "gray21"]
   },
+  "CTkTabview": {
+    "corner_radius": 0,
+    "border_width": 0,
+    "fg_color": ["gray95", "gray10"],
+    "segmented_button_fg_color": ["gray85", "gray16"],
+    "segmented_button_selected_color": ["#2aa666", "#1f538d"],
+    "segmented_button_selected_hover_color": ["#3cb666", "#14375e"],
+    "segmented_button_unselected_color": ["gray85", "gray16"],
+    "segmented_button_unselected_hover_color": ["gray70", "gray41"],
+    "text_color": ["gray14", "gray84"]
+  },
   "DropdownMenu": {
     "fg_color": ["gray90", "gray20"],
     "hover_color": ["gray75", "gray28"],

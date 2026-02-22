@@ -101,6 +101,7 @@ from modules.ui_mapper import (  # noqa: F401
     DEFAULT_BUTTON_WIDTH,
     DEFAULT_BUTTON_HEIGHT,
 )
+
 ROOT = None
 ROOT_HEIGHT = 800
 ROOT_WIDTH = 600
@@ -123,6 +124,9 @@ target_label = None
 status_label = None
 
 img_ft, vid_ft = modules.globals.file_types
+
+# Debounce timer for responsive image scaling
+_resize_timer_id = None
 
 
 def init(start: Callable[[], None], destroy: Callable[[], None], lang: str) -> ctk.CTk:
@@ -225,313 +229,165 @@ def _setup_window(destroy: Callable) -> ctk.CTk:
     ctk.set_default_color_theme(resolve_relative_path("ui.json"))
 
     root = ctk.CTk()
-    root.minsize(ROOT_WIDTH, ROOT_HEIGHT)
+    root.minsize(700, 600)
     root.title(
         f"{modules.metadata.name} {modules.metadata.version} {modules.metadata.edition}"
     )
     root.configure()
     root.protocol("WM_DELETE_WINDOW", lambda: destroy())
 
+    # Configure root grid: row 1 (tabview) gets all extra space
+    root.columnconfigure(0, weight=1)
+    root.rowconfigure(0, weight=0)  # top_frame (images)
+    root.rowconfigure(1, weight=1)  # settings_tabview
+    root.rowconfigure(2, weight=0)  # action_frame
+    root.rowconfigure(3, weight=0)  # status_frame
+
     return root
 
 
-def _add_image_labels(root: ctk.CTk) -> None:
+def _add_top_frame(root: ctk.CTk) -> None:
     global source_label, target_label
 
-    source_label = ctk.CTkLabel(root, text=None)
-    source_label.place(relx=0.1, rely=0.05, relwidth=0.275, relheight=0.225)
+    top_frame = ctk.CTkFrame(root)
+    top_frame.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 5))
+    top_frame.columnconfigure(0, weight=1)
+    top_frame.columnconfigure(1, weight=0)
+    top_frame.columnconfigure(2, weight=1)
 
-    target_label = ctk.CTkLabel(root, text=None)
-    target_label.place(relx=0.6, rely=0.05, relwidth=0.275, relheight=0.225)
+    # Source column
+    source_frame = ctk.CTkFrame(top_frame, fg_color="transparent")
+    source_frame.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+    source_frame.columnconfigure(0, weight=1)
 
+    source_label = ctk.CTkLabel(source_frame, text=None, width=200, height=200)
+    source_label.grid(row=0, column=0, pady=(5, 5))
 
-def _add_file_buttons(root: ctk.CTk) -> None:
     select_face_button = ctk.CTkButton(
-        root, text=_("Select a face"), cursor="hand2", command=lambda: select_source_path()
+        source_frame, text=_("Select a face"), cursor="hand2",
+        command=lambda: select_source_path(),
     )
-    select_face_button.place(relx=0.1, rely=0.30, relwidth=0.3, relheight=0.1)
+    select_face_button.grid(row=1, column=0, pady=(0, 5), sticky="ew", padx=10)
 
+    # Swap button
     swap_faces_button = ctk.CTkButton(
-        root, text="\u2194", cursor="hand2", command=lambda: swap_faces_paths()
+        top_frame, text="\u2194", cursor="hand2", width=40,
+        command=lambda: swap_faces_paths(),
     )
-    swap_faces_button.place(relx=0.45, rely=0.30, relwidth=0.1, relheight=0.1)
+    swap_faces_button.grid(row=0, column=1, padx=5)
+
+    # Target column
+    target_frame = ctk.CTkFrame(top_frame, fg_color="transparent")
+    target_frame.grid(row=0, column=2, sticky="nsew", padx=5, pady=5)
+    target_frame.columnconfigure(0, weight=1)
+
+    target_label = ctk.CTkLabel(target_frame, text=None, width=200, height=200)
+    target_label.grid(row=0, column=0, pady=(5, 5))
 
     select_target_button = ctk.CTkButton(
-        root,
-        text=_("Select a target"),
-        cursor="hand2",
+        target_frame, text=_("Select a target"), cursor="hand2",
         command=lambda: select_target_path(),
     )
-    select_target_button.place(relx=0.6, rely=0.30, relwidth=0.3, relheight=0.1)
+    select_target_button.grid(row=1, column=0, pady=(0, 5), sticky="ew", padx=10)
 
 
-def _add_toggle_switches(root: ctk.CTk) -> None:
-    keep_fps_value = ctk.BooleanVar(value=modules.globals.keep_fps)
-    keep_fps_checkbox = ctk.CTkSwitch(
-        root,
-        text=_("Keep fps"),
-        variable=keep_fps_value,
-        cursor="hand2",
-        command=lambda: (
-            setattr(modules.globals, "keep_fps", keep_fps_value.get()),
+# --- Data-driven switch definitions ---
+
+def _get_switch_defs():
+    """Return switch definitions grouped by tab.
+
+    Each definition: (label, global_attr_or_tumbler, default_value)
+    - If global_attr_or_tumbler starts with "fp_ui:", it's a tumbler key
+    - Otherwise it's a modules.globals attribute name
+    """
+    return {
+        "Processing": [
+            (_("Mouth Mask"), "mouth_mask", False),
+            (_("Show Mouth Mask Box"), "show_mouth_mask_box", False),
+            (_("Many faces"), "many_faces", False),
+            (_("Map faces"), "map_faces", False),
+            (_("Poisson Blend"), "poisson_blend", False),
+        ],
+        "Enhancement": [
+            (_("Face Enhancer"), "fp_ui:face_enhancer", False),
+            (_("GPEN-256"), "fp_ui:face_enhancer_gpen256", False),
+            (_("GPEN-512"), "fp_ui:face_enhancer_gpen512", False),
+        ],
+        "Output": [
+            (_("Keep fps"), "keep_fps", True),
+            (_("Keep audio"), "keep_audio", True),
+            (_("Keep frames"), "keep_frames", False),
+        ],
+        "Live Mode": [
+            (_("Fix Blueish Cam"), "color_correction", False),
+            (_("Show FPS"), "show_fps", False),
+        ],
+    }
+
+
+def _get_switch_value(attr: str) -> bool:
+    if attr.startswith("fp_ui:"):
+        key = attr[len("fp_ui:"):]
+        return modules.globals.fp_ui.get(key, False)
+    return getattr(modules.globals, attr, False)
+
+
+def _create_switch(parent: ctk.CTkFrame, label: str, attr: str) -> ctk.CTkSwitch:
+    value_var = ctk.BooleanVar(value=_get_switch_value(attr))
+
+    if attr.startswith("fp_ui:"):
+        key = attr[len("fp_ui:"):]
+        command = lambda: (
+            update_tumbler(key, value_var.get()),
             save_switch_states(),
-        ),
-    )
-    keep_fps_checkbox.place(relx=0.1, rely=0.5)
-
-    keep_frames_value = ctk.BooleanVar(value=modules.globals.keep_frames)
-    keep_frames_switch = ctk.CTkSwitch(
-        root,
-        text=_("Keep frames"),
-        variable=keep_frames_value,
-        cursor="hand2",
-        command=lambda: (
-            setattr(modules.globals, "keep_frames", keep_frames_value.get()),
+        )
+    elif attr == "map_faces":
+        command = lambda: (
+            setattr(modules.globals, attr, value_var.get()),
             save_switch_states(),
-        ),
-    )
-    keep_frames_switch.place(relx=0.1, rely=0.55)
-
-    enhancer_value = ctk.BooleanVar(value=modules.globals.fp_ui["face_enhancer"])
-    enhancer_switch = ctk.CTkSwitch(
-        root,
-        text=_("Face Enhancer"),
-        variable=enhancer_value,
-        cursor="hand2",
-        command=lambda: (
-            update_tumbler("face_enhancer", enhancer_value.get()),
-            save_switch_states(),
-        ),
-    )
-    enhancer_switch.place(relx=0.1, rely=0.6)
-
-    gpen256_value = ctk.BooleanVar(value=modules.globals.fp_ui.get("face_enhancer_gpen256", False))
-    gpen256_switch = ctk.CTkSwitch(
-        root,
-        text=_("GPEN Enhancer 256"),
-        variable=gpen256_value,
-        cursor="hand2",
-        command=lambda: (
-            update_tumbler("face_enhancer_gpen256", gpen256_value.get()),
-            save_switch_states(),
-        ),
-    )
-    gpen256_switch.place(relx=0.1, rely=0.65)
-
-    gpen512_value = ctk.BooleanVar(value=modules.globals.fp_ui.get("face_enhancer_gpen512", False))
-    gpen512_switch = ctk.CTkSwitch(
-        root,
-        text=_("GPEN Enhancer 512"),
-        variable=gpen512_value,
-        cursor="hand2",
-        command=lambda: (
-            update_tumbler("face_enhancer_gpen512", gpen512_value.get()),
-            save_switch_states(),
-        ),
-    )
-    gpen512_switch.place(relx=0.1, rely=0.7)
-
-    keep_audio_value = ctk.BooleanVar(value=modules.globals.keep_audio)
-    keep_audio_switch = ctk.CTkSwitch(
-        root,
-        text=_("Keep audio"),
-        variable=keep_audio_value,
-        cursor="hand2",
-        command=lambda: (
-            setattr(modules.globals, "keep_audio", keep_audio_value.get()),
-            save_switch_states(),
-        ),
-    )
-    keep_audio_switch.place(relx=0.6, rely=0.5)
-
-    many_faces_value = ctk.BooleanVar(value=modules.globals.many_faces)
-    many_faces_switch = ctk.CTkSwitch(
-        root,
-        text=_("Many faces"),
-        variable=many_faces_value,
-        cursor="hand2",
-        command=lambda: (
-            setattr(modules.globals, "many_faces", many_faces_value.get()),
-            save_switch_states(),
-        ),
-    )
-    many_faces_switch.place(relx=0.6, rely=0.55)
-
-    color_correction_value = ctk.BooleanVar(value=modules.globals.color_correction)
-    color_correction_switch = ctk.CTkSwitch(
-        root,
-        text=_("Fix Blueish Cam"),
-        variable=color_correction_value,
-        cursor="hand2",
-        command=lambda: (
-            setattr(modules.globals, "color_correction", color_correction_value.get()),
-            save_switch_states(),
-        ),
-    )
-    color_correction_switch.place(relx=0.6, rely=0.6)
-
-    map_faces = ctk.BooleanVar(value=modules.globals.map_faces)
-    map_faces_switch = ctk.CTkSwitch(
-        root,
-        text=_("Map faces"),
-        variable=map_faces,
-        cursor="hand2",
-        command=lambda: (
-            setattr(modules.globals, "map_faces", map_faces.get()),
-            save_switch_states(),
-            close_mapper_window() if not map_faces.get() else None
-        ),
-    )
-    map_faces_switch.place(relx=0.1, rely=0.75)
-
-    poisson_blend_value = ctk.BooleanVar(value=modules.globals.poisson_blend)
-    poisson_blend_switch = ctk.CTkSwitch(
-        root,
-        text=_("Poisson Blend"),
-        variable=poisson_blend_value,
-        cursor="hand2",
-        command=lambda: (
-            setattr(modules.globals, "poisson_blend", poisson_blend_value.get()),
-            save_switch_states(),
-        ),
-    )
-    poisson_blend_switch.place(relx=0.1, rely=0.8)
-
-    show_fps_value = ctk.BooleanVar(value=modules.globals.show_fps)
-    show_fps_switch = ctk.CTkSwitch(
-        root,
-        text=_("Show FPS"),
-        variable=show_fps_value,
-        cursor="hand2",
-        command=lambda: (
-            setattr(modules.globals, "show_fps", show_fps_value.get()),
-            save_switch_states(),
-        ),
-    )
-    show_fps_switch.place(relx=0.6, rely=0.65)
-
-    mouth_mask_var = ctk.BooleanVar(value=modules.globals.mouth_mask)
-    mouth_mask_switch = ctk.CTkSwitch(
-        root,
-        text=_("Mouth Mask"),
-        variable=mouth_mask_var,
-        cursor="hand2",
-        command=lambda: setattr(modules.globals, "mouth_mask", mouth_mask_var.get()),
-    )
-    mouth_mask_switch.place(relx=0.1, rely=0.45)
-
-    show_mouth_mask_box_var = ctk.BooleanVar(value=modules.globals.show_mouth_mask_box)
-    show_mouth_mask_box_switch = ctk.CTkSwitch(
-        root,
-        text=_("Show Mouth Mask Box"),
-        variable=show_mouth_mask_box_var,
-        cursor="hand2",
-        command=lambda: setattr(
-            modules.globals, "show_mouth_mask_box", show_mouth_mask_box_var.get()
-        ),
-    )
-    show_mouth_mask_box_switch.place(relx=0.6, rely=0.45)
-
-
-def _add_action_buttons(root: ctk.CTk, start: Callable, destroy: Callable) -> None:
-    start_button = ctk.CTkButton(
-        root, text=_("Start"), cursor="hand2", command=lambda: analyze_target(start, root)
-    )
-    start_button.place(relx=0.15, rely=0.86, relwidth=0.2, relheight=0.05)
-
-    stop_button = ctk.CTkButton(
-        root, text=_("Destroy"), cursor="hand2", command=lambda: destroy()
-    )
-    stop_button.place(relx=0.4, rely=0.86, relwidth=0.2, relheight=0.05)
-
-    preview_button = ctk.CTkButton(
-        root, text=_("Preview"), cursor="hand2", command=lambda: toggle_preview()
-    )
-    preview_button.place(relx=0.65, rely=0.86, relwidth=0.2, relheight=0.05)
-
-
-def _add_camera_row(root: ctk.CTk) -> None:
-    camera_label = ctk.CTkLabel(root, text=_("Select Camera:"))
-    camera_label.place(relx=0.1, rely=0.92, relwidth=0.2, relheight=0.05)
-
-    # Start with a placeholder while cameras are enumerated in the background
-    camera_variable = ctk.StringVar(value=_("Detecting cameras..."))
-    camera_optionmenu = ctk.CTkOptionMenu(
-        root,
-        variable=camera_variable,
-        values=[_("Detecting cameras...")],
-        state="disabled",
-    )
-    camera_optionmenu.place(relx=0.35, rely=0.92, relwidth=0.25, relheight=0.05)
-
-    # camera_indices is captured by the live_button command below
-    camera_indices: list = []
-    camera_names: list = []
-
-    def _finish_camera_probe(indices, names):
-        camera_indices.clear()
-        camera_indices.extend(indices)
-        camera_names.clear()
-        camera_names.extend(names)
-        if names and names[0] != "No cameras found":
-            camera_variable.set(names[0])
-            camera_optionmenu.configure(values=names, state="normal")
-            live_button.configure(state="normal")
-        else:
-            camera_variable.set(_("No cameras found"))
-            camera_optionmenu.configure(values=[_("No cameras found")], state="disabled")
-
-    # Thread-safe queue: background thread posts results, main thread polls.
-    # root.after() called from a non-main thread is unreliable in CustomTkinter.
-    _camera_queue: queue.Queue = queue.Queue()
-
-    def _poll_camera_queue():
-        try:
-            indices, names = _camera_queue.get_nowait()
-            _finish_camera_probe(indices, names)
-        except queue.Empty:
-            root.after(100, _poll_camera_queue)
-
-    if platform.system() == "Darwin":
-        # Camera enumeration via cv2.VideoCapture on macOS is unsafe:
-        # - Invalid indices trigger OBSENSOR (OrbbecSDK) which corrupts global
-        #   OpenCV state and causes SIGSEGV on the first probe.
-        # - Running enumeration in a subprocess (subprocess.run) also crashes
-        #   the parent: fork() after cv2/AVFoundation initialisation in a
-        #   multithreaded process is unsafe on macOS (Objective-C runtime).
-        #
-        # Skip probing entirely. FaceTime (index 0) is always present; a second
-        # camera (index 1) covers the common USB-webcam case. The user can pick
-        # the correct index from the dropdown if they have more cameras.
-        def _enumerate_cameras():
-            _camera_queue.put(([0, 1], ["Camera 0", "Camera 1"]))
+            close_mapper_window() if not value_var.get() else None,
+        )
     else:
-        def _enumerate_cameras():
-            indices, names = get_available_cameras()
-            _camera_queue.put((indices, names))
+        command = lambda: (
+            setattr(modules.globals, attr, value_var.get()),
+            save_switch_states(),
+        )
 
-    threading.Thread(target=_enumerate_cameras, daemon=True).start()
-    root.after(100, _poll_camera_queue)
-
-
-    live_button = ctk.CTkButton(
-        root,
-        text=_("Live"),
-        cursor="hand2",
-        command=lambda: webcam_preview(
-            root,
-            (
-                camera_indices[camera_names.index(camera_variable.get())]
-                if camera_names and camera_names[0] != "No cameras found"
-                else None
-            ),
-        ),
-        state="disabled",  # enabled once cameras are detected
+    switch = ctk.CTkSwitch(
+        parent, text=label, variable=value_var, cursor="hand2", command=command,
     )
-    live_button.place(relx=0.65, rely=0.92, relwidth=0.2, relheight=0.05)
+    return switch
 
 
-def _add_sliders(root: ctk.CTk) -> None:
+def _add_settings_tabview(root: ctk.CTk, start: Callable, destroy: Callable) -> None:
+    tabview = ctk.CTkTabview(root)
+    tabview.grid(row=1, column=0, sticky="nsew", padx=10, pady=5)
+
+    switch_defs = _get_switch_defs()
+
+    for tab_name, switches in switch_defs.items():
+        tab = tabview.add(tab_name)
+        tab.columnconfigure(0, weight=1)
+        tab.columnconfigure(1, weight=1)
+
+        for i, (label, attr, _default) in enumerate(switches):
+            row = i // 2
+            col = i % 2
+            sw = _create_switch(tab, label, attr)
+            sw.grid(row=row, column=col, sticky="w", padx=15, pady=8)
+
+    # Enhancement tab: add sliders
+    enhancement_tab = tabview.tab("Enhancement")
+    _add_sliders_to_tab(enhancement_tab, len(switch_defs["Enhancement"]))
+
+    # Live Mode tab: add camera row
+    live_tab = tabview.tab("Live Mode")
+    _add_camera_to_tab(live_tab, root, len(switch_defs["Live Mode"]))
+
+
+def _add_sliders_to_tab(tab: ctk.CTkFrame, num_switches: int) -> None:
+    start_row = (num_switches + 1) // 2 + 1
+
     transparency_var = ctk.DoubleVar(value=1.0)
 
     def on_transparency_change(value: float):
@@ -549,24 +405,19 @@ def _add_sliders(root: ctk.CTk) -> None:
             modules.globals.face_swapper_enabled = True
             update_status(f"Transparency set to {percentage}%")
 
-    transparency_label = ctk.CTkLabel(root, text="Transparency:")
-    transparency_label.place(relx=0.15, rely=0.75, relwidth=0.2, relheight=0.05)
+    transparency_label = ctk.CTkLabel(tab, text="Transparency:")
+    transparency_label.grid(row=start_row, column=0, sticky="w", padx=15, pady=(15, 2))
 
     transparency_slider = ctk.CTkSlider(
-        root,
-        from_=0.0,
-        to=1.0,
-        variable=transparency_var,
+        tab, from_=0.0, to=1.0, variable=transparency_var,
         command=on_transparency_change,
-        fg_color="#E0E0E0",
-        progress_color="#007BFF",
-        button_color="#FFFFFF",
-        button_hover_color="#CCCCCC",
-        height=5,
-        border_width=1,
-        corner_radius=3,
+        fg_color="#E0E0E0", progress_color="#007BFF",
+        button_color="#FFFFFF", button_hover_color="#CCCCCC",
+        height=5, border_width=1, corner_radius=3,
     )
-    transparency_slider.place(relx=0.35, rely=0.77, relwidth=0.5, relheight=0.02)
+    transparency_slider.grid(
+        row=start_row, column=1, sticky="ew", padx=(0, 15), pady=(15, 2),
+    )
 
     sharpness_var = ctk.DoubleVar(value=0.0)
 
@@ -574,36 +425,130 @@ def _add_sliders(root: ctk.CTk) -> None:
         modules.globals.sharpness = float(value)
         update_status(f"Sharpness set to {value:.1f}")
 
-    sharpness_label = ctk.CTkLabel(root, text="Sharpness:")
-    sharpness_label.place(relx=0.15, rely=0.80, relwidth=0.2, relheight=0.05)
+    sharpness_label = ctk.CTkLabel(tab, text="Sharpness:")
+    sharpness_label.grid(row=start_row + 1, column=0, sticky="w", padx=15, pady=2)
 
     sharpness_slider = ctk.CTkSlider(
-        root,
-        from_=0.0,
-        to=5.0,
-        variable=sharpness_var,
+        tab, from_=0.0, to=5.0, variable=sharpness_var,
         command=on_sharpness_change,
-        fg_color="#E0E0E0",
-        progress_color="#007BFF",
-        button_color="#FFFFFF",
-        button_hover_color="#CCCCCC",
-        height=5,
-        border_width=1,
-        corner_radius=3,
+        fg_color="#E0E0E0", progress_color="#007BFF",
+        button_color="#FFFFFF", button_hover_color="#CCCCCC",
+        height=5, border_width=1, corner_radius=3,
     )
-    sharpness_slider.place(relx=0.35, rely=0.82, relwidth=0.5, relheight=0.02)
+    sharpness_slider.grid(
+        row=start_row + 1, column=1, sticky="ew", padx=(0, 15), pady=2,
+    )
+
+
+def _add_camera_to_tab(tab: ctk.CTkFrame, root: ctk.CTk, num_switches: int) -> None:
+    start_row = (num_switches + 1) // 2 + 1
+
+    camera_label = ctk.CTkLabel(tab, text=_("Select Camera:"))
+    camera_label.grid(row=start_row, column=0, sticky="w", padx=15, pady=(15, 5))
+
+    camera_variable = ctk.StringVar(value=_("Detecting cameras..."))
+    camera_optionmenu = ctk.CTkOptionMenu(
+        tab, variable=camera_variable,
+        values=[_("Detecting cameras...")], state="disabled",
+    )
+    camera_optionmenu.grid(
+        row=start_row, column=1, sticky="ew", padx=(0, 15), pady=(15, 5),
+    )
+
+    camera_indices: list = []
+    camera_names: list = []
+
+    live_button = ctk.CTkButton(
+        tab, text=_("Live"), cursor="hand2",
+        command=lambda: webcam_preview(
+            root,
+            (
+                camera_indices[camera_names.index(camera_variable.get())]
+                if camera_names and camera_names[0] != "No cameras found"
+                else None
+            ),
+        ),
+        state="disabled",
+    )
+    live_button.grid(
+        row=start_row + 1, column=0, columnspan=2, pady=(5, 10), padx=15, sticky="ew",
+    )
+
+    def _finish_camera_probe(indices, names):
+        camera_indices.clear()
+        camera_indices.extend(indices)
+        camera_names.clear()
+        camera_names.extend(names)
+        if names and names[0] != "No cameras found":
+            camera_variable.set(names[0])
+            camera_optionmenu.configure(values=names, state="normal")
+            live_button.configure(state="normal")
+        else:
+            camera_variable.set(_("No cameras found"))
+            camera_optionmenu.configure(values=[_("No cameras found")], state="disabled")
+
+    _camera_queue: queue.Queue = queue.Queue()
+
+    def _poll_camera_queue():
+        try:
+            indices, names = _camera_queue.get_nowait()
+            _finish_camera_probe(indices, names)
+        except queue.Empty:
+            root.after(100, _poll_camera_queue)
+
+    if platform.system() == "Darwin":
+        def _enumerate_cameras():
+            _camera_queue.put(([0, 1], ["Camera 0", "Camera 1"]))
+    else:
+        def _enumerate_cameras():
+            indices, names = get_available_cameras()
+            _camera_queue.put((indices, names))
+
+    threading.Thread(target=_enumerate_cameras, daemon=True).start()
+    root.after(100, _poll_camera_queue)
+
+
+def _add_action_buttons(root: ctk.CTk, start: Callable, destroy: Callable) -> None:
+    action_frame = ctk.CTkFrame(root, fg_color="transparent")
+    action_frame.grid(row=2, column=0, sticky="ew", padx=10, pady=5)
+    action_frame.columnconfigure(0, weight=1)
+    action_frame.columnconfigure(1, weight=1)
+    action_frame.columnconfigure(2, weight=1)
+
+    start_button = ctk.CTkButton(
+        action_frame, text=_("Start"), cursor="hand2",
+        command=lambda: analyze_target(start, root),
+    )
+    start_button.grid(row=0, column=0, sticky="ew", padx=5)
+
+    stop_button = ctk.CTkButton(
+        action_frame, text=_("Destroy"), cursor="hand2",
+        command=lambda: destroy(),
+    )
+    stop_button.grid(row=0, column=1, sticky="ew", padx=5)
+
+    preview_button = ctk.CTkButton(
+        action_frame, text=_("Preview"), cursor="hand2",
+        command=lambda: toggle_preview(),
+    )
+    preview_button.grid(row=0, column=2, sticky="ew", padx=5)
 
 
 def _add_status_bar(root: ctk.CTk) -> None:
     global status_label
 
-    status_label = ctk.CTkLabel(root, text=None, justify="center")
-    status_label.place(relx=0.1, rely=0.96, relwidth=0.8)
+    status_frame = ctk.CTkFrame(root, fg_color="transparent")
+    status_frame.grid(row=3, column=0, sticky="ew", padx=10, pady=(0, 5))
+    status_frame.columnconfigure(0, weight=1)
+    status_frame.columnconfigure(1, weight=1)
+
+    status_label = ctk.CTkLabel(status_frame, text=None, justify="left")
+    status_label.grid(row=0, column=0, sticky="w")
 
     donate_label = ctk.CTkLabel(
-        root, text="Deep Live Cam", justify="center", cursor="hand2"
+        status_frame, text="Deep Live Cam", justify="right", cursor="hand2",
     )
-    donate_label.place(relx=0.1, rely=0.98, relwidth=0.8)
+    donate_label.grid(row=0, column=1, sticky="e")
     donate_label.configure(
         text_color=ctk.ThemeManager.theme.get("URL").get("text_color")
     )
@@ -615,12 +560,9 @@ def _add_status_bar(root: ctk.CTk) -> None:
 def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.CTk:
     load_switch_states()
     root = _setup_window(destroy)
-    _add_image_labels(root)
-    _add_file_buttons(root)
-    _add_toggle_switches(root)
+    _add_top_frame(root)
+    _add_settings_tabview(root, start, destroy)
     _add_action_buttons(root, start, destroy)
-    _add_camera_row(root)
-    _add_sliders(root)
     _add_status_bar(root)
     _restore_recent_paths()
     return root
@@ -843,9 +785,8 @@ def get_available_cameras():
 
     On Windows, uses pygrabber FilterGraph for named device enumeration.
     On Linux, uses a bounded cv2.VideoCapture probe loop with CAP_ANY.
-    On macOS, this function is not used — see _add_camera_row which probes
-    cameras incrementally on the main thread using CAP_AVFOUNDATION to avoid
-    the OBSENSOR backend that segfaults on invalid indices.
+    On macOS, this function is not used — see _add_camera_to_tab which
+    defaults to [0, 1] to avoid the OBSENSOR segfault.
     """
     if platform.system() == "Windows":
         try:
@@ -872,10 +813,7 @@ def get_available_cameras():
             print(f"Error detecting cameras: {str(e)}")
             return [], ["No cameras found"]
     else:
-        # Linux only (macOS uses CAP_AVFOUNDATION on the main thread; see
-        # _add_camera_row). Use CAP_ANY so OpenCV manages threading internally.
-        # Break after 3 consecutive failures to tolerate non-contiguous indices
-        # (e.g. virtual cameras at index 3 with nothing at 1 and 2).
+        # Linux only (macOS uses defaults; see _add_camera_to_tab).
         camera_indices = []
         camera_names = []
         consecutive_failures = 0
@@ -894,4 +832,3 @@ def get_available_cameras():
         if not camera_names:
             return [], ["No cameras found"]
         return camera_indices, camera_names
-
