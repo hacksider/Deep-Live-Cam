@@ -675,44 +675,86 @@ def swap_faces_paths() -> None:
 
 
 def capture_target_from_camera() -> None:
-    """Capture a single frame from the selected camera and set it as target."""
-    global RECENT_DIRECTORY_TARGET
+    """Open a live camera preview window with a Capture button."""
+    cap = cv2.VideoCapture(_selected_camera_index)
+    if not cap.isOpened():
+        update_status("Failed to open camera.")
+        return
 
-    update_status("Capturing from camera...")
+    capture_window = ctk.CTkToplevel(ROOT)
+    capture_window.title(_("Camera Capture"))
+    capture_window.minsize(480, 400)
+    capture_window.resizable(width=True, height=True)
+    capture_window.protocol("WM_DELETE_WINDOW", lambda: _close_capture())
 
-    def _capture():
-        import tempfile
-        cap = cv2.VideoCapture(_selected_camera_index)
-        if not cap.isOpened():
-            ROOT.after(0, lambda: update_status("Failed to open camera."))
+    feed_label = ctk.CTkLabel(capture_window, text=None)
+    feed_label.pack(fill="both", expand=True, padx=5, pady=5)
+
+    button_frame = ctk.CTkFrame(capture_window, fg_color="transparent")
+    button_frame.pack(fill="x", padx=10, pady=(0, 10))
+    button_frame.columnconfigure(0, weight=1)
+    button_frame.columnconfigure(1, weight=1)
+
+    capture_btn = ctk.CTkButton(
+        button_frame, text=_("Capture"), cursor="hand2",
+        command=lambda: _do_capture(),
+    )
+    capture_btn.grid(row=0, column=0, sticky="ew", padx=5)
+
+    cancel_btn = ctk.CTkButton(
+        button_frame, text=_("Cancel"), cursor="hand2",
+        command=lambda: _close_capture(),
+    )
+    cancel_btn.grid(row=0, column=1, sticky="ew", padx=5)
+
+    # Mutable state shared between callbacks
+    _running = [True]
+    _last_frame = [None]
+
+    def _update_feed():
+        if not _running[0]:
             return
-        # Discard a few frames to let the camera auto-expose
-        for _ in range(5):
-            cap.read()
         ret, frame = cap.read()
-        cap.release()
-        if not ret or frame is None:
-            ROOT.after(0, lambda: update_status("Failed to capture frame."))
-            return
+        if ret and frame is not None:
+            _last_frame[0] = frame
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            pil_img = Image.fromarray(rgb)
+            # Scale to fit the label while preserving aspect ratio
+            w = feed_label.winfo_width() or 480
+            h = feed_label.winfo_height() or 360
+            pil_img = ImageOps.contain(pil_img, (max(w, 1), max(h, 1)), Image.LANCZOS)
+            ctk_img = ctk.CTkImage(pil_img, size=pil_img.size)
+            feed_label.configure(image=ctk_img)
+            feed_label._ctk_img = ctk_img  # prevent GC
+        capture_window.after(33, _update_feed)  # ~30 fps
 
-        # Save to a temp file that persists (user may process it later)
+    def _do_capture():
+        frame = _last_frame[0]
+        if frame is None:
+            update_status("No frame captured yet.")
+            return
+        _close_capture()
+
         tmp_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "tmp")
         os.makedirs(tmp_dir, exist_ok=True)
         capture_path = os.path.join(tmp_dir, "camera_capture.png")
         cv2.imwrite(capture_path, frame)
 
-        def _apply():
-            global RECENT_DIRECTORY_TARGET
-            modules.globals.target_path = capture_path
-            RECENT_DIRECTORY_TARGET = tmp_dir
-            image = render_image_preview(capture_path, (200, 200))
-            target_label.configure(image=image)
-            save_switch_states()
-            update_status("Camera capture set as target.")
+        global RECENT_DIRECTORY_TARGET
+        modules.globals.target_path = capture_path
+        RECENT_DIRECTORY_TARGET = tmp_dir
+        image = render_image_preview(capture_path, (200, 200))
+        target_label.configure(image=image)
+        save_switch_states()
+        update_status("Camera capture set as target.")
 
-        ROOT.after(0, _apply)
+    def _close_capture():
+        _running[0] = False
+        cap.release()
+        capture_window.destroy()
 
-    threading.Thread(target=_capture, daemon=True).start()
+    # Start the feed after a short delay so the window has geometry
+    capture_window.after(100, _update_feed)
 
 
 def select_target_path() -> None:
