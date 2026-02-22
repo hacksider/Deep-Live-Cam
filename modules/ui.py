@@ -128,6 +128,9 @@ img_ft, vid_ft = modules.globals.file_types
 # Debounce timer for responsive image scaling
 _resize_timer_id = None
 
+# Selected camera index, updated by camera detection and dropdown selection
+_selected_camera_index = 0
+
 
 def init(start: Callable[[], None], destroy: Callable[[], None], lang: str) -> ctk.CTk:
     global ROOT, PREVIEW, _
@@ -288,7 +291,13 @@ def _add_top_frame(root: ctk.CTk) -> None:
         target_frame, text=_("Select a target"), cursor="hand2",
         command=lambda: select_target_path(),
     )
-    select_target_button.grid(row=1, column=0, pady=(0, 5), sticky="ew", padx=10)
+    select_target_button.grid(row=1, column=0, pady=(0, 2), sticky="ew", padx=10)
+
+    capture_target_button = ctk.CTkButton(
+        target_frame, text=_("Capture from camera"), cursor="hand2",
+        command=lambda: capture_target_from_camera(),
+    )
+    capture_target_button.grid(row=2, column=0, pady=(0, 5), sticky="ew", padx=10)
 
 
 # --- Data-driven switch definitions ---
@@ -460,6 +469,11 @@ def _add_camera_to_tab(
     camera_indices: list = []
     camera_names: list = []
 
+    def _on_camera_selected(choice):
+        global _selected_camera_index
+        if camera_names and choice in camera_names:
+            _selected_camera_index = camera_indices[camera_names.index(choice)]
+
     # Wire up the live button command to use the camera selection from this tab
     live_button.configure(
         command=lambda: webcam_preview(
@@ -471,14 +485,17 @@ def _add_camera_to_tab(
             ),
         ),
     )
+    camera_optionmenu.configure(command=_on_camera_selected)
 
     def _finish_camera_probe(indices, names):
+        global _selected_camera_index
         camera_indices.clear()
         camera_indices.extend(indices)
         camera_names.clear()
         camera_names.extend(names)
         if names and names[0] != "No cameras found":
             camera_variable.set(names[0])
+            _selected_camera_index = indices[0]
             camera_optionmenu.configure(values=names, state="normal")
             live_button.configure(state="normal")
         else:
@@ -655,6 +672,47 @@ def swap_faces_paths() -> None:
     target_image = render_image_preview(modules.globals.target_path, (200, 200))
     target_label.configure(image=target_image)
     save_switch_states()
+
+
+def capture_target_from_camera() -> None:
+    """Capture a single frame from the selected camera and set it as target."""
+    global RECENT_DIRECTORY_TARGET
+
+    update_status("Capturing from camera...")
+
+    def _capture():
+        import tempfile
+        cap = cv2.VideoCapture(_selected_camera_index)
+        if not cap.isOpened():
+            ROOT.after(0, lambda: update_status("Failed to open camera."))
+            return
+        # Discard a few frames to let the camera auto-expose
+        for _ in range(5):
+            cap.read()
+        ret, frame = cap.read()
+        cap.release()
+        if not ret or frame is None:
+            ROOT.after(0, lambda: update_status("Failed to capture frame."))
+            return
+
+        # Save to a temp file that persists (user may process it later)
+        tmp_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "tmp")
+        os.makedirs(tmp_dir, exist_ok=True)
+        capture_path = os.path.join(tmp_dir, "camera_capture.png")
+        cv2.imwrite(capture_path, frame)
+
+        def _apply():
+            global RECENT_DIRECTORY_TARGET
+            modules.globals.target_path = capture_path
+            RECENT_DIRECTORY_TARGET = tmp_dir
+            image = render_image_preview(capture_path, (200, 200))
+            target_label.configure(image=image)
+            save_switch_states()
+            update_status("Camera capture set as target.")
+
+        ROOT.after(0, _apply)
+
+    threading.Thread(target=_capture, daemon=True).start()
 
 
 def select_target_path() -> None:
