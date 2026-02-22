@@ -33,9 +33,13 @@ Standalone Python builds (python-build-standalone, used by mise and uv) ship Tcl
 just start              # Platform-default GPU (coreml on macOS, cuda on Linux/Windows)
 just start-cpu          # CPU only
 just start-with rocm    # Specific provider
+just start-virtualcam   # With virtual camera output
 
 # Using uv directly (requires TCL/TK env vars)
 uv run run.py --execution-provider coreml
+
+# With virtual camera (output appears as "OBS Virtual Camera" in Zoom/Meet/etc.)
+uv run run.py --execution-provider coreml --virtual-cam
 
 # Headless mode (no GUI, no Tcl/Tk needed)
 uv run run.py -s source.jpg -t target.mp4 -o output.mp4
@@ -61,6 +65,10 @@ uv run run.py --many-faces --mouth-mask --frame-processor face_swapper face_enha
 - **`face_swapper.py`** — core face swap using InsightFace + inswapper ONNX model
 - **`face_enhancer.py`** — GFPGAN-based face restoration/enhancement
 - **`face_masking.py`** — mouth mask region handling
+
+### Virtual Camera
+
+`modules/virtual_cam.py` — optional output to a system virtual camera device via `pyvirtualcam`. Sends full-resolution processed frames from the processing thread. Requires OBS (macOS/Windows) or v4l2loopback (Linux). Installed as an optional dependency: `uv sync --extra virtualcam`.
 
 Each processor implements: `pre_check()`, `pre_start()`, `process_frame()`, `process_image()`, `process_video()`.
 
@@ -90,5 +98,5 @@ Processing uses `ThreadPoolExecutor` for parallel frame processing with configur
 
 - Push to `premain` branch first, not `main` — changes merge to `main` after testing
 - `experimental` branch for large/disruptive changes
-- Test realtime faceswap (with/without enhancer), map faces, camera listing
+- Test realtime faceswap (with/without enhancer), map faces, camera listing, virtual camera
 - Verify no FPS drops, GPU overloading (15min minimum), or boot time regressions

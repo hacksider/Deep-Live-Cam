@@ -134,6 +134,24 @@ Deep-Live-Cam (v2.0.3c) is an open-source research and educational platform for 
 - **Supported Languages**: Indonesian, Japanese, Chinese (Simplified/Traditional), Korean, Russian, German, Spanish, French (8 languages as of v2.0.3c)
 - **Status**: Active (8 language packs, community contributions)
 
+### 11. Virtual Camera Output (Optional)
+- **Description**: Send processed frames directly to a system virtual camera device, eliminating the need for OBS screen capture
+- **Scope**: Enhancement feature (toggleable via UI and CLI)
+- **User Story**: "As a streamer, I want the face-swapped output to appear as a virtual camera in Zoom/Meet/Discord so that I don't need a separate screen capture tool"
+- **Technical Implementation**:
+  - Uses `pyvirtualcam` library (optional dependency: `uv sync --extra virtualcam`)
+  - BGR pixel format matches existing OpenCV pipeline (no conversion needed)
+  - Frames sent from the processing thread (single-thread requirement satisfied)
+  - Full-resolution frames sent before display resizing
+  - Platform backends: OBS Virtual Camera (macOS/Windows), v4l2loopback (Linux)
+- **Acceptance Criteria**:
+  - Toggle in Live Mode settings tab enables/disables virtual camera
+  - CLI flag `--virtual-cam` enables virtual camera from command line
+  - Graceful degradation when pyvirtualcam or system backend unavailable
+  - Platform-specific error messages guide users through backend setup
+  - No FPS impact beyond frame copy overhead
+- **Status**: Active (v2.0.3c+)
+
 ## Non-Functional Requirements
 
 ### Performance

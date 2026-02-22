@@ -168,6 +168,7 @@ def save_switch_states():
         "live_resizable": modules.globals.live_resizable,
         "fp_ui": modules.globals.fp_ui,
         "show_fps": modules.globals.show_fps,
+        "virtual_cam": modules.globals.virtual_cam,
         "mouth_mask": modules.globals.mouth_mask,
         "show_mouth_mask_box": modules.globals.show_mouth_mask_box,
         "source_path": modules.globals.source_path,
@@ -193,6 +194,7 @@ def load_switch_states():
         modules.globals.live_resizable = switch_states.get("live_resizable", False)
         modules.globals.fp_ui = switch_states.get("fp_ui", {"face_enhancer": False})
         modules.globals.show_fps = switch_states.get("show_fps", False)
+        modules.globals.virtual_cam = switch_states.get("virtual_cam", False)
         modules.globals.mouth_mask = switch_states.get("mouth_mask", False)
         modules.globals.show_mouth_mask_box = switch_states.get(
             "show_mouth_mask_box", False
@@ -330,6 +332,7 @@ def _get_switch_defs():
         "Live Mode": [
             (_("Fix Blueish Cam"), "color_correction", False),
             (_("Show FPS"), "show_fps", False),
+            (_("Virtual Camera"), "virtual_cam", False),
         ],
     }
 

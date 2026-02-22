@@ -344,6 +344,11 @@ dependencies = [
     { name = "typing-extensions" },
 ]
 
+[package.optional-dependencies]
+virtualcam = [
+    { name = "pyvirtualcam" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "pytest" },
@@ -369,6 +374,7 @@ requires-dist = [
     { name = "protobuf", specifier = "==4.25.1" },
     { name = "psutil", specifier = "==5.9.8" },
     { name = "pygrabber", marker = "sys_platform == 'win32'" },
+    { name = "pyvirtualcam", marker = "extra == 'virtualcam'", specifier = ">=0.14.0" },
     { name = "tensorflow", marker = "sys_platform != 'darwin'" },
     { name = "tk", specifier = "==0.1.0" },
     { name = "torch", marker = "sys_platform != 'darwin'", specifier = "==2.8.0+cu128", index = "https://download.pytorch.org/whl/cu128" },
@@ -377,6 +383,7 @@ requires-dist = [
     { name = "torchvision", marker = "sys_platform == 'darwin'" },
     { name = "typing-extensions", specifier = ">=4.8.0" },
 ]
+provides-extras = ["virtualcam"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = ">=9.0.2" }]
@@ -1447,6 +1454,21 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/66/c0/0c8b6ad9f17a802ee498c46e004a0eb49bc148f2fd230864601a86dcf6db/python-dateutil-2.9.0.post0.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 342432, upload-time = "2024-03-01T18:36:20.211Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl", hash = "sha256:a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427", size = 229892, upload-time = "2024-03-01T18:36:18.57Z" },
+]
+
+[[package]]
+name = "pyvirtualcam"
+version = "0.15.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5a/b4/3b4dedad7d8b2bb1bdec267536ce5b19e115e8a10a39fc3847f61029d6a3/pyvirtualcam-0.15.0-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:6bfae7f1d009acc8945a38cb6bb3796166386b524682c8462728fba1c99c7158", size = 619737, upload-time = "2026-01-24T18:27:07.523Z" },
+    { url = "https://files.pythonhosted.org/packages/b9/2c/751525f9463bd344008f2b8af41b766b067f8d357897c6ac4dc834968e64/pyvirtualcam-0.15.0-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:219624d06a899dc9ad9c3be20e700c628628e7b4bf69b64f9924ced6a48e9168", size = 627799, upload-time = "2026-01-24T18:27:09.402Z" },
+    { url = "https://files.pythonhosted.org/packages/c6/85/f46c4345ed34b2872a21560162fcc8d0e0e962f115d59259f7a1d5712dc7/pyvirtualcam-0.15.0-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:6b4aeba347f5c31f7657e792921a9b357f8ae8b4517fcf3a9bf7c173c1193cff", size = 158570, upload-time = "2026-01-24T18:27:10.555Z" },
+    { url = "https://files.pythonhosted.org/packages/8f/66/ed6c4116b4fc7aa9dd3a7abedd3cbfd86b22777e19c67400c3551b0f047f/pyvirtualcam-0.15.0-cp310-cp310-manylinux_2_26_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:53132673c88cb847b1694f7153359ce132a71c6a7f0f6e6d3d78775b5fe7e2de", size = 114206, upload-time = "2026-01-24T18:27:11.764Z" },
+    { url = "https://files.pythonhosted.org/packages/85/65/31b351ab67991621b071e18cc9f08ec8746e1846fcd44101cfef38a5bba0/pyvirtualcam-0.15.0-cp310-cp310-win_amd64.whl", hash = "sha256:8cb92623a4bf88a23b1b2605040d6040aeb3f334a80442bb435a9fb66e86bdb1", size = 186006, upload-time = "2026-01-24T18:27:13.897Z" },
 ]
 
 [[package]]

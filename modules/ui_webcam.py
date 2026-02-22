@@ -6,6 +6,7 @@ from PIL import Image
 import customtkinter as ctk
 
 import modules.globals
+from modules import virtual_cam
 from modules.gpu_processing import gpu_cvt_color, gpu_flip
 from modules.face_analyser import get_one_face, get_many_faces, set_det_size, _LIVE_DET_SIZE, _DEFAULT_DET_SIZE
 from modules.processors.frame.core import get_frame_processors_modules
@@ -174,6 +175,10 @@ def _processing_thread_func(capture_queue, processed_queue, stop_event,
                 2,
             )
 
+        # Send full-resolution processed frame to virtual camera if enabled
+        if modules.globals.virtual_cam:
+            virtual_cam.send(temp_frame)
+
         # Put processed frame into output queue, dropping old frames if full
         try:
             processed_queue.put_nowait(temp_frame)
@@ -205,6 +210,11 @@ def create_webcam_preview(camera_index: int):
 
     preview_label.configure(width=PREVIEW_DEFAULT_WIDTH, height=PREVIEW_DEFAULT_HEIGHT)
     PREVIEW.deiconify()
+
+    # Start virtual camera if enabled
+    if modules.globals.virtual_cam:
+        if not virtual_cam.start(PREVIEW_DEFAULT_WIDTH, PREVIEW_DEFAULT_HEIGHT):
+            update_status("Virtual camera failed to start — check logs")
 
     # Queues for decoupling capture from processing and processing from display.
     # Small maxsize ensures we always work on recent frames and drop stale ones.
@@ -252,6 +262,7 @@ def create_webcam_preview(camera_index: int):
         det_thread.join(timeout=2.0)
         proc_thread.join(timeout=2.0)
         cap.release()
+        virtual_cam.stop()
         set_det_size(_DEFAULT_DET_SIZE)
         PREVIEW.withdraw()
 

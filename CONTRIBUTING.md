@@ -25,6 +25,9 @@ Before creating a Pull Request (PR), ensure you have completed the following tes
     *   Test with both options (**enabled** and **disabled**).
 *   **Camera Listing**:
     *   Verify that all cameras are listed accurately.
+*   **Virtual Camera**:
+    *   Test with virtual camera toggle **enabled** and **disabled**.
+    *   Verify the virtual camera device appears in external apps (Zoom, Meet, etc.).
 
 ### Stability
 

@@ -58,6 +58,9 @@ torchvision = [
     { index = "pytorch-cu128", marker = "sys_platform != 'darwin'" },
 ]
 
+[project.optional-dependencies]
+virtualcam = ["pyvirtualcam>=0.14.0"]
+
 [dependency-groups]
 dev = [
     "pytest>=9.0.2",

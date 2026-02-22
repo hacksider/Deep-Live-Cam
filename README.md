@@ -306,8 +306,19 @@ python run.py --execution-provider openvino
 -   Select a source face image.
 -   Click "Live".
 -   Wait for the preview to appear (10-30 seconds).
--   Use a screen capture tool like OBS to stream.
+-   Use a screen capture tool like OBS to stream, or enable the Virtual Camera toggle (see below).
 -   To change the face, select a new source image.
+
+**3. Virtual Camera Mode**
+
+Send the face-swapped output directly to a virtual camera device that Zoom, Google Meet, Discord, and other apps can select — no OBS screen capture needed.
+
+-   **Setup (one-time)**:
+    -   macOS: Install OBS 30+, open it, click Start Virtual Camera, then Stop, then close OBS.
+    -   Linux: `sudo apt install v4l2loopback-dkms && sudo modprobe v4l2loopback devices=1`
+    -   Windows: Install OBS 26+.
+-   **Usage**: Enable the "Virtual Camera" toggle in the Live Mode settings tab, then start Live preview. In your video call app, select "OBS Virtual Camera" as the camera input.
+-   **CLI**: `python run.py --virtual-cam --execution-provider coreml`
 
 ## Command Line Arguments (Unmaintained)
 
@@ -328,6 +339,7 @@ options:
   --video-quality [0-51]                                   adjust output video quality
   --live-mirror                                            the live camera display as you see it in the front-facing camera frame
   --live-resizable                                         the live camera frame is resizable
+  --virtual-cam                                            output to virtual camera device
   --max-memory MAX_MEMORY                                  maximum amount of RAM in GB
   --execution-provider {cpu} [{cpu} ...]                   available execution provider (choices: cpu, ...)
   --execution-threads EXECUTION_THREADS                    number of execution threads
