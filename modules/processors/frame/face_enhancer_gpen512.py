@@ -26,10 +26,16 @@ MODEL_URL = "https://github.com/harisreedhar/Face-Upscalers-ONNX/releases/downlo
 MODEL_FILE = "GPEN-BFR-512.onnx"
 
 _model = ModelHolder()
+_load_error_logged = False
 
 
 def _load_model() -> Any:
     model_path = os.path.join(MODELS_DIR, MODEL_FILE)
+    if not os.path.isfile(model_path):
+        print(f"{NAME}: Model not found, downloading...")
+        conditional_download(MODELS_DIR, [MODEL_URL])
+    if not os.path.isfile(model_path):
+        raise FileNotFoundError(f"Model file not found: {model_path}")
     print(f"{NAME}: Loading ONNX model from {model_path}")
     session = create_onnx_session(model_path)
     print(f"{NAME}: Model loaded successfully.")
@@ -58,10 +64,13 @@ def pre_start() -> bool:
 
 
 def enhance_face(temp_frame: Frame, face: Face) -> Frame:
+    global _load_error_logged
     try:
         session = get_enhancer()
     except Exception as e:
-        print(f"{NAME}: {e}")
+        if not _load_error_logged:
+            print(f"{NAME}: {e}")
+            _load_error_logged = True
         return temp_frame
     try:
         return enhance_face_onnx(temp_frame, face, session, INPUT_SIZE)
