@@ -25,7 +25,16 @@ THREAD_LOCK = threading.Lock()
 NAME = "DLC.FACE-SWAPPER"
 
 # --- START: Added for Interpolation ---
-PREVIOUS_FRAME_RESULT = None # Stores the final processed frame from the previous step
+# Per-thread previous frame for interpolation (avoids cross-thread contamination)
+_THREAD_LOCAL = threading.local()
+
+
+def _get_previous_frame():
+    return getattr(_THREAD_LOCAL, 'previous_frame_result', None)
+
+
+def _set_previous_frame(frame):
+    _THREAD_LOCAL.previous_frame_result = frame
 # --- END: Added for Interpolation ---
 
 # --- START: Mac M1-M5 Optimizations ---
@@ -294,8 +303,6 @@ def get_faces_optimized(frame: Frame, use_cache: bool = True) -> Optional[List[F
 # --- START: Helper function for interpolation and sharpening ---
 def apply_post_processing(current_frame: Frame, swapped_face_bboxes: List[np.ndarray]) -> Frame:
     """Applies sharpening and interpolation with Apple Silicon optimizations."""
-    global PREVIOUS_FRAME_RESULT
-
     processed_frame = current_frame.copy()
 
     # 1. Apply Sharpening (if enabled) with optimized kernel for Apple Silicon
@@ -337,13 +344,14 @@ def apply_post_processing(current_frame: Frame, swapped_face_bboxes: List[np.nda
     interpolation_weight = getattr(modules.globals, "interpolation_weight", 0.2)
 
     final_frame = processed_frame # Start with the current (potentially sharpened) frame
+    prev_frame = _get_previous_frame()
 
     if enable_interpolation and 0 < interpolation_weight < 1:
-        if PREVIOUS_FRAME_RESULT is not None and PREVIOUS_FRAME_RESULT.shape == processed_frame.shape and PREVIOUS_FRAME_RESULT.dtype == processed_frame.dtype:
+        if prev_frame is not None and prev_frame.shape == processed_frame.shape and prev_frame.dtype == processed_frame.dtype:
             # Perform interpolation
             try:
                  final_frame = gpu_add_weighted(
-                    PREVIOUS_FRAME_RESULT, 1.0 - interpolation_weight,
+                    prev_frame, 1.0 - interpolation_weight,
                     processed_frame, interpolation_weight,
                     0
                  )
@@ -352,21 +360,21 @@ def apply_post_processing(current_frame: Frame, swapped_face_bboxes: List[np.nda
             except cv2.error as interp_e:
                  # print(f"Warning: OpenCV error during interpolation: {interp_e}") # Debug
                  final_frame = processed_frame # Use current frame if interpolation fails
-                 PREVIOUS_FRAME_RESULT = None # Reset state if error occurs
+                 _set_previous_frame(None)
 
             # Update the state for the next frame *with the interpolated result*
-            PREVIOUS_FRAME_RESULT = final_frame.copy()
+            _set_previous_frame(final_frame.copy())
         else:
             # If previous frame invalid or doesn't match, use current frame and update state
-            if PREVIOUS_FRAME_RESULT is not None and PREVIOUS_FRAME_RESULT.shape != processed_frame.shape:
+            if prev_frame is not None and prev_frame.shape != processed_frame.shape:
                 # print("Info: Frame shape changed, resetting interpolation state.") # Debug
                 pass
-            PREVIOUS_FRAME_RESULT = processed_frame.copy()
+            _set_previous_frame(processed_frame.copy())
     else:
          # If interpolation is off or weight is invalid, just use the current frame
          # Update state with the current (potentially sharpened) frame
          # Reset previous frame state if interpolation was just turned off or weight is invalid
-         PREVIOUS_FRAME_RESULT = processed_frame.copy()
+         _set_previous_frame(processed_frame.copy())
 
 
     return final_frame
@@ -381,8 +389,7 @@ def process_frame(source_face: Face, temp_frame: Frame) -> Frame:
     if getattr(modules.globals, "opacity", 1.0) == 0:
         # If opacity is 0, no swap happens, so no post-processing needed.
         # Also reset interpolation state if it was active.
-        global PREVIOUS_FRAME_RESULT
-        PREVIOUS_FRAME_RESULT = None
+        _set_previous_frame(None)
         return temp_frame
 
     # Color correction removed from here (better applied before swap if needed)
@@ -417,8 +424,7 @@ def process_frame_v2(temp_frame: Frame, temp_frame_path: str = "") -> Frame:
     if getattr(modules.globals, "opacity", 1.0) == 0:
         # If opacity is 0, no swap happens, so no post-processing needed.
         # Also reset interpolation state if it was active.
-        global PREVIOUS_FRAME_RESULT
-        PREVIOUS_FRAME_RESULT = None
+        _set_previous_frame(None)
         return temp_frame
 
     processed_frame = temp_frame # Start with the input frame
@@ -655,8 +661,7 @@ def process_frames(
 def process_image(source_path: str, target_path: str, output_path: str) -> None:
     """Processes a single target image."""
     # --- Reset interpolation state for single image processing ---
-    global PREVIOUS_FRAME_RESULT
-    PREVIOUS_FRAME_RESULT = None
+    _set_previous_frame(None)
     # ---
 
     use_v2 = getattr(modules.globals, "map_faces", False)
@@ -716,8 +721,7 @@ def process_image(source_path: str, target_path: str, output_path: str) -> None:
 def process_video(source_path: str, temp_frame_paths: List[str]) -> None:
     """Sets up and calls the frame processing for video."""
     # --- Reset interpolation state before starting video processing ---
-    global PREVIOUS_FRAME_RESULT
-    PREVIOUS_FRAME_RESULT = None
+    _set_previous_frame(None)
     # ---
 
     mode_desc = "'map_faces'" if getattr(modules.globals, "map_faces", False) else "'simple'"
