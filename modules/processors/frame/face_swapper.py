@@ -511,7 +511,7 @@ def _build_pairs_from_file_map(temp_frame_path: str) -> list:
 def _build_pairs_live(processed_frame: Frame) -> list:
     """Build (source_face, target_face) pairs for live/webcam mode."""
     pairs = []
-    detected_faces = get_many_faces(processed_frame)
+    detected_faces = get_faces_optimized(processed_frame)
     if not detected_faces:
         return pairs
 
