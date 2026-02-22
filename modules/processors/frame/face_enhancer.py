@@ -342,7 +342,7 @@ def process_frames(
             continue
 
         result_frame = process_frame(None, temp_frame)
-        cv2.imwrite(temp_frame_path, result_frame)
+        cv2.imwrite(temp_frame_path, result_frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
         if progress:
             progress.update(1)
 

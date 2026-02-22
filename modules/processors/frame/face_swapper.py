@@ -632,8 +632,8 @@ def process_frames(
 
         # Write the result back to the same frame path with optimized compression
         try:
-            # Use PNG compression level 3 (faster) instead of default 9
-            write_success = cv2.imwrite(temp_frame_path, result_frame, [cv2.IMWRITE_PNG_COMPRESSION, 3])
+            # JPEG quality 95 — fast I/O with negligible quality loss
+            write_success = cv2.imwrite(temp_frame_path, result_frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
             if not write_success:
                 print(f"{NAME}: Error: Failed to write processed frame to {temp_frame_path}")
         except Exception as write_e:
