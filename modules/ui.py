@@ -102,6 +102,7 @@ from modules.ui_mapper import (  # noqa: F401
     DEFAULT_BUTTON_HEIGHT,
 )
 
+
 ROOT = None
 ROOT_HEIGHT = 800
 ROOT_WIDTH = 600
