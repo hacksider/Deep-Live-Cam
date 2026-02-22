@@ -944,3 +944,449 @@ def get_available_cameras():
         if not camera_names:
             return [], ["No cameras found"]
         return camera_indices, camera_names
+    while not stop_event.is_set():
+        ret, frame = cap.read()
+        if not ret:
+            stop_event.set()
+            break
+        try:
+            capture_queue.put_nowait(frame)
+        except queue.Full:
+            # Drop the oldest frame and enqueue the new one
+            try:
+                capture_queue.get_nowait()
+            except queue.Empty:
+                pass
+            try:
+                capture_queue.put_nowait(frame)
+            except queue.Full:
+                pass
+
+
+# How often to run full face detection. On intermediate frames the last
+# detected face positions are reused, which significantly reduces the
+# per-frame cost of the processing thread.
+DETECT_EVERY_N = 2
+
+
+def _processing_thread_func(capture_queue, processed_queue, stop_event):
+    """Processing thread: takes raw frames from capture_queue, applies face
+    processing, and puts results into processed_queue. Drops processed frames
+    when the output queue is full so the UI always gets the latest result.
+
+    Uses DETECT_EVERY_N to skip expensive face detection on intermediate
+    frames, reusing cached face positions instead."""
+    frame_processors = get_frame_processors_modules(modules.globals.frame_processors)
+    source_image = None
+    prev_time = time.time()
+    fps_update_interval = 0.5
+    frame_count = 0
+    fps = 0
+    proc_frame_index = 0
+    cached_target_face = None  # cached single-face result
+    cached_many_faces = None   # cached many-faces result
+
+    while not stop_event.is_set():
+        try:
+            frame = capture_queue.get(timeout=0.05)
+        except queue.Empty:
+            continue
+
+        temp_frame = frame.copy()
+        run_detection = (proc_frame_index % DETECT_EVERY_N == 0)
+        proc_frame_index += 1
+
+        if modules.globals.live_mirror:
+            temp_frame = gpu_flip(temp_frame, 1)
+
+        if not modules.globals.map_faces:
+            if source_image is None and modules.globals.source_path:
+                source_image = get_one_face(cv2.imread(modules.globals.source_path))
+
+            # Update face detection cache on detection frames
+            if run_detection or (cached_target_face is None and cached_many_faces is None):
+                if modules.globals.many_faces:
+                    cached_many_faces = get_many_faces(temp_frame)
+                    cached_target_face = None
+                else:
+                    cached_target_face = get_one_face(temp_frame)
+                    cached_many_faces = None
+
+            for frame_processor in frame_processors:
+                if frame_processor.NAME == "DLC.FACE-ENHANCER":
+                    if modules.globals.fp_ui["face_enhancer"]:
+                        temp_frame = frame_processor.process_frame(None, temp_frame)
+                elif frame_processor.NAME == "DLC.FACE-SWAPPER":
+                    # Use cached face positions to skip redundant detection
+                    swapped_bboxes = []
+                    if modules.globals.many_faces and cached_many_faces:
+                        result = temp_frame.copy()
+                        for t_face in cached_many_faces:
+                            result = frame_processor.swap_face(source_image, t_face, result)
+                            if hasattr(t_face, 'bbox') and t_face.bbox is not None:
+                                swapped_bboxes.append(t_face.bbox.astype(int))
+                        temp_frame = result
+                    elif cached_target_face is not None:
+                        temp_frame = frame_processor.swap_face(source_image, cached_target_face, temp_frame)
+                        if hasattr(cached_target_face, 'bbox') and cached_target_face.bbox is not None:
+                            swapped_bboxes.append(cached_target_face.bbox.astype(int))
+                    # Apply post-processing (sharpening, interpolation)
+                    temp_frame = frame_processor.apply_post_processing(temp_frame, swapped_bboxes)
+                else:
+                    temp_frame = frame_processor.process_frame(source_image, temp_frame)
+        else:
+            modules.globals.target_path = None
+            for frame_processor in frame_processors:
+                if frame_processor.NAME == "DLC.FACE-ENHANCER":
+                    if modules.globals.fp_ui["face_enhancer"]:
+                        temp_frame = frame_processor.process_frame_v2(temp_frame)
+                else:
+                    temp_frame = frame_processor.process_frame_v2(temp_frame)
+
+        # Calculate and display FPS
+        current_time = time.time()
+        frame_count += 1
+        if current_time - prev_time >= fps_update_interval:
+            fps = frame_count / (current_time - prev_time)
+            frame_count = 0
+            prev_time = current_time
+
+        if modules.globals.show_fps:
+            cv2.putText(
+                temp_frame,
+                f"FPS: {fps:.1f}",
+                (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                1,
+                (0, 255, 0),
+                2,
+            )
+
+        # Put processed frame into output queue, dropping old frames if full
+        try:
+            processed_queue.put_nowait(temp_frame)
+        except queue.Full:
+            try:
+                processed_queue.get_nowait()
+            except queue.Empty:
+                pass
+            try:
+                processed_queue.put_nowait(temp_frame)
+            except queue.Full:
+                pass
+
+
+def create_webcam_preview(camera_index: int):
+    global preview_label, PREVIEW
+
+    cap = VideoCapturer(camera_index)
+    if not cap.start(PREVIEW_DEFAULT_WIDTH, PREVIEW_DEFAULT_HEIGHT, 60):
+        update_status("Failed to start camera")
+        return
+
+    preview_label.configure(width=PREVIEW_DEFAULT_WIDTH, height=PREVIEW_DEFAULT_HEIGHT)
+    PREVIEW.deiconify()
+
+    # Queues for decoupling capture from processing and processing from display.
+    # Small maxsize ensures we always work on recent frames and drop stale ones.
+    capture_queue = queue.Queue(maxsize=2)
+    processed_queue = queue.Queue(maxsize=2)
+    stop_event = threading.Event()
+
+    # Start capture thread
+    cap_thread = threading.Thread(
+        target=_capture_thread_func,
+        args=(cap, capture_queue, stop_event),
+        daemon=True,
+    )
+    cap_thread.start()
+
+    # Start processing thread
+    proc_thread = threading.Thread(
+        target=_processing_thread_func,
+        args=(capture_queue, processed_queue, stop_event),
+        daemon=True,
+    )
+    proc_thread.start()
+
+    # Main (UI) thread: pull processed frames and update the display
+    while not stop_event.is_set():
+        try:
+            temp_frame = processed_queue.get(timeout=0.03)
+        except queue.Empty:
+            ROOT.update()
+            continue
+
+        if modules.globals.live_resizable:
+            temp_frame = fit_image_to_size(
+                temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
+            )
+        else:
+            temp_frame = fit_image_to_size(
+                temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
+            )
+
+        image = gpu_cvt_color(temp_frame, cv2.COLOR_BGR2RGB)
+        image = Image.fromarray(image)
+        image = ImageOps.contain(
+            image, (temp_frame.shape[1], temp_frame.shape[0]), Image.LANCZOS
+        )
+        image = ctk.CTkImage(image, size=image.size)
+        preview_label.configure(image=image)
+        ROOT.update()
+
+        if PREVIEW.state() == "withdrawn":
+            break
+
+    # Signal threads to stop and wait for them
+    stop_event.set()
+    cap_thread.join(timeout=2.0)
+    proc_thread.join(timeout=2.0)
+    cap.release()
+    PREVIEW.withdraw()
+
+
+def create_source_target_popup_for_webcam(
+        root: ctk.CTk, map: list, camera_index: int
+) -> None:
+    global POPUP_LIVE, popup_status_label_live
+
+    POPUP_LIVE = ctk.CTkToplevel(root)
+    POPUP_LIVE.title(_("Source x Target Mapper"))
+    POPUP_LIVE.geometry(f"{POPUP_LIVE_WIDTH}x{POPUP_LIVE_HEIGHT}")
+    POPUP_LIVE.focus()
+
+    def on_submit_click():
+        if has_valid_map():
+            simplify_maps()
+            update_pop_live_status("Mappings successfully submitted!")
+            create_webcam_preview(camera_index)  # Open the preview window
+        else:
+            update_pop_live_status("At least 1 source with target is required!")
+
+    def on_add_click():
+        add_blank_map()
+        refresh_data(map)
+        update_pop_live_status("Please provide mapping!")
+
+    def on_clear_click():
+        clear_source_target_images(map)
+        refresh_data(map)
+        update_pop_live_status("All mappings cleared!")
+
+    popup_status_label_live = ctk.CTkLabel(POPUP_LIVE, text=None, justify="center")
+    popup_status_label_live.grid(row=1, column=0, pady=15)
+
+    add_button = ctk.CTkButton(POPUP_LIVE, text=_("Add"), command=lambda: on_add_click())
+    add_button.place(relx=0.1, rely=0.92, relwidth=0.2, relheight=0.05)
+
+    clear_button = ctk.CTkButton(POPUP_LIVE, text=_("Clear"), command=lambda: on_clear_click())
+    clear_button.place(relx=0.4, rely=0.92, relwidth=0.2, relheight=0.05)
+
+    close_button = ctk.CTkButton(
+        POPUP_LIVE, text=_("Submit"), command=lambda: on_submit_click()
+    )
+    close_button.place(relx=0.7, rely=0.92, relwidth=0.2, relheight=0.05)
+
+
+
+def clear_source_target_images(map: list):
+    global source_label_dict_live, target_label_dict_live
+
+    for item in map:
+        if "source" in item:
+            del item["source"]
+        if "target" in item:
+            del item["target"]
+
+    for button_num in list(source_label_dict_live.keys()):
+        source_label_dict_live[button_num].destroy()
+        del source_label_dict_live[button_num]
+
+    for button_num in list(target_label_dict_live.keys()):
+        target_label_dict_live[button_num].destroy()
+        del target_label_dict_live[button_num]
+
+
+def refresh_data(map: list):
+    global POPUP_LIVE
+
+    scrollable_frame = ctk.CTkScrollableFrame(
+        POPUP_LIVE, width=POPUP_LIVE_SCROLL_WIDTH, height=POPUP_LIVE_SCROLL_HEIGHT
+    )
+    scrollable_frame.grid(row=0, column=0, padx=0, pady=0, sticky="nsew")
+
+    def on_sbutton_click(map, button_num):
+        map = update_webcam_source(scrollable_frame, map, button_num)
+
+    def on_tbutton_click(map, button_num):
+        map = update_webcam_target(scrollable_frame, map, button_num)
+
+    for item in map:
+        id = item["id"]
+
+        button = ctk.CTkButton(
+            scrollable_frame,
+            text=_("Select source image"),
+            command=lambda id=id: on_sbutton_click(map, id),
+            width=DEFAULT_BUTTON_WIDTH,
+            height=DEFAULT_BUTTON_HEIGHT,
+        )
+        button.grid(row=id, column=0, padx=30, pady=10)
+
+        x_label = ctk.CTkLabel(
+            scrollable_frame,
+            text=f"X",
+            width=MAPPER_PREVIEW_MAX_WIDTH,
+            height=MAPPER_PREVIEW_MAX_HEIGHT,
+        )
+        x_label.grid(row=id, column=2, padx=10, pady=10)
+
+        button = ctk.CTkButton(
+            scrollable_frame,
+            text=_("Select target image"),
+            command=lambda id=id: on_tbutton_click(map, id),
+            width=DEFAULT_BUTTON_WIDTH,
+            height=DEFAULT_BUTTON_HEIGHT,
+        )
+        button.grid(row=id, column=3, padx=20, pady=10)
+
+        if "source" in item:
+            image = Image.fromarray(
+                gpu_cvt_color(item["source"]["cv2"], cv2.COLOR_BGR2RGB)
+            )
+            image = image.resize(
+                (MAPPER_PREVIEW_MAX_WIDTH, MAPPER_PREVIEW_MAX_HEIGHT), Image.LANCZOS
+            )
+            tk_image = ctk.CTkImage(image, size=image.size)
+
+            source_image = ctk.CTkLabel(
+                scrollable_frame,
+                text=f"S-{id}",
+                width=MAPPER_PREVIEW_MAX_WIDTH,
+                height=MAPPER_PREVIEW_MAX_HEIGHT,
+            )
+            source_image.grid(row=id, column=1, padx=10, pady=10)
+            source_image.configure(image=tk_image)
+
+        if "target" in item:
+            image = Image.fromarray(
+                gpu_cvt_color(item["target"]["cv2"], cv2.COLOR_BGR2RGB)
+            )
+            image = image.resize(
+                (MAPPER_PREVIEW_MAX_WIDTH, MAPPER_PREVIEW_MAX_HEIGHT), Image.LANCZOS
+            )
+            tk_image = ctk.CTkImage(image, size=image.size)
+
+            target_image = ctk.CTkLabel(
+                scrollable_frame,
+                text=f"T-{id}",
+                width=MAPPER_PREVIEW_MAX_WIDTH,
+                height=MAPPER_PREVIEW_MAX_HEIGHT,
+            )
+            target_image.grid(row=id, column=4, padx=20, pady=10)
+            target_image.configure(image=tk_image)
+
+
+def update_webcam_source(
+        scrollable_frame: ctk.CTkScrollableFrame, map: list, button_num: int
+) -> list:
+    global source_label_dict_live
+
+    source_path = ctk.filedialog.askopenfilename(
+        title=_("select an source image"),
+        initialdir=RECENT_DIRECTORY_SOURCE,
+        filetypes=[img_ft],
+    )
+
+    if "source" in map[button_num]:
+        map[button_num].pop("source")
+        source_label_dict_live[button_num].destroy()
+        del source_label_dict_live[button_num]
+
+    if source_path == "":
+        return map
+    else:
+        cv2_img = cv2.imread(source_path)
+        face = get_one_face(cv2_img)
+
+        if face:
+            x_min, y_min, x_max, y_max = face["bbox"]
+
+            map[button_num]["source"] = {
+                "cv2": cv2_img[int(y_min): int(y_max), int(x_min): int(x_max)],
+                "face": face,
+            }
+
+            image = Image.fromarray(
+                gpu_cvt_color(map[button_num]["source"]["cv2"], cv2.COLOR_BGR2RGB)
+            )
+            image = image.resize(
+                (MAPPER_PREVIEW_MAX_WIDTH, MAPPER_PREVIEW_MAX_HEIGHT), Image.LANCZOS
+            )
+            tk_image = ctk.CTkImage(image, size=image.size)
+
+            source_image = ctk.CTkLabel(
+                scrollable_frame,
+                text=f"S-{button_num}",
+                width=MAPPER_PREVIEW_MAX_WIDTH,
+                height=MAPPER_PREVIEW_MAX_HEIGHT,
+            )
+            source_image.grid(row=button_num, column=1, padx=10, pady=10)
+            source_image.configure(image=tk_image)
+            source_label_dict_live[button_num] = source_image
+        else:
+            update_pop_live_status("Face could not be detected in last upload!")
+        return map
+
+
+def update_webcam_target(
+        scrollable_frame: ctk.CTkScrollableFrame, map: list, button_num: int
+) -> list:
+    global target_label_dict_live
+
+    target_path = ctk.filedialog.askopenfilename(
+        title=_("select an target image"),
+        initialdir=RECENT_DIRECTORY_SOURCE,
+        filetypes=[img_ft],
+    )
+
+    if "target" in map[button_num]:
+        map[button_num].pop("target")
+        target_label_dict_live[button_num].destroy()
+        del target_label_dict_live[button_num]
+
+    if target_path == "":
+        return map
+    else:
+        cv2_img = cv2.imread(target_path)
+        face = get_one_face(cv2_img)
+
+        if face:
+            x_min, y_min, x_max, y_max = face["bbox"]
+
+            map[button_num]["target"] = {
+                "cv2": cv2_img[int(y_min): int(y_max), int(x_min): int(x_max)],
+                "face": face,
+            }
+
+            image = Image.fromarray(
+                gpu_cvt_color(map[button_num]["target"]["cv2"], cv2.COLOR_BGR2RGB)
+            )
+            image = image.resize(
+                (MAPPER_PREVIEW_MAX_WIDTH, MAPPER_PREVIEW_MAX_HEIGHT), Image.LANCZOS
+            )
+            tk_image = ctk.CTkImage(image, size=image.size)
+
+            target_image = ctk.CTkLabel(
+                scrollable_frame,
+                text=f"T-{button_num}",
+                width=MAPPER_PREVIEW_MAX_WIDTH,
+                height=MAPPER_PREVIEW_MAX_HEIGHT,
+            )
+            target_image.grid(row=button_num, column=4, padx=20, pady=10)
+            target_image.configure(image=tk_image)
+            target_label_dict_live[button_num] = target_image
+        else:
+            update_pop_live_status("Face could not be detected in last upload!")
+        return map
