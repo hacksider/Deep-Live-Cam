@@ -1,6 +1,7 @@
 # --- START OF FILE globals.py ---
 
 import os
+import threading
 from typing import List, Dict, Any
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -14,6 +15,7 @@ file_types = [
 # Face Mapping Data
 source_target_map: List[Dict[str, Any]] = [] # Stores detailed map for image/video processing
 simple_map: Dict[str, Any] = {}             # Stores simplified map (embeddings/faces) for live/simple mode
+MAP_LOCK = threading.Lock()                 # Protects source_target_map and simple_map mutations
 
 # Paths
 source_path: str | None = None
