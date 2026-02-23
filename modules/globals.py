@@ -88,4 +88,9 @@ enable_interpolation: bool = True # Toggle temporal smoothing
 interpolation_weight: float = 0  # Blend weight for current frame (0.0-1.0). Lower=smoother.
 # --- END: Added for Frame Interpolation ---
 
+# --- RIFE Frame Interpolation (rife-ncnn-vulkan) ---
+rife_enabled: bool = False            # Toggle RIFE frame interpolation for video output
+rife_model: str = "rife-v4.25-lite"   # Model to use: "rife-v4.25" or "rife-v4.25-lite"
+rife_multiplier: int = 2              # Frame rate multiplier: 2 = double fps, 4 = quadruple fps
+
 # --- END OF FILE globals.py ---

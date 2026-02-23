@@ -172,6 +172,9 @@ def save_switch_states():
         "virtual_cam": modules.globals.virtual_cam,
         "mouth_mask": modules.globals.mouth_mask,
         "show_mouth_mask_box": modules.globals.show_mouth_mask_box,
+        "rife_enabled": modules.globals.rife_enabled,
+        "rife_model": modules.globals.rife_model,
+        "rife_multiplier": modules.globals.rife_multiplier,
         "source_path": modules.globals.source_path,
         "target_path": modules.globals.target_path,
     }
@@ -200,6 +203,9 @@ def load_switch_states():
         modules.globals.show_mouth_mask_box = switch_states.get(
             "show_mouth_mask_box", False
         )
+        modules.globals.rife_enabled = switch_states.get("rife_enabled", False)
+        modules.globals.rife_model = switch_states.get("rife_model", "rife-v4.25-lite")
+        modules.globals.rife_multiplier = switch_states.get("rife_multiplier", 2)
         # Restore last-used paths; validate existence before accepting.
         saved_source = switch_states.get("source_path")
         if saved_source and os.path.isfile(saved_source):
@@ -329,6 +335,7 @@ def _get_switch_defs():
             (_("Keep fps"), "keep_fps", True),
             (_("Keep audio"), "keep_audio", True),
             (_("Keep frames"), "keep_frames", False),
+            (_("RIFE Interpolation"), "rife_enabled", False),
         ],
         "Live Mode": [
             (_("Fix Blueish Cam"), "color_correction", False),
@@ -393,6 +400,10 @@ def _add_settings_tabview(root: ctk.CTk, live_button: ctk.CTkButton) -> None:
     enhancement_tab = tabview.tab("Enhancement")
     _add_sliders_to_tab(enhancement_tab, len(switch_defs["Enhancement"]))
 
+    # Output tab: add RIFE model/multiplier dropdowns
+    output_tab = tabview.tab("Output")
+    _add_rife_controls_to_tab(output_tab, len(switch_defs["Output"]))
+
     # Live Mode tab: add camera dropdown (live button is in action bar)
     live_tab = tabview.tab("Live Mode")
     _add_camera_to_tab(live_tab, root, len(switch_defs["Live Mode"]), live_button)
@@ -449,6 +460,53 @@ def _add_sliders_to_tab(tab: ctk.CTkFrame, num_switches: int) -> None:
         height=5, border_width=1, corner_radius=3,
     )
     sharpness_slider.grid(
+        row=start_row + 1, column=1, sticky="ew", padx=(0, 15), pady=2,
+    )
+
+
+def _add_rife_controls_to_tab(tab: ctk.CTkFrame, num_switches: int) -> None:
+    """Add RIFE model selector and multiplier dropdown to the Output tab."""
+    start_row = (num_switches + 1) // 2 + 1
+
+    # Model selector
+    model_label = ctk.CTkLabel(tab, text="RIFE Model:")
+    model_label.grid(row=start_row, column=0, sticky="w", padx=15, pady=(15, 2))
+
+    model_values = ["rife-v4.25-lite", "rife-v4.25"]
+    current_model = getattr(modules.globals, "rife_model", "rife-v4.25-lite")
+    model_variable = ctk.StringVar(value=current_model)
+
+    def on_model_change(choice):
+        modules.globals.rife_model = choice
+        save_switch_states()
+        update_status(f"RIFE model set to {choice}")
+
+    model_optionmenu = ctk.CTkOptionMenu(
+        tab, variable=model_variable, values=model_values,
+        command=on_model_change,
+    )
+    model_optionmenu.grid(
+        row=start_row, column=1, sticky="ew", padx=(0, 15), pady=(15, 2),
+    )
+
+    # Multiplier selector
+    multiplier_label = ctk.CTkLabel(tab, text="RIFE Multiplier:")
+    multiplier_label.grid(row=start_row + 1, column=0, sticky="w", padx=15, pady=2)
+
+    multiplier_values = ["2x", "4x"]
+    current_mult = getattr(modules.globals, "rife_multiplier", 2)
+    multiplier_variable = ctk.StringVar(value=f"{current_mult}x")
+
+    def on_multiplier_change(choice):
+        modules.globals.rife_multiplier = int(choice.replace("x", ""))
+        save_switch_states()
+        update_status(f"RIFE multiplier set to {choice}")
+
+    multiplier_optionmenu = ctk.CTkOptionMenu(
+        tab, variable=multiplier_variable, values=multiplier_values,
+        command=on_multiplier_change,
+    )
+    multiplier_optionmenu.grid(
         row=start_row + 1, column=1, sticky="ew", padx=(0, 15), pady=2,
     )
 

@@ -54,6 +54,9 @@ def parse_args() -> None:
     program.add_argument('--live-mirror', help='The live camera display as you see it in the front-facing camera frame', dest='live_mirror', action='store_true', default=False)
     program.add_argument('--live-resizable', help='The live camera frame is resizable', dest='live_resizable', action='store_true', default=False)
     program.add_argument('--virtual-cam', help='output to virtual camera device', dest='virtual_cam', action='store_true', default=False)
+    program.add_argument('--rife', help='enable RIFE frame interpolation for video output', dest='rife_enabled', action='store_true', default=False)
+    program.add_argument('--rife-model', help='RIFE model to use', dest='rife_model', default='rife-v4.25-lite', choices=['rife-v4.25', 'rife-v4.25-lite'])
+    program.add_argument('--rife-multiplier', help='RIFE frame rate multiplier (2=double, 4=quadruple)', dest='rife_multiplier', type=int, default=2, choices=[2, 4])
     program.add_argument('--max-memory', help='maximum amount of RAM in GB', dest='max_memory', type=int, default=suggest_max_memory())
     program.add_argument('--execution-provider', help='execution provider', dest='execution_provider', default=['cpu'], choices=suggest_execution_providers(), nargs='+')
     program.add_argument('--execution-threads', help='number of execution threads', dest='execution_threads', type=int, default=suggest_execution_threads())
@@ -88,6 +91,9 @@ def parse_args() -> None:
     modules.globals.execution_providers = decode_execution_providers(args.execution_provider)
     modules.globals.execution_threads = args.execution_threads
     modules.globals.lang = args.lang
+    modules.globals.rife_enabled = args.rife_enabled
+    modules.globals.rife_model = args.rife_model
+    modules.globals.rife_multiplier = args.rife_multiplier
 
     #for ENHANCER tumblers:
     for enhancer_key in ('face_enhancer', 'face_enhancer_gpen256', 'face_enhancer_gpen512'):
@@ -250,16 +256,33 @@ def start() -> None:
     fps_processing = total_frames / processing_time if processing_time > 0 else 0
     update_status(f'Frame processing completed in {processing_time:.2f}s ({fps_processing:.2f} fps)')
     
+    # RIFE frame interpolation (if enabled)
+    if modules.globals.rife_enabled:
+        from modules.rife_interpolation import interpolate_frames
+        rife_start = time.time()
+        temp_directory_path = os.path.dirname(temp_frame_paths[0]) if temp_frame_paths else None
+        if temp_directory_path:
+            new_count = interpolate_frames(temp_directory_path)
+            rife_time = time.time() - rife_start
+            if new_count:
+                update_status(f'RIFE interpolation completed in {rife_time:.2f}s ({new_count} frames)')
+                # Refresh frame paths after interpolation added new frames
+                temp_frame_paths = get_temp_frame_paths(modules.globals.target_path)
+            else:
+                update_status(f'RIFE interpolation skipped or failed ({rife_time:.2f}s)')
+
     # handles fps
     encoding_start = time.time()
+    rife_multiplier = modules.globals.rife_multiplier if modules.globals.rife_enabled else 1
     if modules.globals.keep_fps:
         update_status('Detecting fps...')
-        fps = detect_fps(modules.globals.target_path)
+        fps = detect_fps(modules.globals.target_path) * rife_multiplier
         update_status(f'Creating video with {fps} fps...')
         create_video(modules.globals.target_path, fps)
     else:
-        update_status(f'Creating video with {modules.globals.FPS_CAP:.1f} fps...')
-        create_video(modules.globals.target_path)
+        adjusted_fps = modules.globals.FPS_CAP * rife_multiplier
+        update_status(f'Creating video with {adjusted_fps:.1f} fps...')
+        create_video(modules.globals.target_path, adjusted_fps)
     encoding_time = time.time() - encoding_start
     update_status(f'Video encoding completed in {encoding_time:.2f}s')
     
@@ -295,6 +318,11 @@ def run() -> None:
         return
     for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
         if not frame_processor.pre_check():
+            return
+    # Check RIFE interpolation requirements if enabled
+    if modules.globals.rife_enabled:
+        from modules.rife_interpolation import pre_check as rife_pre_check
+        if not rife_pre_check():
             return
     limit_resources()
     if modules.globals.headless:

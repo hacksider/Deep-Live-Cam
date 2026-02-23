@@ -60,6 +60,7 @@ torchvision = [
 
 [project.optional-dependencies]
 virtualcam = ["pyvirtualcam>=0.14.0"]
+rife = ["rife-ncnn-vulkan-python-tntwise>=1.4.0"]
 
 [dependency-groups]
 dev = [
