@@ -24,6 +24,7 @@ import modules.metadata
 import modules.ui as ui
 from modules.processors.frame.core import get_frame_processors_modules
 from modules.utilities import has_image_extension, is_image, is_video, detect_fps, create_video, extract_frames, get_temp_frame_paths, restore_audio, create_temp, move_temp, clean_temp, normalize_output_path
+from modules.blas_check import check_apple_silicon_blas
 
 if HAS_TORCH and 'ROCMExecutionProvider' in modules.globals.execution_providers:
     del torch
@@ -181,6 +182,7 @@ def pre_check() -> bool:
     if not shutil.which('ffmpeg'):
         update_status('ffmpeg is not installed.')
         return False
+    check_apple_silicon_blas()
     return True
 
 
