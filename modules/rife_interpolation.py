@@ -18,6 +18,7 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 from typing import List, Optional
 
 import modules.globals
@@ -37,6 +38,7 @@ DEFAULT_MODEL = "rife-v4.25-lite"
 # Cached native Rife instance (avoids repeated model loading)
 _NATIVE_RIFE = None
 _NATIVE_RIFE_MODEL = None
+_NATIVE_RIFE_LOCK = threading.Lock()
 
 
 def _update_status(message: str) -> None:
@@ -163,25 +165,34 @@ def _count_frames(directory: str) -> int:
 # ---------------------------------------------------------------------------
 
 def _get_native_rife():
-    """Get or create a cached native Rife instance."""
+    """Get or create a cached native Rife instance.
+
+    Thread-safe: uses _NATIVE_RIFE_LOCK to prevent concurrent creation.
+    """
     global _NATIVE_RIFE, _NATIVE_RIFE_MODEL
 
     model_name = getattr(modules.globals, "rife_model", DEFAULT_MODEL)
 
+    # Fast path: instance already exists for current model
     if _NATIVE_RIFE is not None and _NATIVE_RIFE_MODEL == model_name:
         return _NATIVE_RIFE
 
-    from rife_ncnn_vulkan_python import Rife
+    with _NATIVE_RIFE_LOCK:
+        # Re-check under lock (another thread may have created it)
+        if _NATIVE_RIFE is not None and _NATIVE_RIFE_MODEL == model_name:
+            return _NATIVE_RIFE
 
-    # The native binding resolves bundled model names automatically.
-    # For custom model dirs, we'd pass the path instead.
-    model_dir = find_model_dir(model_name)
-    model_arg = model_dir if model_dir else model_name
+        from rife_ncnn_vulkan_python import Rife
 
-    _NATIVE_RIFE = Rife(gpuid=0, model=model_arg, uhd_mode=False)
-    _NATIVE_RIFE_MODEL = model_name
-    _update_status(f"RIFE native engine loaded: {model_name}")
-    return _NATIVE_RIFE
+        # The native binding resolves bundled model names automatically.
+        # For custom model dirs, we'd pass the path instead.
+        model_dir = find_model_dir(model_name)
+        model_arg = model_dir if model_dir else model_name
+
+        _NATIVE_RIFE = Rife(gpuid=0, model=model_arg, uhd_mode=False)
+        _NATIVE_RIFE_MODEL = model_name
+        _update_status(f"RIFE native engine loaded: {model_name}")
+        return _NATIVE_RIFE
 
 
 def _interpolate_native(temp_directory_path: str) -> Optional[int]:
@@ -251,6 +262,43 @@ def _interpolate_native(temp_directory_path: str) -> Optional[int]:
         f"RIFE interpolation complete: {input_count} -> {final_count} frames"
     )
     return final_count
+
+
+# ---------------------------------------------------------------------------
+# Live frame-pair interpolation (for webcam preview)
+# ---------------------------------------------------------------------------
+
+
+def interpolate_frame_pair(frame0, frame1, multiplier: int = 2) -> List:
+    """Interpolate intermediate frames between two BGR numpy arrays.
+
+    Returns only the intermediate frames (not frame0 or frame1).
+    For 2x: returns 1 frame at timestep 0.5.
+    For 4x: returns 3 frames at timesteps 0.25, 0.5, 0.75.
+
+    Returns an empty list on any failure (no native binding, shape mismatch,
+    GPU error) so callers can safely skip interpolation.
+    """
+    import numpy as np
+
+    if not has_native_binding():
+        return []
+
+    if frame0.shape != frame1.shape:
+        return []
+
+    n_intermediate = max(multiplier - 1, 1)
+
+    try:
+        rife = _get_native_rife()
+        intermediates = []
+        for step_idx in range(1, n_intermediate + 1):
+            timestep = step_idx / multiplier
+            interpolated = rife.process_cv2(frame0, frame1, timestep=timestep)
+            intermediates.append(interpolated)
+        return intermediates
+    except Exception:
+        return []
 
 
 # ---------------------------------------------------------------------------

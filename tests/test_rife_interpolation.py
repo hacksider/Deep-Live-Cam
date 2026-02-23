@@ -1,8 +1,9 @@
 """Tests for the RIFE frame interpolation module."""
 import os
 import sys
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, call
 
+import numpy as np
 import pytest
 
 import modules.globals
@@ -14,6 +15,7 @@ from modules.rife_interpolation import (
     find_binary,
     find_model_dir,
     has_native_binding,
+    interpolate_frame_pair,
     pre_check,
     interpolate_frames,
     RIFE_DIR,
@@ -273,3 +275,79 @@ class TestGlobals:
         assert isinstance(modules.globals.rife_multiplier, int)
         assert modules.globals.rife_model in ("rife-v4.25", "rife-v4.25-lite")
         assert modules.globals.rife_multiplier in (2, 4)
+
+
+# ---------------------------------------------------------------------------
+# interpolate_frame_pair (live webcam interpolation)
+# ---------------------------------------------------------------------------
+
+
+class TestInterpolateFramePair:
+    """Tests for the in-memory frame-pair interpolation function."""
+
+    def _make_frame(self, h=480, w=640):
+        """Create a dummy BGR frame."""
+        return np.zeros((h, w, 3), dtype=np.uint8)
+
+    def test_returns_empty_when_no_native_binding(self):
+        frame0 = self._make_frame()
+        frame1 = self._make_frame()
+        with patch("modules.rife_interpolation.has_native_binding", return_value=False):
+            result = interpolate_frame_pair(frame0, frame1, multiplier=2)
+        assert result == []
+
+    def test_returns_empty_on_shape_mismatch(self):
+        frame0 = self._make_frame(480, 640)
+        frame1 = self._make_frame(720, 1280)
+        with patch("modules.rife_interpolation.has_native_binding", return_value=True):
+            result = interpolate_frame_pair(frame0, frame1, multiplier=2)
+        assert result == []
+
+    def test_2x_returns_one_intermediate(self):
+        frame0 = self._make_frame()
+        frame1 = self._make_frame()
+        fake_interp = self._make_frame()
+
+        mock_rife = MagicMock()
+        mock_rife.process_cv2.return_value = fake_interp
+
+        with patch("modules.rife_interpolation.has_native_binding", return_value=True), \
+             patch("modules.rife_interpolation._get_native_rife", return_value=mock_rife):
+            result = interpolate_frame_pair(frame0, frame1, multiplier=2)
+
+        assert len(result) == 1
+        mock_rife.process_cv2.assert_called_once()
+        # Verify timestep=0.5 for 2x
+        _, kwargs = mock_rife.process_cv2.call_args
+        assert kwargs["timestep"] == pytest.approx(0.5)
+
+    def test_4x_returns_three_intermediates(self):
+        frame0 = self._make_frame()
+        frame1 = self._make_frame()
+        fake_interp = self._make_frame()
+
+        mock_rife = MagicMock()
+        mock_rife.process_cv2.return_value = fake_interp
+
+        with patch("modules.rife_interpolation.has_native_binding", return_value=True), \
+             patch("modules.rife_interpolation._get_native_rife", return_value=mock_rife):
+            result = interpolate_frame_pair(frame0, frame1, multiplier=4)
+
+        assert len(result) == 3
+        assert mock_rife.process_cv2.call_count == 3
+        # Verify timesteps 0.25, 0.5, 0.75
+        timesteps = [c.kwargs["timestep"] for c in mock_rife.process_cv2.call_args_list]
+        assert timesteps == pytest.approx([0.25, 0.5, 0.75])
+
+    def test_graceful_on_rife_exception(self):
+        frame0 = self._make_frame()
+        frame1 = self._make_frame()
+
+        mock_rife = MagicMock()
+        mock_rife.process_cv2.side_effect = RuntimeError("GPU error")
+
+        with patch("modules.rife_interpolation.has_native_binding", return_value=True), \
+             patch("modules.rife_interpolation._get_native_rife", return_value=mock_rife):
+            result = interpolate_frame_pair(frame0, frame1, multiplier=2)
+
+        assert result == []

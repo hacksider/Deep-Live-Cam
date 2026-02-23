@@ -10,6 +10,7 @@ from modules import virtual_cam
 from modules.gpu_processing import gpu_cvt_color, gpu_flip
 from modules.face_analyser import get_one_face, get_many_faces, set_det_size, _LIVE_DET_SIZE, _DEFAULT_DET_SIZE
 from modules.processors.frame.core import get_frame_processors_modules
+from modules.rife_interpolation import has_native_binding, interpolate_frame_pair
 from modules.video_capture import VideoCapturer
 
 
@@ -87,6 +88,8 @@ def _processing_thread_func(capture_queue, processed_queue, stop_event,
     fps_update_interval = 0.5
     frame_count = 0
     fps = 0
+    prev_processed_frame = None
+    rife_warned = False
 
     while not stop_event.is_set():
         try:
@@ -163,6 +166,39 @@ def _processing_thread_func(capture_queue, processed_queue, stop_event,
                 else:
                     temp_frame = frame_processor.process_frame(None, temp_frame)
 
+        # RIFE frame interpolation: emit intermediate frames between
+        # the previous processed frame and the current one.
+        rife_enabled = getattr(modules.globals, "rife_enabled", False)
+        if rife_enabled and prev_processed_frame is not None:
+            if not rife_warned and not has_native_binding():
+                print("[DLC.RIFE] Native binding not available — live interpolation disabled")
+                rife_warned = True
+            else:
+                multiplier = getattr(modules.globals, "rife_multiplier", 2)
+                intermediates = interpolate_frame_pair(
+                    prev_processed_frame, temp_frame, multiplier=multiplier
+                )
+                for interp_frame in intermediates:
+                    frame_count += 1
+                    if modules.globals.virtual_cam:
+                        virtual_cam.send(interp_frame)
+                    try:
+                        processed_queue.put_nowait(interp_frame)
+                    except queue.Full:
+                        try:
+                            processed_queue.get_nowait()
+                        except queue.Empty:
+                            pass
+                        try:
+                            processed_queue.put_nowait(interp_frame)
+                        except queue.Full:
+                            pass
+
+        if rife_enabled:
+            prev_processed_frame = temp_frame.copy()
+        else:
+            prev_processed_frame = None
+
         # Calculate and display FPS
         current_time = time.time()
         frame_count += 1
@@ -226,7 +262,7 @@ def create_webcam_preview(camera_index: int):
     # Queues for decoupling capture from processing and processing from display.
     # Small maxsize ensures we always work on recent frames and drop stale ones.
     capture_queue = queue.Queue(maxsize=2)
-    processed_queue = queue.Queue(maxsize=2)
+    processed_queue = queue.Queue(maxsize=4)
     stop_event = threading.Event()
 
     # Shared state for the producer-consumer detection pipeline.
