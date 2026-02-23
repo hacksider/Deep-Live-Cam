@@ -116,6 +116,28 @@ def get_face_swapper() -> Any:
                     providers=providers_config,
                 )
                 update_status("Face swapper model loaded successfully.", NAME)
+                # Warmup inference: trigger CoreML JIT compilation and compute plan
+                # caching so the first real inference call has no latency spike.
+                if any(
+                    (p[0] if isinstance(p, tuple) else p) == "CoreMLExecutionProvider"
+                    for p in providers_config
+                ):
+                    try:
+                        session = FACE_SWAPPER.session
+                        input_feed = {
+                            inp.name: np.zeros(
+                                [d if isinstance(d, int) and d > 0 else 1
+                                 for d in inp.shape],
+                                dtype=np.float32,
+                            )
+                            for inp in session.get_inputs()
+                        }
+                        session.run(None, input_feed)
+                        update_status("CoreML warmup inference complete.", NAME)
+                    except Exception as warmup_err:
+                        update_status(
+                            f"CoreML warmup skipped (non-fatal): {warmup_err}", NAME
+                        )
             except Exception as e:
                 update_status(f"Error loading face swapper model: {e}", NAME)
                 FACE_SWAPPER = None
