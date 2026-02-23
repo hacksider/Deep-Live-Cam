@@ -114,16 +114,23 @@ def _processing_thread_func(capture_queue, processed_queue, stop_event,
                 cached_target_face = detection_result.get('target_face')
                 cached_many_faces = detection_result.get('many_faces')
 
+            # Build a face list from cached detection for enhancer reuse
+            cached_faces_list = None
+            if cached_many_faces:
+                cached_faces_list = cached_many_faces
+            elif cached_target_face is not None:
+                cached_faces_list = [cached_target_face]
+
             for frame_processor in frame_processors:
                 if frame_processor.NAME == "DLC.FACE-ENHANCER":
                     if modules.globals.fp_ui.get("face_enhancer"):
-                        temp_frame = frame_processor.process_frame(None, temp_frame)
+                        temp_frame = frame_processor.process_frame(None, temp_frame, faces=cached_faces_list)
                 elif frame_processor.NAME == "DLC.FACE-ENHANCER-GPEN256":
                     if modules.globals.fp_ui.get("face_enhancer_gpen256"):
-                        temp_frame = frame_processor.process_frame(None, temp_frame)
+                        temp_frame = frame_processor.process_frame(None, temp_frame, faces=cached_faces_list)
                 elif frame_processor.NAME == "DLC.FACE-ENHANCER-GPEN512":
                     if modules.globals.fp_ui.get("face_enhancer_gpen512"):
-                        temp_frame = frame_processor.process_frame(None, temp_frame)
+                        temp_frame = frame_processor.process_frame(None, temp_frame, faces=cached_faces_list)
                 elif frame_processor.NAME == "DLC.FACE-SWAPPER":
                     # Use cached face positions to skip redundant detection
                     swapped_bboxes = []

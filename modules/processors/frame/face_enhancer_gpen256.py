@@ -79,8 +79,11 @@ def enhance_face(temp_frame: Frame, face: Face) -> Frame:
         return temp_frame
 
 
-def process_frame(source_face: Face | None, temp_frame: Frame) -> Frame:
-    target_face = get_one_face(temp_frame)
+def process_frame(source_face: Face | None, temp_frame: Frame, faces=None) -> Frame:
+    if faces:
+        target_face = min(faces, key=lambda x: x.bbox[0])
+    else:
+        target_face = get_one_face(temp_frame)
     if target_face is None:
         return temp_frame
     return enhance_face(temp_frame, target_face)
@@ -110,8 +113,11 @@ def process_video(source_path: str | None, temp_frame_paths: List[str]) -> None:
     modules.processors.frame.core.process_video(source_path, temp_frame_paths, process_frames)
 
 
-def process_frame_v2(temp_frame: Frame) -> Frame:
-    target_face = get_one_face(temp_frame)
+def process_frame_v2(temp_frame: Frame, faces=None) -> Frame:
+    if faces:
+        target_face = min(faces, key=lambda x: x.bbox[0])
+    else:
+        target_face = get_one_face(temp_frame)
     if target_face:
         temp_frame = enhance_face(temp_frame, target_face)
     return temp_frame

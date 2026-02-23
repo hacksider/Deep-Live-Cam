@@ -230,65 +230,6 @@ def create_eyes_mask(face: Face, frame: Frame) -> (np.ndarray, np.ndarray, tuple
         
     return mask, eyes_cutout, (min_x, min_y, max_x, max_y), eyes_polygon
 
-def create_curved_eyebrow(points):
-    if len(points) >= 5:
-        # Sort points by x-coordinate
-        sorted_idx = np.argsort(points[:, 0])
-        sorted_points = points[sorted_idx]
-        
-        # Calculate dimensions
-        x_min, y_min = np.min(sorted_points, axis=0)
-        x_max, y_max = np.max(sorted_points, axis=0)
-        width = x_max - x_min
-        height = y_max - y_min
-        
-        # Create more points for smoother curve
-        num_points = 50
-        x = np.linspace(x_min, x_max, num_points)
-        
-        # Fit quadratic curve through points for more natural arch
-        coeffs = np.polyfit(sorted_points[:, 0], sorted_points[:, 1], 2)
-        y = np.polyval(coeffs, x)
-        
-        # Increased offsets to create more separation
-        top_offset = height * 0.5  # Increased from 0.3 to shift up more
-        bottom_offset = height * 0.2  # Increased from 0.1 to shift down more
-        
-        # Create smooth curves
-        top_curve = y - top_offset
-        bottom_curve = y + bottom_offset
-        
-        # Create curved endpoints with more pronounced taper
-        end_points = 5
-        start_x = np.linspace(x[0] - width * 0.15, x[0], end_points)  # Increased taper
-        end_x = np.linspace(x[-1], x[-1] + width * 0.15, end_points)  # Increased taper
-        
-        # Create tapered ends
-        start_curve = np.column_stack((
-            start_x,
-            np.linspace(bottom_curve[0], top_curve[0], end_points)
-        ))
-        end_curve = np.column_stack((
-            end_x,
-            np.linspace(bottom_curve[-1], top_curve[-1], end_points)
-        ))
-        
-        # Combine all points to form a smooth contour
-        contour_points = np.vstack([
-            start_curve,
-            np.column_stack((x, top_curve)),
-            end_curve,
-            np.column_stack((x[::-1], bottom_curve[::-1]))
-        ])
-        
-        # Add slight padding for better coverage
-        center = np.mean(contour_points, axis=0)
-        vectors = contour_points - center
-        padded_points = center + vectors * 1.2  # Increased padding slightly
-        
-        return padded_points
-    return points
-
 def create_eyebrows_mask(face: Face, frame: Frame) -> (np.ndarray, np.ndarray, tuple, np.ndarray):
     mask = np.zeros(frame.shape[:2], dtype=np.uint8)
     eyebrows_cutout = None
@@ -388,16 +329,16 @@ def create_eyebrows_mask(face: Face, frame: Frame) -> (np.ndarray, np.ndarray, t
             # Generate and draw eyebrow shapes
             left_shape = create_curved_eyebrow(left_local)
             right_shape = create_curved_eyebrow(right_local)
-            
-            # Apply multi-stage blurring for natural feathering (GPU-accelerated when available)
-            # First, strong Gaussian blur for initial softening
-            mask_roi = gpu_gaussian_blur(mask_roi, (21, 21), 7)
-            
-            # Second, medium blur for transition areas
-            mask_roi = gpu_gaussian_blur(mask_roi, (11, 11), 3)
-            
-            # Finally, light blur for fine details
-            mask_roi = gpu_gaussian_blur(mask_roi, (5, 5), 1)
+
+            # Draw the eyebrow shapes onto the mask before blurring
+            cv2.fillPoly(mask_roi, [left_shape.astype(np.int32)], 255)
+            cv2.fillPoly(mask_roi, [right_shape.astype(np.int32)], 255)
+
+            # Single Gaussian blur for natural feathering.
+            # Equivalent to the previous three cascading blurs (σ=7, σ=3, σ=1)
+            # whose combined sigma is √(49+9+1) ≈ 7.7.  Using (0,0) lets
+            # OpenCV auto-calculate the kernel size from the sigma.
+            mask_roi = gpu_gaussian_blur(mask_roi, (0, 0), 8)
             
             # Normalize mask values
             mask_roi = cv2.normalize(mask_roi, None, 0, 255, cv2.NORM_MINMAX)
@@ -472,24 +413,22 @@ def apply_mask_area(
             adjusted_polygon = polygon - [min_x, min_y]
             cv2.fillPoly(polygon_mask, [adjusted_polygon], 255)
 
-        # Apply strong initial feathering (GPU-accelerated when available)
-        polygon_mask = gpu_gaussian_blur(polygon_mask, (21, 21), 7)
-
-        # Apply additional feathering
+        # Feather the polygon mask in a single pass.
+        # Combine the initial sigma (7) with the adaptive feather amount and
+        # the final smoothing sigma (1) into one equivalent sigma:
+        #   σ_total = √(σ_initial² + σ_adaptive² + σ_final²)
         feather_amount = min(
             modules.globals.MOUTH_FEATHER_RADIUS * 3,  # MOUTH_FEATHER_RADIUS * 3 = 30, preserving original cap
             box_width // modules.globals.mask_feather_ratio,
             box_height // modules.globals.mask_feather_ratio,
         )
+        combined_sigma = (49 + feather_amount ** 2 + 1) ** 0.5
         feathered_mask = cv2.GaussianBlur(
-            polygon_mask.astype(np.float32), (0, 0), feather_amount
+            polygon_mask.astype(np.float32), (0, 0), combined_sigma
         )
         max_val = feathered_mask.max()
         if max_val > 1e-6:
             feathered_mask *= np.float32(1.0 / max_val)
-
-        # Apply additional smoothing to the mask edges
-        feathered_mask = cv2.GaussianBlur(feathered_mask, (5, 5), 1)
 
         face_mask_roi = face_mask[min_y:max_y, min_x:max_x]
         combined_mask = feathered_mask * (face_mask_roi.astype(np.float32) * np.float32(1.0 / 255.0))

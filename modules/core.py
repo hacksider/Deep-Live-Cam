@@ -11,13 +11,7 @@ import platform
 import signal
 import shutil
 import argparse
-try:
-    import torch
-    HAS_TORCH = True
-except ImportError:
-    HAS_TORCH = False
 import onnxruntime
-import tensorflow
 
 import modules.globals
 import modules.metadata
@@ -26,12 +20,25 @@ from modules.processors.frame.core import get_frame_processors_modules
 from modules.utilities import has_image_extension, is_image, is_video, detect_fps, create_video, extract_frames, get_temp_frame_paths, restore_audio, create_temp, move_temp, clean_temp, normalize_output_path
 from modules.blas_check import check_apple_silicon_blas
 
-if HAS_TORCH and 'ROCMExecutionProvider' in modules.globals.execution_providers:
-    del torch
+# Lazy-loaded heavy imports — deferred until actually needed to save 3-5s startup.
+torch = None  # loaded on demand by _ensure_torch()
+HAS_TORCH = None  # tri-state: None = not checked, True/False after check
 
 warnings.filterwarnings('ignore', category=FutureWarning, module='insightface')
-if HAS_TORCH:
-    warnings.filterwarnings('ignore', category=UserWarning, module='torchvision')
+
+
+def _ensure_torch() -> bool:
+    """Import torch on first call and cache the result."""
+    global torch, HAS_TORCH
+    if HAS_TORCH is None:
+        try:
+            import torch as _torch
+            torch = _torch
+            HAS_TORCH = True
+            warnings.filterwarnings('ignore', category=UserWarning, module='torchvision')
+        except ImportError:
+            HAS_TORCH = False
+    return HAS_TORCH
 
 
 def parse_args() -> None:
@@ -121,12 +128,17 @@ def parse_args() -> None:
         modules.globals.execution_threads = args.gpu_threads_deprecated
 
 
+# Cache available providers at import time — querying the ONNX Runtime
+# registry is not free and the result never changes within a process.
+_AVAILABLE_PROVIDERS: List[str] = onnxruntime.get_available_providers()
+
+
 def encode_execution_providers(execution_providers: List[str]) -> List[str]:
     return [execution_provider.replace('ExecutionProvider', '').lower() for execution_provider in execution_providers]
 
 
 def decode_execution_providers(execution_providers: List[str]) -> List[str]:
-    return [provider for provider, encoded_execution_provider in zip(onnxruntime.get_available_providers(), encode_execution_providers(onnxruntime.get_available_providers()))
+    return [provider for provider, encoded_execution_provider in zip(_AVAILABLE_PROVIDERS, encode_execution_providers(_AVAILABLE_PROVIDERS))
             if any(execution_provider in encoded_execution_provider for execution_provider in execution_providers)]
 
 
@@ -137,7 +149,7 @@ def suggest_max_memory() -> int:
 
 
 def suggest_execution_providers() -> List[str]:
-    return encode_execution_providers(onnxruntime.get_available_providers())
+    return encode_execution_providers(_AVAILABLE_PROVIDERS)
 
 
 def suggest_execution_threads() -> int:
@@ -160,10 +172,14 @@ def suggest_execution_threads() -> int:
 
 
 def limit_resources() -> None:
-    # prevent tensorflow memory leak
-    gpus = tensorflow.config.experimental.list_physical_devices('GPU')
-    for gpu in gpus:
-        tensorflow.config.experimental.set_memory_growth(gpu, True)
+    # prevent tensorflow memory leak (lazy import — only needed for GPU memory config)
+    try:
+        import tensorflow
+        gpus = tensorflow.config.experimental.list_physical_devices('GPU')
+        for gpu in gpus:
+            tensorflow.config.experimental.set_memory_growth(gpu, True)
+    except ImportError:
+        pass
     # limit memory usage
     if modules.globals.max_memory:
         memory = modules.globals.max_memory * 1024 ** 3
@@ -179,7 +195,7 @@ def limit_resources() -> None:
 
 
 def release_resources() -> None:
-    if 'CUDAExecutionProvider' in modules.globals.execution_providers and HAS_TORCH:
+    if 'CUDAExecutionProvider' in modules.globals.execution_providers and _ensure_torch():
         torch.cuda.empty_cache()
 
 

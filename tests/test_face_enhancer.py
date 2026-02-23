@@ -17,14 +17,12 @@ def test_process_frame_v2_is_callable():
 def test_process_frame_v2_returns_frame_when_no_face():
     """process_frame_v2 must return a frame even when no face is detected."""
     frame = _blank_frame()
-    with patch("modules.processors.frame.face_enhancer.get_one_face", return_value=None):
-        with patch("modules.processors.frame.face_enhancer.get_face_enhancer",
-                   side_effect=RuntimeError("Model not loaded")):
-            from modules.processors.frame import face_enhancer
-            result = face_enhancer.process_frame_v2(frame)
-            assert result is not None
-            assert isinstance(result, np.ndarray)
-            assert result.shape == frame.shape
+    with patch("modules.processors.frame.face_enhancer.get_many_faces", return_value=None):
+        from modules.processors.frame import face_enhancer
+        result = face_enhancer.process_frame_v2(frame)
+        assert result is not None
+        assert isinstance(result, np.ndarray)
+        assert result.shape == frame.shape
 
 
 def test_enhance_face_handles_runtime_error():
@@ -32,7 +30,12 @@ def test_enhance_face_handles_runtime_error():
     from modules.processors.frame import face_enhancer
 
     frame = _blank_frame()
-    with patch("modules.processors.frame.face_enhancer.get_face_enhancer",
-               side_effect=RuntimeError("Model load failed")):
-        result = face_enhancer.enhance_face(frame)
-        assert np.array_equal(result, frame)
+    # Must mock get_many_faces to return a face (so enhance_face doesn't
+    # early-exit), then mock get_face_enhancer to raise RuntimeError.
+    mock_face = MagicMock()
+    mock_face.kps = np.array([[10, 10], [20, 10], [15, 20], [10, 25], [20, 25]], dtype=np.float32)
+    with patch("modules.processors.frame.face_enhancer.get_many_faces", return_value=[mock_face]):
+        with patch("modules.processors.frame.face_enhancer.get_face_enhancer",
+                   side_effect=RuntimeError("Model load failed")):
+            result = face_enhancer.enhance_face(frame)
+            assert np.array_equal(result, frame)

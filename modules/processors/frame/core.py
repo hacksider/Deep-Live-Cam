@@ -72,26 +72,40 @@ def multi_process_frame(source_path: str, temp_frame_paths: List[str], process_f
 
     Uses separate processes for video batch mode to bypass the GIL and fully
     utilise multiple CPU cores. Each worker process loads its own ONNX model
-    (~2-5s startup overhead per worker), which is amortised over thousands of
-    frames in a typical video.
+    (~2-5s startup overhead per worker), which is amortised over the batch of
+    frames assigned to each worker.
+
+    Frames are grouped into batches (one per worker) so each process loads
+    the ONNX model once and processes many frames, rather than paying the
+    model-loading cost per individual frame.
 
     For live/webcam mode, use multi_process_frame_live() instead which uses
     ThreadPoolExecutor to avoid per-process model loading latency.
     """
     max_workers = modules.globals.execution_threads
 
+    # Split frame paths into batches — one batch per worker process.
+    # This amortises the per-process ONNX model loading (~2-5s) across
+    # many frames instead of paying it once per frame.
+    batches: List[List[str]] = [[] for _ in range(max_workers)]
+    for i, path in enumerate(temp_frame_paths):
+        batches[i % max_workers].append(path)
+    # Remove empty batches (when fewer frames than workers)
+    batches = [b for b in batches if b]
+
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
         futures = {
-            executor.submit(process_frames, source_path, [path], None): path
-            for path in temp_frame_paths
+            executor.submit(process_frames, source_path, batch, None): batch
+            for batch in batches
         }
         for future in as_completed(futures):
+            batch = futures[future]
             try:
                 future.result()
             except Exception as e:
-                print(f"Error processing frame {futures[future]}: {e}")
+                print(f"Error processing batch of {len(batch)} frames: {e}")
             if progress:
-                progress.update(1)
+                progress.update(len(batch))
 
 
 def multi_process_frame_live(source_path: str, temp_frame_paths: List[str], process_frames: Callable[[str, List[str], Any], None], progress: Any = None) -> None:

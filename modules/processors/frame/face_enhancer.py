@@ -12,7 +12,7 @@ import onnxruntime
 import modules.globals
 import modules.processors.frame.core
 from modules.core import update_status
-from modules.face_analyser import get_one_face, get_many_faces
+from modules.face_analyser import get_many_faces
 from modules.paths import MODELS_DIR
 from modules.typing import Frame, Face
 from modules.utilities import (
@@ -244,9 +244,26 @@ def _postprocess_face(output: np.ndarray) -> np.ndarray:
     return cv2.cvtColor(face, cv2.COLOR_RGB2BGR)
 
 
-def enhance_face(temp_frame: Frame) -> Frame:
-    """Enhances all faces in a frame using the GFPGAN ONNX model."""
-    session = get_face_enhancer()
+def enhance_face(temp_frame: Frame, faces=None) -> Frame:
+    """Enhances all faces in a frame using the GFPGAN ONNX model.
+
+    Args:
+        temp_frame: The input frame to enhance.
+        faces: Optional pre-detected face list. When provided, skips the
+            redundant InsightFace detection pass (~100-200 ms saved per frame).
+    """
+    # Check for faces before loading the model — avoids paying the session
+    # initialisation cost on face-free frames.
+    if faces is None:
+        faces = get_many_faces(temp_frame)
+    if not faces:
+        return temp_frame
+
+    try:
+        session = get_face_enhancer()
+    except RuntimeError as e:
+        print(f"{NAME}: {e}")
+        return temp_frame
 
     # Determine model input resolution from the session metadata
     input_info = session.get_inputs()[0]
@@ -259,11 +276,6 @@ def enhance_face(temp_frame: Frame) -> Frame:
             align_size = 512
     except (ValueError, TypeError, IndexError):
         align_size = 512
-
-    # Detect faces using InsightFace (already a project dependency)
-    faces = get_many_faces(temp_frame)
-    if not faces:
-        return temp_frame
 
     result_frame = temp_frame.copy()
 
@@ -312,25 +324,16 @@ def enhance_face(temp_frame: Frame) -> Frame:
     return result_frame
 
 
-def process_frame(source_face: Face | None, temp_frame: Frame) -> Frame:
-    """Processes a frame: enhances face if detected.
+def process_frame(source_face: Face | None, temp_frame: Frame, faces=None) -> Frame:
+    """Processes a frame: enhances all detected faces.
 
-    We run a lightweight InsightFace detection before calling GFPGAN to avoid
-    paying the full GFPGAN inference cost on frames that contain no face.
-    GFPGAN runs its own internal detection, so this is a redundant detection,
-    but it is cheap compared to the full enhancement pass and allows early-exit
-    on face-free frames.
-
-    TODO: if the frame processor pipeline is ever refactored to pass detected
-    face bounding boxes between stages, the InsightFace call here can be
-    replaced by reusing the bboxes produced by face_swapper, eliminating the
-    redundancy entirely.
+    Args:
+        source_face: Unused (kept for processor interface compatibility).
+        temp_frame: The input frame.
+        faces: Optional pre-detected face list. Passed through to
+            enhance_face() to skip redundant InsightFace detection.
     """
-    target_face = get_one_face(temp_frame)
-    if target_face is None:
-        return temp_frame
-    temp_frame = enhance_face(temp_frame)
-    return temp_frame
+    return enhance_face(temp_frame, faces=faces)
 
 
 def process_frames(
@@ -363,10 +366,7 @@ def process_video(
     """Processes video frames using the frame processor core."""
     modules.processors.frame.core.process_video(source_path, temp_frame_paths, process_frames)
 
-def process_frame_v2(temp_frame: Frame) -> Frame:
-    target_face = get_one_face(temp_frame)
-    if target_face:
-        temp_frame = enhance_face(temp_frame)
-    return temp_frame
+def process_frame_v2(temp_frame: Frame, faces=None) -> Frame:
+    return enhance_face(temp_frame, faces=faces)
 
 # --- END OF FILE face_enhancer.py ---

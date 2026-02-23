@@ -58,7 +58,7 @@ def pre_check() -> bool:
     try:
         os.makedirs(download_directory_path, exist_ok=True)
     except OSError as e:
-        logging.error(f"Failed to create directory {download_directory_path} due to permission error: {e}")
+        print(f"{NAME}: Failed to create directory {download_directory_path}: {e}")
         return False
 
     # Use the direct download URL from Hugging Face
@@ -324,15 +324,17 @@ def get_faces_optimized(frame: Frame, use_cache: bool = True) -> Optional[List[F
     """Optimized face detection for live mode on Apple Silicon"""
     global LAST_DETECTION_TIME, FACE_DETECTION_CACHE
     
-    if not use_cache or not IS_APPLE_SILICON:
-        # Standard detection
+    if not use_cache:
+        # Standard detection (no caching)
         if modules.globals.many_faces:
             return get_many_faces(frame)
         else:
             face = get_one_face(frame)
             return [face] if face else None
-    
-    # Adaptive detection rate for live mode
+
+    # TTL-based detection caching — skips detection when the previous result
+    # is still fresh (within DETECTION_INTERVAL).  Previously gated behind
+    # IS_APPLE_SILICON; now enabled on all platforms for live mode.
     current_time = time.time()
     time_since_last = current_time - LAST_DETECTION_TIME
     
@@ -546,7 +548,10 @@ def _build_pairs_live(processed_frame: Frame) -> list:
                             pairs.append((source_faces[i], detected_faces_with_embedding[closest_idx]))
     else:
         source_face = default_source_face()
-        target_face = get_one_face(processed_frame)
+        # Reuse already-detected faces instead of re-running detection.
+        # get_one_face() returns the leftmost face (min bbox x), so replicate
+        # that selection from the existing detection results.
+        target_face = min(detected_faces, key=lambda x: x.bbox[0]) if detected_faces else None
         if source_face and target_face:
             pairs.append((source_face, target_face))
     return pairs
@@ -706,10 +711,8 @@ def process_frames(
 
 def process_image(source_path: str, target_path: str, output_path: str) -> None:
     """Processes a single target image."""
-    # --- Reset interpolation state for single image processing ---
-    global PREVIOUS_FRAME_RESULT
-    PREVIOUS_FRAME_RESULT = None
-    # ---
+    # Reset per-thread interpolation state for single image processing
+    _set_previous_frame(None)
 
     use_v2 = getattr(modules.globals, "map_faces", False)
 
@@ -767,10 +770,8 @@ def process_image(source_path: str, target_path: str, output_path: str) -> None:
 
 def process_video(source_path: str, temp_frame_paths: List[str]) -> None:
     """Sets up and calls the frame processing for video."""
-    # --- Reset interpolation state before starting video processing ---
-    global PREVIOUS_FRAME_RESULT
-    PREVIOUS_FRAME_RESULT = None
-    # ---
+    # Reset per-thread interpolation state before starting video processing
+    _set_previous_frame(None)
 
     mode_desc = "'map_faces'" if getattr(modules.globals, "map_faces", False) else "'simple'"
     if getattr(modules.globals, "map_faces", False) and getattr(modules.globals, "many_faces", False):
