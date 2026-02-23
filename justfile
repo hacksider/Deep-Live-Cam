@@ -1,14 +1,15 @@
 # Deep-Live-Cam justfile — run `just` or `just help` to see recipes
 
 set positional-arguments
-set windows-shell := ["bash", "-cu"]
+set windows-shell := ["sh", "-cu"]
 
 models_dir := "models"
 default_provider := if os() == "macos" { "coreml" } else if os() == "windows" { "cuda" } else { "cuda" }
 
 # Tcl/Tk library path for standalone Python builds (needed for tkinter)
-export TCL_LIBRARY := `python3 -c "import os, sys, glob; c=glob.glob(os.path.join(sys.base_prefix,'lib','tcl*','init.tcl')); print(os.path.dirname(c[0]) if c else '')" 2>/dev/null || echo ""`
-export TK_LIBRARY := `python3 -c "import os, sys, glob; c=glob.glob(os.path.join(sys.base_prefix,'lib','tk*')); print(c[0] if c else '')" 2>/dev/null || echo ""`
+# Use python3 on Unix, python on Windows; also search 'tcl' subdir (Windows installer layout)
+export TCL_LIBRARY := `(python3 -c "import os, sys, glob; hits=glob.glob(os.path.join(sys.base_prefix,'lib','tcl*','init.tcl'))+glob.glob(os.path.join(sys.base_prefix,'tcl','tcl*','init.tcl')); print(os.path.dirname(hits[0]) if hits else '')" 2>/dev/null || python -c "import os, sys, glob; hits=glob.glob(os.path.join(sys.base_prefix,'lib','tcl*','init.tcl'))+glob.glob(os.path.join(sys.base_prefix,'tcl','tcl*','init.tcl')); print(os.path.dirname(hits[0]) if hits else '')" 2>/dev/null || echo "")`
+export TK_LIBRARY := `(python3 -c "import os, sys, glob; hits=glob.glob(os.path.join(sys.base_prefix,'lib','tk*'))+glob.glob(os.path.join(sys.base_prefix,'tcl','tk*')); print(hits[0] if hits else '')" 2>/dev/null || python -c "import os, sys, glob; hits=glob.glob(os.path.join(sys.base_prefix,'lib','tk*'))+glob.glob(os.path.join(sys.base_prefix,'tcl','tk*')); print(hits[0] if hits else '')" 2>/dev/null || echo "")`
 
 # Show available recipes
 default:
@@ -40,12 +41,12 @@ models:
     else
         echo "inswapper_128_fp16.onnx already exists, skipping."
     fi
-    if [ ! -f "{{ models_dir }}/GFPGANv1.4.pth" ]; then
-        echo "Downloading GFPGANv1.4.pth..."
-        curl -L -o "{{ models_dir }}/GFPGANv1.4.pth" \
-            "https://github.com/TencentARC/GFPGAN/releases/download/v1.3.4/GFPGANv1.4.pth"
+    if [ ! -f "{{ models_dir }}/gfpgan-1024.onnx" ]; then
+        echo "Downloading gfpgan-1024.onnx..."
+        curl -L -o "{{ models_dir }}/gfpgan-1024.onnx" \
+            "https://huggingface.co/hacksider/deep-live-cam/resolve/main/gfpgan-1024.onnx"
     else
-        echo "GFPGANv1.4.pth already exists, skipping."
+        echo "gfpgan-1024.onnx already exists, skipping."
     fi
 
 

@@ -578,8 +578,15 @@ def _add_camera_to_tab(
             _camera_queue.put(([0, 1], ["Camera 0", "Camera 1"]))
     else:
         def _enumerate_cameras():
-            indices, names = get_available_cameras()
-            _camera_queue.put((indices, names))
+            if platform.system() == "Windows":
+                import ctypes
+                ctypes.windll.ole32.CoInitializeEx(0, 0)
+            try:
+                indices, names = get_available_cameras()
+                _camera_queue.put((indices, names))
+            finally:
+                if platform.system() == "Windows":
+                    ctypes.windll.ole32.CoUninitialize()
 
     threading.Thread(target=_enumerate_cameras, daemon=True).start()
     root.after(100, _poll_camera_queue)
