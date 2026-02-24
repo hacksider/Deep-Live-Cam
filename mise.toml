@@ -1,0 +1,5 @@
+[tools]
+python = "3.10"
+
+[env]
+_.python.venv = { path = ".venv", create = true }

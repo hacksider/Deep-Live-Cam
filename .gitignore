@@ -26,3 +26,10 @@ faceswap/
 .vscode/
 switch_states.json
 /models
+
+# uv
+.venv/
+uv.lock
+
+# mise
+.mise.local.toml
