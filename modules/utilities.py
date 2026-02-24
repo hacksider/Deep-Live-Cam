@@ -1,5 +1,6 @@
 import glob
 import hashlib
+import logging
 import mimetypes
 import os
 import platform
@@ -11,6 +12,8 @@ from typing import List, Any
 from tqdm import tqdm
 
 import modules.globals
+
+logger = logging.getLogger(__name__)
 
 TEMP_FILE = "temp.mp4"
 TEMP_DIRECTORY = "temp"
@@ -40,7 +43,7 @@ def run_ffmpeg(args: List[str]) -> bool:
         subprocess.check_output(commands, stderr=subprocess.STDOUT)
         return True
     except Exception as e:
-        print(f"run_ffmpeg: command failed: {e}")
+        logger.error("run_ffmpeg: command failed: %s", e)
     return False
 
 
@@ -62,7 +65,7 @@ def detect_fps(target_path: str) -> float:
         numerator, denominator = map(int, output)
         return numerator / denominator
     except Exception as e:
-        print(f"detect_fps: could not parse frame rate from {target_path!r}: {e}, defaulting to 30.0")
+        logger.warning("detect_fps: could not parse frame rate from %r: %s, defaulting to 30.0", target_path, e)
     return 30.0
 
 
@@ -177,7 +180,7 @@ def create_video(target_path: str, fps: float = 30.0) -> None:
     
     if not success and encoder in ['h264_nvenc', 'hevc_nvenc', 'h264_amf', 'hevc_amf']:
         # Fallback to software encoding
-        print(f"Hardware encoding with {encoder} failed, falling back to software encoding...")
+        logger.warning("Hardware encoding with %s failed, falling back to software encoding...", encoder)
         fallback_encoder = 'libx264' if 'h264' in encoder else 'libx265'
         ffmpeg_args_fallback = [
             "-r", str(fps),
@@ -283,7 +286,7 @@ def is_video(video_path: str) -> bool:
     return False
 
 
-def conditional_download(download_directory_path: str, urls: List[str], expected_checksums: dict | None = None) -> None:
+def conditional_download(download_directory_path: str, urls: List[str], *, expected_checksums: dict | None = None) -> None:
     if not os.path.exists(download_directory_path):
         os.makedirs(download_directory_path)
     for url in urls:
@@ -301,11 +304,11 @@ def conditional_download(download_directory_path: str, urls: List[str], expected
                 unit_divisor=1024,
             ) as progress:
                 urllib.request.urlretrieve(url, download_file_path, reporthook=lambda count, block_size, total_size: progress.update(block_size))  # type: ignore[attr-defined]
-            # Verify checksum if one was registered for this file
-            filename = os.path.basename(url)
-            if expected_checksums and filename in expected_checksums:
-                expected = expected_checksums[filename]
+            # Verify checksum if one was registered for this URL
+            if expected_checksums and url in expected_checksums:
+                expected = expected_checksums[url]
                 actual = _compute_sha256(download_file_path)
+                filename = os.path.basename(url)
                 if actual != expected:
                     os.remove(download_file_path)
                     raise ValueError(
@@ -313,7 +316,7 @@ def conditional_download(download_directory_path: str, urls: List[str], expected
                         f"expected {expected!r}, got {actual!r}. "
                         f"File deleted — please retry the download."
                     )
-                print(f"conditional_download: checksum verified for {filename!r}")
+                logger.info("conditional_download: checksum verified for %r", filename)
 
 
 def resolve_relative_path(path: str) -> str:

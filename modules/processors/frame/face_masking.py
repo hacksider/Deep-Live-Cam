@@ -1,8 +1,12 @@
+import logging
+
 import cv2
 import numpy as np
 from modules.typing import Face, Frame
 import modules.globals
 from modules.gpu_processing import gpu_gaussian_blur, gpu_resize, gpu_cvt_color
+
+logger = logging.getLogger(__name__)
 
 def apply_color_transfer(source, target):
     """
@@ -498,7 +502,7 @@ def apply_mask_area(
 
         frame[min_y:max_y, min_x:max_x] = final_blend.astype(np.uint8)
     except Exception as e:
-        print(f"face_masking: blending failed, returning unmodified frame: {e}")
+        logger.warning("face_masking: blending failed, returning unmodified frame: %s", e)
 
     return frame
 
