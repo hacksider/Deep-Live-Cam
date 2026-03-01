@@ -1,12 +1,129 @@
 import sys
 import importlib
+from typing import Set, Optional
+
+# Define a whitelist of allowed modules that can be dynamically imported
+ALLOWED_MODULES: Set[str] = {
+    'modules.processors.frame.blur',
+    'modules.processors.frame.censor',
+    'modules.processors.frame.crop',
+    'modules.processors.frame.resize',
+    'modules.processors.frame.rotate',
+    # Add all legitimate processor modules that should be importable
+}
+
+def safe_import_module(module_name: str) -> Optional[object]:
+    """
+    Safely import a module by checking against a whitelist.
+    
+    Args:
+        module_name: The name of the module to import
+        
+    Returns:
+        The imported module or None if the module is not in the whitelist
+    """
+    if module_name in ALLOWED_MODULES:
+        return safe_import_module(module_name)
+    else:
+        # Log the attempt to import a non-whitelisted module
+        print(f"Warning: Attempted to import non-whitelisted module: {module_name}")
+        return None
+
+import importlib
+from typing import Set, Optional
+
+# Define a whitelist of allowed modules that can be dynamically imported
+ALLOWED_MODULES: Set[str] = {
+    'modules.processors.frame.blur',
+    'modules.processors.frame.censor',
+    'modules.processors.frame.crop',
+    'modules.processors.frame.resize',
+    'modules.processors.frame.rotate',
+    # Add all legitimate processor modules that should be importable
+}
+
+def safe_import_module(module_name: str) -> Optional[object]:
+    """
+    Safely import a module by checking against a whitelist.
+    
+    Args:
+        module_name: The name of the module to import
+        
+    Returns:
+        The imported module or None if the module is not in the whitelist
+    """
+    if module_name in ALLOWED_MODULES:
+        return safe_import_module(module_name)
+    else:
+        # Log the attempt to import a non-whitelisted module
+        print(f"Warning: Attempted to import non-whitelisted module: {module_name}")
+        return None
+
 from concurrent.futures import ThreadPoolExecutor
 from types import ModuleType
 from typing import Any, List, Callable
 from tqdm import tqdm
 
-import modules
-import modules.globals                   
+import importlib
+from typing import Set, Optional
+
+# Define a whitelist of allowed modules that can be dynamically imported
+ALLOWED_MODULES: Set[str] = {
+    'modules.processors.frame.blur',
+    'modules.processors.frame.censor',
+    'modules.processors.frame.crop',
+    'modules.processors.frame.resize',
+    'modules.processors.frame.rotate',
+    # Add all legitimate processor modules that should be importable
+}
+
+def safe_import_module(module_name: str) -> Optional[object]:
+    """
+    Safely import a module by checking against a whitelist.
+    
+    Args:
+        module_name: The name of the module to import
+        
+    Returns:
+        The imported module or None if the module is not in the whitelist
+    """
+    if module_name in ALLOWED_MODULES:
+        return safe_import_module(module_name)
+    else:
+        # Log the attempt to import a non-whitelisted module
+        print(f"Warning: Attempted to import non-whitelisted module: {module_name}")
+        return None
+
+import importlib
+from typing import Set, Optional
+
+# Define a whitelist of allowed modules that can be dynamically imported
+ALLOWED_MODULES: Set[str] = {
+    'modules.processors.frame.blur',
+    'modules.processors.frame.censor',
+    'modules.processors.frame.crop',
+    'modules.processors.frame.resize',
+    'modules.processors.frame.rotate',
+    # Add all legitimate processor modules that should be importable
+}
+
+def safe_import_module(module_name: str) -> Optional[object]:
+    """
+    Safely import a module by checking against a whitelist.
+    
+    Args:
+        module_name: The name of the module to import
+        
+    Returns:
+        The imported module or None if the module is not in the whitelist
+    """
+    if module_name in ALLOWED_MODULES:
+        return safe_import_module(module_name)
+    else:
+        # Log the attempt to import a non-whitelisted module
+        print(f"Warning: Attempted to import non-whitelisted module: {module_name}")
+        return None
+
 
 FRAME_PROCESSORS_MODULES: List[ModuleType] = []
 FRAME_PROCESSORS_INTERFACE = [
@@ -20,7 +137,7 @@ FRAME_PROCESSORS_INTERFACE = [
 
 def load_frame_processor_module(frame_processor: str) -> Any:
     try:
-        frame_processor_module = importlib.import_module(f'modules.processors.frame.{frame_processor}')
+        frame_processor_module = safe_import_module(f'modules.processors.frame.{frame_processor}')
         for method_name in FRAME_PROCESSORS_INTERFACE:
             if not hasattr(frame_processor_module, method_name):
                 sys.exit()
