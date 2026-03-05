@@ -292,7 +292,7 @@ def apply_post_processing(current_frame: Frame, swapped_face_bboxes: List[np.nda
     """Applies sharpening and interpolation with Apple Silicon optimizations."""
     global PREVIOUS_FRAME_RESULT
 
-    processed_frame = current_frame.copy()
+    processed_frame = current_frame
 
     # 1. Apply Sharpening (if enabled) with optimized kernel for Apple Silicon
     sharpness_value = getattr(modules.globals, "sharpness", 0.0)
