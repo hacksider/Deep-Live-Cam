@@ -1,9 +1,11 @@
+import os
 import sys
 import importlib
 from concurrent.futures import ThreadPoolExecutor
 from types import ModuleType
 from typing import Any, List, Callable
 from tqdm import tqdm
+import cv2
 
 import modules
 import modules.globals                   
@@ -90,6 +92,31 @@ def multi_process_frame(source_path: str, temp_frame_paths: List[str], process_f
                     future.result()
                 except Exception as e:
                     print(f"Error processing frame: {e}")
+
+
+def process_frames_io(
+    temp_frame_paths: List[str],
+    process_fn: Callable,
+    progress: Any = None,
+    jpeg_quality: int = 95,
+) -> None:
+    """Read/process/write loop shared by frame processors.
+
+    ``process_fn`` receives a single frame (numpy array) and must return
+    the processed frame.  Frames that cannot be read are skipped.
+    """
+    for path in temp_frame_paths:
+        frame = cv2.imread(path)
+        if frame is None:
+            if progress:
+                progress.update(1)
+            continue
+        result = process_fn(frame)
+        if result is None:
+            result = frame
+        cv2.imwrite(path, result, [cv2.IMWRITE_JPEG_QUALITY, jpeg_quality])
+        if progress:
+            progress.update(1)
 
 
 def process_video(source_path: str, frame_paths: list[str], process_frames: Callable[[str, List[str], Any], None]) -> None:

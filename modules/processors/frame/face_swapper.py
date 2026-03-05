@@ -510,7 +510,8 @@ def process_frame_v2(temp_frame: Frame, temp_frame_path: str = "") -> Frame:
                                      source_target_pairs.append((source_faces[i], detected_faces_with_embedding[closest_idx]))
             else: # Fallback: if no map, use default source for the single detected face (if any)
                 source_face = default_source_face()
-                target_face = get_one_face(processed_frame, detected_faces) # Use faces already detected
+                # Reuse already-detected faces instead of running detection again
+                target_face = min(detected_faces, key=lambda x: x.bbox[0])
                 if source_face and target_face:
                     source_target_pairs.append((source_face, target_face))
 
