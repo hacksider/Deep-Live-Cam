@@ -17,8 +17,17 @@ FRAME_PROCESSORS_INTERFACE = [
     'process_video'
 ]
 
+ALLOWED_PROCESSORS = {
+    'face_swapper',
+    'face_enhancer',
+    'face_enhancer_gpen256',
+    'face_enhancer_gpen512'
+}
 
 def load_frame_processor_module(frame_processor: str) -> Any:
+    if frame_processor not in ALLOWED_PROCESSORS:
+        print(f"Frame processor {frame_processor} is not allowed")
+        sys.exit()
     try:
         frame_processor_module = importlib.import_module(f'modules.processors.frame.{frame_processor}')
         for method_name in FRAME_PROCESSORS_INTERFACE:
