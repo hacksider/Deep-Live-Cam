@@ -14,3 +14,5 @@ tensorflow; sys_platform != 'darwin'
 opennsfw2==0.10.2
 protobuf==4.25.1
 pygrabber
+# Optional: virtual camera output (requires OBS on macOS/Windows, v4l2loopback on Linux)
+# pyvirtualcam>=0.4.0

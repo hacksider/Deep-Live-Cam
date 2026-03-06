@@ -52,6 +52,7 @@ def parse_args() -> None:
     program.add_argument('-l', '--lang', help='Ui language', default="en")
     program.add_argument('--live-mirror', help='The live camera display as you see it in the front-facing camera frame', dest='live_mirror', action='store_true', default=False)
     program.add_argument('--live-resizable', help='The live camera frame is resizable', dest='live_resizable', action='store_true', default=False)
+    program.add_argument('--virtual-cam', help='output to virtual camera device (requires pyvirtualcam)', dest='virtual_cam', action='store_true', default=False)
     program.add_argument('--max-memory', help='maximum amount of RAM in GB', dest='max_memory', type=int, default=suggest_max_memory())
     program.add_argument('--execution-provider', help='execution provider', dest='execution_provider', default=['cpu'], choices=suggest_execution_providers(), nargs='+')
     program.add_argument('--execution-threads', help='number of execution threads', dest='execution_threads', type=int, default=suggest_execution_threads())
@@ -81,6 +82,7 @@ def parse_args() -> None:
     modules.globals.video_quality = args.video_quality
     modules.globals.live_mirror = args.live_mirror
     modules.globals.live_resizable = args.live_resizable
+    modules.globals.virtual_cam = args.virtual_cam
     modules.globals.max_memory = args.max_memory
     modules.globals.execution_providers = decode_execution_providers(args.execution_provider)
     modules.globals.execution_threads = args.execution_threads
