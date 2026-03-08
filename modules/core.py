@@ -164,7 +164,7 @@ def limit_resources() -> None:
             import ctypes
             kernel32 = ctypes.windll.kernel32
             kernel32.SetProcessWorkingSetSize(-1, ctypes.c_size_t(memory), ctypes.c_size_t(memory))
-        else:
+        elif platform.system().lower() == 'linux':
             import resource
             resource.setrlimit(resource.RLIMIT_DATA, (memory, memory))
 
