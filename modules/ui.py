@@ -33,6 +33,7 @@ from modules.video_capture import VideoCapturer
 from modules.gettext import LanguageManager
 from modules.ui_tooltip import ToolTip
 from modules import globals
+from modules import virtual_cam
 import platform
 
 if platform.system() == "Windows":
@@ -135,6 +136,7 @@ def save_switch_states():
         "show_fps": modules.globals.show_fps,
         "mouth_mask": modules.globals.mouth_mask,
         "show_mouth_mask_box": modules.globals.show_mouth_mask_box,
+        "virtual_cam": modules.globals.virtual_cam,
     }
     with open("switch_states.json", "w") as f:
         json.dump(switch_states, f)
@@ -160,6 +162,7 @@ def load_switch_states():
         modules.globals.show_mouth_mask_box = switch_states.get(
             "show_mouth_mask_box", False
         )
+        modules.globals.virtual_cam = switch_states.get("virtual_cam", False)
     except FileNotFoundError:
         # If the file doesn't exist, use default values
         pass
@@ -1166,6 +1169,10 @@ def _processing_thread_func(capture_queue, processed_queue, stop_event,
                 2,
             )
 
+        # Send to virtual camera if enabled
+        if modules.globals.virtual_cam:
+            virtual_cam.send(temp_frame)
+
         # Put processed frame into output queue, dropping old frames if full
         try:
             processed_queue.put_nowait(temp_frame)
@@ -1190,6 +1197,11 @@ def create_webcam_preview(camera_index: int):
 
     preview_label.configure(width=PREVIEW_DEFAULT_WIDTH, height=PREVIEW_DEFAULT_HEIGHT)
     PREVIEW.deiconify()
+
+    # Start virtual camera if enabled
+    if modules.globals.virtual_cam:
+        if not virtual_cam.start(PREVIEW_DEFAULT_WIDTH, PREVIEW_DEFAULT_HEIGHT):
+            update_status("Virtual camera failed to start")
 
     # Queues for decoupling capture from processing and processing from display.
     # Small maxsize ensures we always work on recent frames and drop stale ones.
@@ -1238,6 +1250,7 @@ def create_webcam_preview(camera_index: int):
         det_thread.join(timeout=2.0)
         proc_thread.join(timeout=2.0)
         cap.release()
+        virtual_cam.stop()
         PREVIEW.withdraw()
 
     # Non-blocking display loop using ROOT.after() — avoids blocking the
