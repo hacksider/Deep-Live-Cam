@@ -10,6 +10,8 @@ import json
 import queue
 import threading
 import numpy as np
+import requests
+import tempfile
 import modules.globals
 import modules.metadata
 from modules.face_analyser import (
@@ -192,8 +194,14 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     select_face_button = ctk.CTkButton(
         root, text=_("Select a face"), cursor="hand2", command=lambda: select_source_path()
     )
-    select_face_button.place(relx=0.1, rely=0.30, relwidth=0.3, relheight=0.1)
+    select_face_button.place(relx=0.1, rely=0.30, relwidth=0.24, relheight=0.1)
     ToolTip(select_face_button, _("Choose the source face image to swap onto the target"))
+
+    random_face_button = ctk.CTkButton(
+        root, text="🔄", cursor="hand2", width=30, command=lambda: fetch_random_face()
+    )
+    random_face_button.place(relx=0.35, rely=0.30, relwidth=0.05, relheight=0.1)
+    ToolTip(random_face_button, _("Get a random face from thispersondoesnotexist.com"))
 
     swap_faces_button = ctk.CTkButton(
         root, text="↔", cursor="hand2", command=lambda: swap_faces_paths()
@@ -764,6 +772,26 @@ def update_tumbler(var: str, value: bool) -> None:
         frame_processors = get_frame_processors_modules(
             modules.globals.frame_processors
         )
+
+
+def fetch_random_face() -> None:
+    PREVIEW.withdraw()
+    try:
+        response = requests.get(
+            "https://thispersondoesnotexist.com/",
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=10,
+        )
+        response.raise_for_status()
+        temp_dir = tempfile.gettempdir()
+        temp_path = os.path.join(temp_dir, "deep_live_cam_random_face.jpg")
+        with open(temp_path, "wb") as f:
+            f.write(response.content)
+        modules.globals.source_path = temp_path
+        image = render_image_preview(temp_path, (200, 200))
+        source_label.configure(image=image)
+    except Exception as e:
+        print(f"Failed to fetch random face: {e}")
 
 
 def select_source_path() -> None:
