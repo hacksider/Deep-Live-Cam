@@ -309,6 +309,9 @@ python run.py --execution-provider openvino
 -   Use a screen capture tool like OBS to stream.
 -   To change the face, select a new source image.
 
+## Download all models in this huggingface link
+- [**Download models here**](https://huggingface.co/hacksider/deep-live-cam/tree/main)
+
 ## Command Line Arguments (Unmaintained)
 
 ```
