@@ -28,7 +28,7 @@ def get_face_analyser() -> Any:
                 FACE_ANALYSER = insightface.app.FaceAnalysis(
                     name='buffalo_l',
                     providers=modules.globals.execution_providers,
-                    allowed_modules=['detection', 'recognition']
+                    allowed_modules=['detection', 'recognition', 'landmark_2d_106']
                 )
                 FACE_ANALYSER.prepare(ctx_id=0, det_size=(320, 320))
     return FACE_ANALYSER

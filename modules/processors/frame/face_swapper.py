@@ -136,10 +136,12 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
     if not hasattr(source_face, 'normed_embedding') or source_face.normed_embedding is None:
         return temp_frame
 
-    # Store a copy of the original frame before swapping for opacity blending
+    # Store a copy of the original frame before swapping for opacity blending and mouth mask
     opacity = getattr(modules.globals, "opacity", 1.0)
     opacity = max(0.0, min(1.0, opacity))
-    original_frame = temp_frame if opacity >= 1.0 else temp_frame.copy()
+    mouth_mask_enabled = getattr(modules.globals, "mouth_mask", False)
+    # Always copy if mouth mask is enabled (we need the unmodified original for mouth cutout)
+    original_frame = temp_frame.copy() if (opacity < 1.0 or mouth_mask_enabled) else temp_frame
 
     # Pre-swap Input Check with optimization
     if temp_frame.dtype != np.uint8:
@@ -190,28 +192,28 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
     # --- Post-swap Processing (Masking, Opacity, etc.) ---
     # Now, work with the guaranteed uint8 'swapped_frame'
 
-    if getattr(modules.globals, "mouth_mask", False): # Check if mouth_mask is enabled
+    if mouth_mask_enabled: # Check if mouth_mask is enabled
         # Create a mask for the target face
-        face_mask = create_face_mask(target_face, temp_frame) # Use temp_frame (original shape) for mask creation geometry
+        face_mask = create_face_mask(target_face, original_frame) # Use original_frame for mask creation geometry
 
-        # Create the mouth mask using original geometry
+        # Create the mouth mask using the ORIGINAL frame (before swap) for cutout
         mouth_mask, mouth_cutout, mouth_box, lower_lip_polygon = (
-            create_lower_mouth_mask(target_face, temp_frame) # Use temp_frame (original) for cutout
+            create_lower_mouth_mask(target_face, original_frame) # Use original_frame for real mouth cutout
         )
 
         # Apply the mouth area only if mouth_cutout exists
-        if mouth_cutout is not None and mouth_box != (0,0,0,0): # Add check for valid box
-             # Apply mouth area (from original) onto the 'swapped_frame'
+        if mouth_cutout is not None and mouth_box != (0,0,0,0):
+            # Apply mouth area (from original) onto the 'swapped_frame'
             swapped_frame = apply_mouth_area(
                 swapped_frame, mouth_cutout, mouth_box, face_mask, lower_lip_polygon
             )
 
+            # Draw bounding box only while slider is being dragged
             if getattr(modules.globals, "show_mouth_mask_box", False):
-                        mouth_mask_data = (mouth_mask, mouth_cutout, mouth_box, lower_lip_polygon)
-                        # Draw visualization on the swapped_frame *before* opacity blending
-                        swapped_frame = draw_mouth_mask_visualization(
-                            swapped_frame, target_face, mouth_mask_data
-                        )
+                mouth_mask_data = (mouth_mask, mouth_cutout, mouth_box, lower_lip_polygon)
+                swapped_frame = draw_mouth_mask_visualization(
+                    swapped_frame, target_face, mouth_mask_data
+                )
         
     # --- Poisson Blending ---
     if getattr(modules.globals, "poisson_blend", False):
@@ -750,9 +752,9 @@ def create_lower_mouth_mask(
         return mask, mouth_cutout, mouth_box, lower_lip_polygon
 
     try: # Wrap main logic in try-except
-        # Use outer mouth landmarks (52-63) to capture the lips only
-        # This avoids including the chin/jawline, preserving the face shape from the swap
-        lower_lip_order = list(range(52, 64))
+        # Use outer mouth landmarks (52-71) to capture the full mouth area
+        # This covers both upper and lower lips for proper mouth preservation
+        lower_lip_order = list(range(52, 72))
 
         # Check if all indices are valid for the loaded landmarks (already partially done by < 106 check)
         if max(lower_lip_order) >= landmarks.shape[0]:
@@ -772,9 +774,18 @@ def create_lower_mouth_mask(
             return mask, mouth_cutout, mouth_box, lower_lip_polygon
 
 
-        mask_down_size = getattr(modules.globals, "mask_down_size", 0.1) # Default 0.1
-        expansion_factor = 1 + mask_down_size
-        expanded_landmarks = (lower_lip_landmarks - center) * expansion_factor + center
+        mouth_mask_size = getattr(modules.globals, "mouth_mask_size", 0.0) # 0-100 slider
+        # 0=tight lip outline, 50=covers mouth area, 100=mouth to chin
+        expansion_factor = 1 + (mouth_mask_size / 100.0) * 2.5
+
+        # Expand landmarks from center, with extra downward bias toward chin
+        offsets = lower_lip_landmarks - center
+        # Add extra downward expansion for points below center (toward chin)
+        chin_bias = 1 + (mouth_mask_size / 100.0) * 1.5  # extra vertical stretch downward
+        scale_y = np.where(offsets[:, 1] > 0, expansion_factor * chin_bias, expansion_factor)
+        expanded_landmarks = lower_lip_landmarks.copy()
+        expanded_landmarks[:, 0] = center[0] + offsets[:, 0] * expansion_factor
+        expanded_landmarks[:, 1] = center[1] + offsets[:, 1] * scale_y
 
         # Ensure landmarks are finite after adjustments
         if not np.all(np.isfinite(expanded_landmarks)):
@@ -881,8 +892,8 @@ def draw_mouth_mask_visualization(
         print(f"Error drawing polygon for visualization: {e}") # Optional debug
         pass
 
-    # Optional: Draw bounding box (red rectangle)
-    # cv2.rectangle(vis_frame, (min_x, min_y), (max_x, max_y), (0, 0, 255), 1)
+    # Draw bounding box (red rectangle)
+    cv2.rectangle(vis_frame, (min_x, min_y), (max_x, max_y), (0, 0, 255), 2)
 
     # Optional: Add labels
     label_pos_y = min_y - 10 if min_y > 20 else max_y + 15 # Adjust position based on box location
@@ -962,85 +973,34 @@ def apply_mouth_area(
             # print("Warning: Mouth cutout is invalid after resize attempt.")
             return frame
 
-        # --- Color Correction Step ---
-        # Apply color transfer from ROI (swapped face region) to the original mouth cutout
-        # This helps match lighting/color before blending
-        color_corrected_mouth = resized_mouth_cutout # Default to resized if correction fails
-        try:
-           # Ensure both images are 3 channels for color transfer
-           if len(resized_mouth_cutout.shape) == 3 and resized_mouth_cutout.shape[2] == 3 and \
-              len(roi.shape) == 3 and roi.shape[2] == 3:
-                 color_corrected_mouth = apply_color_transfer(resized_mouth_cutout, roi)
-           else:
-               # print("Warning: Cannot apply color transfer, images not BGR.")
-               pass
-        except cv2.error as ct_e: # Handle potential errors in color transfer
-           # print(f"Warning: Color transfer failed: {ct_e}. Using uncorrected mouth cutout.") # Optional debug
-           pass
-        except Exception as ct_gen_e:
-           # print(f"Warning: Unexpected error during color transfer: {ct_gen_e}")
-           pass
-        # --- End Color Correction ---
-
-
         # --- Mask Creation ---
-        # Create a mask based *specifically* on the mouth_polygon, relative to the ROI
+        # Create a mask based on the mouth_polygon, relative to the ROI
         polygon_mask_roi = np.zeros(roi.shape[:2], dtype=np.uint8)
-        # Adjust polygon coordinates relative to the ROI's top-left corner
         adjusted_polygon = mouth_polygon - [min_x, min_y]
-        # Draw the filled polygon on the ROI mask
         cv2.fillPoly(polygon_mask_roi, [adjusted_polygon.astype(np.int32)], 255)
 
-        # Feather the polygon mask (Gaussian blur)
-        mask_feather_ratio = getattr(modules.globals, "mask_feather_ratio", 12) # Default 12
-        # Calculate feather amount based on the smaller dimension of the box
-        feather_base_dim = min(box_width, box_height)
-        feather_amount = max(1, min(30, feather_base_dim // max(1, mask_feather_ratio))) # Avoid div by zero
-        # Ensure kernel size is odd and positive
+        # Feather the edges with Gaussian blur for smooth blending
+        feather_amount = max(1, min(30, min(box_width, box_height) // 8))
         kernel_size = 2 * feather_amount + 1
-        feathered_polygon_mask = cv2.GaussianBlur(polygon_mask_roi.astype(np.float32), (kernel_size, kernel_size), 0)
+        feathered_mask = cv2.GaussianBlur(polygon_mask_roi.astype(np.float32), (kernel_size, kernel_size), 0)
 
-        # Normalize feathered mask to [0.0, 1.0] range
-        max_val = feathered_polygon_mask.max()
-        if max_val > 1e-6: # Avoid division by zero
-           feathered_polygon_mask = feathered_polygon_mask / max_val
+        # Normalize to [0.0, 1.0]
+        max_val = feathered_mask.max()
+        if max_val > 1e-6:
+            feathered_mask = feathered_mask / max_val
         else:
-           feathered_polygon_mask.fill(0.0) # Mask is all black if max is near zero
-        # --- End Mask Creation ---
+            feathered_mask.fill(0.0)
 
-
-        # --- Refined Blending ---
-        # Get the corresponding ROI from the *full face mask* (already blurred)
-        # Ensure face_mask is float and normalized [0.0, 1.0]
-        if face_mask.dtype != np.float64 and face_mask.dtype != np.float32:
-            face_mask_float = face_mask.astype(np.float32) / 255.0
-        else: # Assume already float [0,1] if type is float
-            face_mask_float = face_mask.astype(np.float32) if face_mask.dtype == np.float64 else face_mask
-        face_mask_roi = face_mask_float[min_y:max_y, min_x:max_x]
-
-        # Combine the feathered mouth polygon mask with the face mask ROI
-        # Use minimum to ensure we only affect area inside both masks (mouth area within face)
-        # This helps blend the edges smoothly with the surrounding swapped face region
-        combined_mask = np.minimum(feathered_polygon_mask, face_mask_roi)
-
-        # Expand mask to 3 channels for blending (ensure it matches image channels)
+        # --- Blending: paste original mouth onto swapped face ---
         if len(frame.shape) == 3 and frame.shape[2] == 3:
-            combined_mask_3channel = combined_mask[:, :, np.newaxis]
+            mask_3ch = feathered_mask[:, :, np.newaxis].astype(np.float32)
+            inv_mask = 1.0 - mask_3ch
 
-            # Ensure data types are compatible for blending
-            # float32 provides sufficient precision for 8-bit image blending
-            combined_mask_f32 = combined_mask_3channel.astype(np.float32)
-            inv_mask = np.float32(1.0) - combined_mask_f32
+            # Blend: (original_mouth * mask) + (swapped_face * (1 - mask))
+            blended_roi = (resized_mouth_cutout.astype(np.float32) * mask_3ch +
+                           roi.astype(np.float32) * inv_mask)
 
-            # Blend: (original_mouth * combined_mask) + (swapped_face_roi * (1 - combined_mask))
-            blended_roi = (color_corrected_mouth * combined_mask_f32 +
-                           roi * inv_mask)
-
-            # Place the blended ROI back into the frame
-            frame[min_y:max_y, min_x:max_x] = blended_roi.astype(np.uint8)
-        else:
-            # print("Warning: Cannot apply mouth mask blending, frame is not 3-channel BGR.")
-            pass # Don't modify frame if it's not BGR
+            frame[min_y:max_y, min_x:max_x] = np.clip(blended_roi, 0, 255).astype(np.uint8)
 
     except Exception as e:
         print(f"Error applying mouth area: {e}") # Optional debug

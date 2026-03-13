@@ -82,8 +82,8 @@ def create_lower_mouth_mask(
 
     landmarks = face.landmark_2d_106
     if landmarks is not None:
-        # Use outer mouth landmarks (52-63) to capture the lips only
-        lower_lip_order = list(range(52, 64))
+        # Use outer mouth landmarks (52-71) to capture the full mouth area
+        lower_lip_order = list(range(52, 72))
         
         if max(lower_lip_order) >= landmarks.shape[0]:
             return mask, mouth_cutout, mouth_box, lower_lip_polygon
@@ -94,13 +94,16 @@ def create_lower_mouth_mask(
         center = np.mean(lower_lip_landmarks, axis=0)
 
         # Expand the landmarks outward using the mouth_mask_size
-        # Use a more conservative expansion to avoid affecting face shape
-        expansion_factor = (
-            1 + modules.globals.mask_down_size * modules.globals.mouth_mask_size
-        )
-        expanded_landmarks = (lower_lip_landmarks - center) * expansion_factor + center
+        mouth_mask_size = getattr(modules.globals, "mouth_mask_size", 0.0) # 0-100 slider
+        expansion_factor = 1 + (mouth_mask_size / 100.0) * 2.5
 
-        # Removed specific top/chin extensions to preserve face shape
+        # Expand with extra downward bias toward chin
+        offsets = lower_lip_landmarks - center
+        chin_bias = 1 + (mouth_mask_size / 100.0) * 1.5
+        scale_y = np.where(offsets[:, 1] > 0, expansion_factor * chin_bias, expansion_factor)
+        expanded_landmarks = lower_lip_landmarks.copy()
+        expanded_landmarks[:, 0] = center[0] + offsets[:, 0] * expansion_factor
+        expanded_landmarks[:, 1] = center[1] + offsets[:, 1] * scale_y
 
         # Convert back to integer coordinates
         expanded_landmarks = expanded_landmarks.astype(np.int32)
