@@ -478,7 +478,7 @@ def process_frame_v2(temp_frame: Frame, temp_frame_path: str = "") -> Frame:
 
     else:
         # Live stream or webcam processing (analyze faces on the fly)
-        detected_faces = get_many_faces(processed_frame)
+        detected_faces = get_faces_optimized(processed_frame)
         if detected_faces:
             if modules.globals.many_faces:
                  source_face = default_source_face() # Use default source for all detected targets
