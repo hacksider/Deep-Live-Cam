@@ -133,8 +133,6 @@ def suggest_execution_providers() -> List[str]:
 
 def suggest_execution_threads() -> int:
     """Suggest optimal thread count based on hardware and execution provider."""
-    import os
-    
     # Get CPU count
     cpu_count = os.cpu_count() or 4
     
