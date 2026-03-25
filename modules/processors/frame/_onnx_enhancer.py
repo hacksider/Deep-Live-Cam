@@ -21,11 +21,41 @@ IS_APPLE_SILICON = platform.system() == "Darwin" and platform.machine() == "arm6
 THREAD_SEMAPHORE = threading.Semaphore(min(max(1, (os.cpu_count() or 1)), 8))
 
 
+def _build_session_providers() -> list[Any]:
+    providers = list(modules.globals.execution_providers or ["CPUExecutionProvider"])
+    if providers and any(p != "CPUExecutionProvider" for p in providers) and "CPUExecutionProvider" not in providers:
+        providers.append("CPUExecutionProvider")
+
+    configured: list[Any] = []
+    for provider in providers:
+        if provider == "CoreMLExecutionProvider":
+            configured.append(
+                (
+                    "CoreMLExecutionProvider",
+                    {
+                        "ModelFormat": "MLProgram",
+                        "MLComputeUnits": "ALL",
+                    },
+                )
+            )
+        else:
+            configured.append(provider)
+    return configured
+
+
 def create_onnx_session(model_path: str) -> onnxruntime.InferenceSession:
     """Create an ONNX Runtime session using the configured execution providers."""
-    providers = modules.globals.execution_providers
-    session = onnxruntime.InferenceSession(model_path, providers=providers)
-    return session
+    providers = _build_session_providers()
+    session_options = onnxruntime.SessionOptions()
+    session_options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
+    if any((p == "CoreMLExecutionProvider") or (isinstance(p, tuple) and p[0] == "CoreMLExecutionProvider") for p in providers):
+        session_options.intra_op_num_threads = 1
+        session_options.inter_op_num_threads = 1
+    try:
+        return onnxruntime.InferenceSession(model_path, sess_options=session_options, providers=providers)
+    except Exception:
+        plain_providers = [p if isinstance(p, str) else p[0] for p in providers]
+        return onnxruntime.InferenceSession(model_path, sess_options=session_options, providers=plain_providers)
 
 
 def warmup_session(session: onnxruntime.InferenceSession) -> None:

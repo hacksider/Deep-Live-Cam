@@ -24,8 +24,12 @@ from modules.processors.frame._onnx_enhancer import (
 
 NAME = "DLC.FACE-ENHANCER-GPEN256"
 INPUT_SIZE = 256
-MODEL_URL = "https://github.com/harisreedhar/Face-Upscalers-ONNX/releases/download/GPEN-BFR/GPEN-BFR-256.onnx"
 MODEL_FILE = "GPEN-BFR-256.onnx"
+MODEL_URLS = [
+    "https://github.com/harisreedhar/Face-Upscalers-ONNX/releases/download/Models/GPEN-BFR-256.onnx",
+    # Legacy URL fallback
+    "https://github.com/harisreedhar/Face-Upscalers-ONNX/releases/download/GPEN-BFR/GPEN-BFR-256.onnx",
+]
 
 ENHANCER = None
 THREAD_LOCK = threading.Lock()
@@ -41,7 +45,11 @@ def pre_check() -> bool:
     if not os.path.exists(model_path):
         update_status(f"Downloading {MODEL_FILE}...", NAME)
         from modules.utilities import conditional_download
-        conditional_download(models_dir, [MODEL_URL])
+        try:
+            conditional_download(models_dir, MODEL_URLS)
+        except Exception as e:
+            update_status(f"Failed to download {MODEL_FILE}: {e}", NAME)
+            return False
     return True
 
 
@@ -59,7 +67,10 @@ def get_enhancer() -> Any:
             model_path = os.path.join(models_dir, MODEL_FILE)
             if not os.path.exists(model_path):
                 from modules.utilities import conditional_download
-                conditional_download(models_dir, [MODEL_URL])
+                try:
+                    conditional_download(models_dir, MODEL_URLS)
+                except Exception as e:
+                    raise RuntimeError(f"Download failed for {MODEL_FILE}: {e}")
             if not os.path.exists(model_path):
                 raise FileNotFoundError(f"Model file not found: {model_path}")
             print(f"{NAME}: Loading ONNX model from {model_path}")
@@ -83,14 +94,14 @@ def enhance_face(temp_frame: Frame, face: Face) -> Frame:
 
 
 def process_frame(source_face: Face | None, temp_frame: Frame) -> Frame:
-    target_face = get_one_face(temp_frame)
+    target_face = get_one_face(temp_frame, require_embedding=False)
     if target_face is None:
         return temp_frame
     return enhance_face(temp_frame, target_face)
 
 
 def process_frame_v2(temp_frame: Frame) -> Frame:
-    target_face = get_one_face(temp_frame)
+    target_face = get_one_face(temp_frame, require_embedding=False)
     if target_face:
         temp_frame = enhance_face(temp_frame, target_face)
     return temp_frame

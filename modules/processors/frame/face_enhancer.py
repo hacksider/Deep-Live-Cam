@@ -15,6 +15,7 @@ from modules.core import update_status
 from modules.face_analyser import get_one_face, get_many_faces
 from modules.typing import Frame, Face
 from modules.utilities import (
+    conditional_download,
     is_image,
     is_video,
 )
@@ -23,11 +24,16 @@ FACE_ENHANCER = None
 THREAD_SEMAPHORE = threading.Semaphore()
 THREAD_LOCK = threading.Lock()
 NAME = "DLC.FACE-ENHANCER"
+_MODEL_MISSING_WARNED = False
 
 abs_dir = os.path.dirname(os.path.abspath(__file__))
 models_dir = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(abs_dir))), "models"
 )
+MODEL_CANDIDATES = ["gfpgan-1024.onnx", "GFPGANv1.4.onnx"]
+MODEL_DOWNLOAD_URLS = [
+    "https://huggingface.co/hacksider/deep-live-cam/resolve/main/GFPGANv1.4.onnx"
+]
 
 # Standard FFHQ 5-point face template for 512x512 resolution
 # Points: left_eye, right_eye, nose, left_mouth, right_mouth
@@ -43,16 +49,60 @@ FFHQ_TEMPLATE_512 = np.array(
 )
 
 
+def _resolve_face_enhancer_model_path() -> str | None:
+    for model_name in MODEL_CANDIDATES:
+        model_path = os.path.join(models_dir, model_name)
+        if os.path.exists(model_path):
+            return model_path
+    return None
+
+
 def pre_check() -> bool:
-    model_path = os.path.join(models_dir, "gfpgan-1024.onnx")
-    if not os.path.exists(model_path):
-        update_status(
-            f"GFPGAN ONNX model not found at {model_path}. "
-            "Please place gfpgan-1024.onnx in the models folder.",
-            NAME,
-        )
-        return False
-    return True
+    if _resolve_face_enhancer_model_path() is not None:
+        return True
+    try:
+        conditional_download(models_dir, MODEL_DOWNLOAD_URLS)
+    except Exception as exc:
+        update_status(f"Failed to download face enhancer model: {exc}", NAME)
+    if _resolve_face_enhancer_model_path() is not None:
+        return True
+    expected = ", ".join(MODEL_CANDIDATES)
+    update_status(
+        f"GFPGAN ONNX model not found. Expected one of: {expected}.",
+        NAME,
+    )
+    return False
+
+
+def _disable_face_enhancer(reason: str) -> None:
+    global _MODEL_MISSING_WARNED
+    modules.globals.fp_ui["face_enhancer"] = False
+    if not _MODEL_MISSING_WARNED:
+        print(f"{NAME}: {reason}")
+        update_status(reason, NAME)
+        _MODEL_MISSING_WARNED = True
+
+
+def _build_session_providers() -> list[Any]:
+    providers = list(modules.globals.execution_providers or ["CPUExecutionProvider"])
+    if providers and any(p != "CPUExecutionProvider" for p in providers) and "CPUExecutionProvider" not in providers:
+        providers.append("CPUExecutionProvider")
+
+    configured: list[Any] = []
+    for provider in providers:
+        if provider == "CoreMLExecutionProvider":
+            configured.append(
+                (
+                    "CoreMLExecutionProvider",
+                    {
+                        "ModelFormat": "MLProgram",
+                        "MLComputeUnits": "ALL",
+                    },
+                )
+            )
+        else:
+            configured.append(provider)
+    return configured
 
 
 def pre_start() -> bool:
@@ -73,26 +123,44 @@ def get_face_enhancer() -> onnxruntime.InferenceSession:
 
     with THREAD_LOCK:
         if FACE_ENHANCER is None:
-            model_path = os.path.join(models_dir, "gfpgan-1024.onnx")
+            model_path = _resolve_face_enhancer_model_path()
 
-            if not os.path.exists(model_path):
-                raise FileNotFoundError(
-                    f"{NAME}: Model not found at {model_path}"
-                )
+            if model_path is None:
+                try:
+                    conditional_download(models_dir, MODEL_DOWNLOAD_URLS)
+                except Exception:
+                    pass
+                model_path = _resolve_face_enhancer_model_path()
+                if model_path is None:
+                    _disable_face_enhancer(
+                        f"Model not found in {models_dir}. Expected one of: {', '.join(MODEL_CANDIDATES)}. Face enhancer disabled."
+                    )
+                    return None
 
             try:
-                providers = modules.globals.execution_providers
+                providers = _build_session_providers()
 
                 session_options = onnxruntime.SessionOptions()
                 session_options.graph_optimization_level = (
                     onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
                 )
+                if any((p == "CoreMLExecutionProvider") or (isinstance(p, tuple) and p[0] == "CoreMLExecutionProvider") for p in providers):
+                    session_options.intra_op_num_threads = 1
+                    session_options.inter_op_num_threads = 1
 
-                FACE_ENHANCER = onnxruntime.InferenceSession(
-                    model_path,
-                    sess_options=session_options,
-                    providers=providers,
-                )
+                try:
+                    FACE_ENHANCER = onnxruntime.InferenceSession(
+                        model_path,
+                        sess_options=session_options,
+                        providers=providers,
+                    )
+                except Exception:
+                    plain_providers = [p if isinstance(p, str) else p[0] for p in providers]
+                    FACE_ENHANCER = onnxruntime.InferenceSession(
+                        model_path,
+                        sess_options=session_options,
+                        providers=plain_providers,
+                    )
 
                 input_info = FACE_ENHANCER.get_inputs()[0]
                 output_info = FACE_ENHANCER.get_outputs()[0]
@@ -113,14 +181,10 @@ def get_face_enhancer() -> onnxruntime.InferenceSession:
             except Exception as e:
                 print(f"{NAME}: Error loading GFPGAN ONNX model: {e}")
                 FACE_ENHANCER = None
-                raise RuntimeError(
-                    f"{NAME}: Failed to load GFPGAN ONNX model: {e}"
+                _disable_face_enhancer(
+                    f"Failed to load GFPGAN ONNX model: {e}. Face enhancer disabled."
                 )
-
-    if FACE_ENHANCER is None:
-        raise RuntimeError(
-            f"{NAME}: Failed to initialize GFPGAN ONNX session. Check logs."
-        )
+                return None
 
     return FACE_ENHANCER
 
@@ -245,9 +309,11 @@ def _postprocess_face(output: np.ndarray) -> np.ndarray:
     return cv2.cvtColor(face, cv2.COLOR_RGB2BGR)
 
 
-def enhance_face(temp_frame: Frame) -> Frame:
-    """Enhances all faces in a frame using the GFPGAN ONNX model."""
+def _enhance_faces_in_frame(temp_frame: Frame, faces: List[Face]) -> Frame:
+    """Enhance a specific list of detected faces in a frame."""
     session = get_face_enhancer()
+    if session is None:
+        return temp_frame
 
     # Determine model input resolution from the session metadata
     input_info = session.get_inputs()[0]
@@ -261,8 +327,6 @@ def enhance_face(temp_frame: Frame) -> Frame:
     except (ValueError, TypeError, IndexError):
         align_size = 512
 
-    # Detect faces using InsightFace (already a project dependency)
-    faces = get_many_faces(temp_frame)
     if not faces:
         return temp_frame
 
@@ -313,10 +377,38 @@ def enhance_face(temp_frame: Frame) -> Frame:
     return result_frame
 
 
+def enhance_faces(temp_frame: Frame, faces: List[Face]) -> Frame:
+    """Public helper for live mode when detections are already cached."""
+    try:
+        return _enhance_faces_in_frame(temp_frame, faces)
+    except Exception as e:
+        _disable_face_enhancer(
+            f"Runtime enhancer error: {e}. Face enhancer disabled."
+        )
+        return temp_frame
+
+
+def enhance_face(temp_frame: Frame) -> Frame:
+    """Enhances all faces in a frame using the GFPGAN ONNX model."""
+    faces = get_many_faces(temp_frame, require_embedding=False)
+    return _enhance_faces_in_frame(temp_frame, faces or [])
+
+
 def process_frame(source_face: Face | None, temp_frame: Frame) -> Frame:
     """Processes a frame: enhances face if detected."""
-    temp_frame = enhance_face(temp_frame)
-    return temp_frame
+    try:
+        temp_frame = enhance_face(temp_frame)
+        return temp_frame
+    except Exception as e:
+        _disable_face_enhancer(
+            f"Runtime enhancer error: {e}. Face enhancer disabled."
+        )
+        return temp_frame
+
+
+def process_frame_v2(temp_frame: Frame) -> Frame:
+    """Live/mapped-mode compatibility wrapper."""
+    return process_frame(None, temp_frame)
 
 
 def process_frames(

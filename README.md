@@ -156,8 +156,8 @@ Apple Silicon (M1/M2/M3) requires specific setup:
 # Install Python 3.11 (specific version is important)
 brew install python@3.11
 
-# Install tkinter package (required for the GUI)
-brew install python-tk@3.10
+# Install tkinter package (required for the GUI, if missing)
+brew install python-tk@3.11
 
 # Create and activate virtual environment with Python 3.11
 python3.11 -m venv venv
@@ -165,6 +165,16 @@ source venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
+
+# Stability fixes for macOS webcam/runtime
+pip uninstall -y opencv-python-headless
+pip install --upgrade "numpy<2" "opencv-python==4.10.0.84"
+```
+
+Shortcut:
+
+```bash
+./scripts/setup_macos.sh
 ```
 
 ** In case something goes wrong and you need to reinstall the virtual environment **
@@ -214,24 +224,24 @@ python run.py --execution-provider cuda
 
 Apple Silicon (M1/M2/M3) specific installation:
 
-1. Make sure you've completed the macOS setup above using Python 3.10.
+1. Make sure you've completed the macOS setup above using Python 3.11.
 2. Install dependencies:
 
 ```bash
-pip uninstall onnxruntime onnxruntime-silicon
-pip install onnxruntime-silicon==1.13.1
+pip uninstall -y onnxruntime onnxruntime-silicon onnxruntime-coreml
+pip install onnxruntime-silicon==1.16.3
 ```
 
-3. Usage (important: specify Python 3.10):
+3. Usage:
 
 ```bash
-python3.10 run.py --execution-provider coreml
+python run.py --execution-provider coreml
 ```
 
 **Important Notes for macOS:**
-- You **must** use Python 3.10, not newer versions like 3.11 or 3.13
-- Always run with `python3.10` command not just `python` if you have multiple Python versions installed
-- If you get error about `_tkinter` missing, reinstall the tkinter package: `brew reinstall python-tk@3.10`
+- Python 3.11 is recommended for best compatibility
+- If CoreML is unstable on your machine, run with CPU: `python run.py --execution-provider cpu`
+- If you get error about `_tkinter` missing, reinstall: `brew reinstall python-tk@3.11`
 - If you get model loading errors, check that your models are in the correct folder
 - If you encounter conflicts with other Python versions, consider uninstalling them:
   ```bash
@@ -239,7 +249,7 @@ python3.10 run.py --execution-provider coreml
   brew list | grep python
   
   # Uninstall conflicting versions if needed
-  brew uninstall --ignore-dependencies python@3.11 python@3.13
+  brew uninstall --ignore-dependencies python@3.10 python@3.13
   
   # Keep only Python 3.11
   brew cleanup

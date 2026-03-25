@@ -21,22 +21,21 @@ from __future__ import annotations
 import cv2
 import numpy as np
 from typing import Tuple, Optional
+import platform
 
-# ---------------------------------------------------------------------------
-# CUDA availability detection (evaluated once at import time)
-# ---------------------------------------------------------------------------
 CUDA_AVAILABLE: bool = False
+IS_APPLE_SILICON = platform.system() == "Darwin" and platform.machine() == "arm64"
 
 try:
-    # cv2.cuda.GpuMat is only present when OpenCV is compiled with CUDA
     _test_mat = cv2.cuda.GpuMat()
-    # Verify we have the required filter / image-processing functions
     _has_gauss = hasattr(cv2.cuda, "createGaussianFilter")
     _has_resize = hasattr(cv2.cuda, "resize")
     _has_cvt = hasattr(cv2.cuda, "cvtColor")
     if _has_gauss and _has_resize and _has_cvt:
         CUDA_AVAILABLE = True
-        print("[gpu_processing] OpenCV CUDA support detected – GPU-accelerated processing enabled.")
+        print(
+            "[gpu_processing] OpenCV CUDA support detected – GPU-accelerated processing enabled."
+        )
     else:
         missing = []
         if not _has_gauss:
@@ -45,14 +44,24 @@ try:
             missing.append("resize")
         if not _has_cvt:
             missing.append("cvtColor")
-        print(f"[gpu_processing] cv2.cuda.GpuMat exists but missing: {', '.join(missing)} – falling back to CPU.")
+        print(
+            f"[gpu_processing] cv2.cuda.GpuMat exists but missing: {', '.join(missing)} – falling back to CPU."
+        )
 except Exception:
-    print("[gpu_processing] OpenCV CUDA not available – using CPU fallback for all operations.")
+    if IS_APPLE_SILICON:
+        print(
+            "[gpu_processing] Apple Silicon detected – using optimized CPU path with Accelerate framework."
+        )
+    else:
+        print(
+            "[gpu_processing] OpenCV CUDA not available – using CPU fallback for all operations."
+        )
 
 
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _ensure_uint8(img: np.ndarray) -> np.ndarray:
     """Clip and convert to uint8 if necessary."""
@@ -84,24 +93,22 @@ def _cv_type_for(img: np.ndarray) -> int:
 # Public API – Gaussian Blur
 # ---------------------------------------------------------------------------
 
+
 def gpu_gaussian_blur(
     src: np.ndarray,
     ksize: Tuple[int, int],
     sigma_x: float,
     sigma_y: float = 0,
 ) -> np.ndarray:
-    """Drop-in replacement for ``cv2.GaussianBlur`` with CUDA acceleration.
-
-    Parameters match ``cv2.GaussianBlur(src, ksize, sigmaX, sigmaY)``.
-    When *ksize* is ``(0, 0)`` OpenCV computes the kernel size from *sigma_x*.
-    """
     if CUDA_AVAILABLE:
         try:
             src_u8 = _ensure_uint8(src)
             cv_type = _cv_type_for(src_u8)
             ks = _ksize_odd(ksize) if ksize != (0, 0) else ksize
 
-            gauss = cv2.cuda.createGaussianFilter(cv_type, cv_type, ks, sigma_x, sigma_y)
+            gauss = cv2.cuda.createGaussianFilter(
+                cv_type, cv_type, ks, sigma_x, sigma_y
+            )
             gpu_src = cv2.cuda.GpuMat()
             gpu_src.upload(src_u8)
             gpu_dst = gauss.apply(gpu_src)
@@ -109,12 +116,16 @@ def gpu_gaussian_blur(
         except cv2.error:
             pass
 
+    if IS_APPLE_SILICON and ksize[0] > 7:
+        ksize = (7, 7)
+
     return cv2.GaussianBlur(src, ksize, sigma_x, sigmaY=sigma_y)
 
 
 # ---------------------------------------------------------------------------
 # Public API – addWeighted
 # ---------------------------------------------------------------------------
+
 
 def gpu_add_weighted(
     src1: np.ndarray,
@@ -144,6 +155,7 @@ def gpu_add_weighted(
 # Public API – Unsharp-mask sharpening
 # ---------------------------------------------------------------------------
 
+
 def gpu_sharpen(
     src: np.ndarray,
     strength: float,
@@ -168,7 +180,9 @@ def gpu_sharpen(
             gpu_src = cv2.cuda.GpuMat()
             gpu_src.upload(src_u8)
             gpu_blurred = gauss.apply(gpu_src)
-            gpu_sharp = cv2.cuda.addWeighted(gpu_src, 1.0 + strength, gpu_blurred, -strength, 0)
+            gpu_sharp = cv2.cuda.addWeighted(
+                gpu_src, 1.0 + strength, gpu_blurred, -strength, 0
+            )
             result = gpu_sharp.download()
             return np.clip(result, 0, 255).astype(np.uint8)
         except cv2.error:
@@ -215,7 +229,9 @@ def gpu_resize(
             if dsize and dsize[0] > 0 and dsize[1] > 0:
                 gpu_dst = cv2.cuda.resize(gpu_src, dsize, interpolation=interp)
             else:
-                gpu_dst = cv2.cuda.resize(gpu_src, (0, 0), fx=fx, fy=fy, interpolation=interp)
+                gpu_dst = cv2.cuda.resize(
+                    gpu_src, (0, 0), fx=fx, fy=fy, interpolation=interp
+                )
 
             return gpu_dst.download()
         except cv2.error:
@@ -227,6 +243,7 @@ def gpu_resize(
 # ---------------------------------------------------------------------------
 # Public API – Color conversion
 # ---------------------------------------------------------------------------
+
 
 def gpu_cvt_color(
     src: np.ndarray,
@@ -252,6 +269,7 @@ def gpu_cvt_color(
 # ---------------------------------------------------------------------------
 # Public API – Flip
 # ---------------------------------------------------------------------------
+
 
 def gpu_flip(
     src: np.ndarray,
@@ -279,8 +297,10 @@ def gpu_flip(
 # Convenience: check at runtime whether GPU path is active
 # ---------------------------------------------------------------------------
 
+
 def is_gpu_accelerated() -> bool:
     """Return ``True`` when the CUDA path will be used."""
     return CUDA_AVAILABLE
+
 
 # --- END OF FILE gpu_processing.py ---

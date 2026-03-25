@@ -22,20 +22,31 @@ if platform.system().lower() == "darwin":
 
 def run_ffmpeg(args: List[str]) -> bool:
     """Run ffmpeg with hardware acceleration and optimized settings."""
-    commands = [
+    is_macos = platform.system().lower() == "darwin"
+    base_commands = [
         "ffmpeg",
         "-hide_banner",
-        "-hwaccel", "auto",  # Auto-detect hardware acceleration
-        "-hwaccel_output_format", "auto",  # Use hardware format when possible
         "-threads", str(modules.globals.execution_threads or 0),  # 0 = auto-detect optimal thread count
         "-loglevel", modules.globals.log_level,
     ]
-    commands.extend(args)
-    try:
-        subprocess.check_output(commands, stderr=subprocess.STDOUT)
-        return True
-    except Exception:
-        pass
+    if is_macos:
+        command_variants = [
+            base_commands + ["-hwaccel", "videotoolbox"] + args,
+            base_commands + ["-hwaccel", "auto"] + args,
+            base_commands + args,
+        ]
+    else:
+        hwaccel_flags = ["-hwaccel", "auto", "-hwaccel_output_format", "auto"]
+        command_variants = [
+            base_commands + hwaccel_flags + args,
+            base_commands + args,
+        ]
+    for commands in command_variants:
+        try:
+            subprocess.check_output(commands, stderr=subprocess.STDOUT)
+            return True
+        except Exception:
+            continue
     return False
 
 
@@ -87,7 +98,22 @@ def create_video(target_path: str, fps: float = 30.0) -> None:
     encoder_options = []
     
     # GPU-accelerated encoding options
-    if 'CUDAExecutionProvider' in modules.globals.execution_providers:
+    if platform.system().lower() == "darwin":
+        # Apple VideoToolbox hardware encoder path
+        quality_vtb = str(max(1, min(100, 100 - int(modules.globals.video_quality * 1.8))))
+        if encoder == 'libx264':
+            encoder = 'h264_videotoolbox'
+            encoder_options = [
+                "-q:v", quality_vtb,
+                "-allow_sw", "1",
+            ]
+        elif encoder == 'libx265':
+            encoder = 'hevc_videotoolbox'
+            encoder_options = [
+                "-q:v", quality_vtb,
+                "-allow_sw", "1",
+            ]
+    elif 'CUDAExecutionProvider' in modules.globals.execution_providers:
         # NVIDIA GPU encoding
         if encoder == 'libx264':
             encoder = 'h264_nvenc'
@@ -170,7 +196,7 @@ def create_video(target_path: str, fps: float = 30.0) -> None:
     # Try with hardware encoder first, fallback to software if it fails
     success = run_ffmpeg(ffmpeg_args)
     
-    if not success and encoder in ['h264_nvenc', 'hevc_nvenc', 'h264_amf', 'hevc_amf']:
+    if not success and encoder in ['h264_nvenc', 'hevc_nvenc', 'h264_amf', 'hevc_amf', 'h264_videotoolbox', 'hevc_videotoolbox']:
         # Fallback to software encoding
         print(f"Hardware encoding with {encoder} failed, falling back to software encoding...")
         fallback_encoder = 'libx264' if 'h264' in encoder else 'libx265'
@@ -285,17 +311,48 @@ def conditional_download(download_directory_path: str, urls: List[str]) -> None:
         download_file_path = os.path.join(
             download_directory_path, os.path.basename(url)
         )
-        if not os.path.exists(download_file_path):
-            request = urllib.request.urlopen(url)  # type: ignore[attr-defined]
-            total = int(request.headers.get("Content-Length", 0))
-            with tqdm(
-                total=total,
-                desc="Downloading",
-                unit="B",
-                unit_scale=True,
-                unit_divisor=1024,
-            ) as progress:
-                urllib.request.urlretrieve(url, download_file_path, reporthook=lambda count, block_size, total_size: progress.update(block_size))  # type: ignore[attr-defined]
+        temp_download_file_path = download_file_path + ".part"
+
+        expected_total = 0
+        try:
+            with urllib.request.urlopen(url) as request:  # type: ignore[attr-defined]
+                expected_total = int(request.headers.get("Content-Length", 0))
+        except Exception:
+            expected_total = 0
+
+        # Skip if the existing file matches expected size.
+        if os.path.exists(download_file_path) and expected_total > 0:
+            if os.path.getsize(download_file_path) == expected_total:
+                continue
+            # Remove corrupted/incomplete artifact.
+            os.remove(download_file_path)
+        elif os.path.exists(download_file_path) and expected_total == 0:
+            # If remote size is unavailable, keep existing file.
+            continue
+
+        if os.path.exists(temp_download_file_path):
+            os.remove(temp_download_file_path)
+
+        request = urllib.request.urlopen(url)  # type: ignore[attr-defined]
+        total = int(request.headers.get("Content-Length", 0))
+        with tqdm(
+            total=total,
+            desc="Downloading",
+            unit="B",
+            unit_scale=True,
+            unit_divisor=1024,
+        ) as progress:
+            urllib.request.urlretrieve(  # type: ignore[attr-defined]
+                url,
+                temp_download_file_path,
+                reporthook=lambda count, block_size, total_size: progress.update(block_size),
+            )
+
+        if total > 0 and os.path.getsize(temp_download_file_path) != total:
+            os.remove(temp_download_file_path)
+            raise RuntimeError(f"Download incomplete for {download_file_path}")
+
+        os.replace(temp_download_file_path, download_file_path)
 
 
 def resolve_relative_path(path: str) -> str:

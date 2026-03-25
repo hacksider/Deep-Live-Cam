@@ -9,6 +9,9 @@ import time
 import json
 import queue
 import threading
+import subprocess
+import re
+import sys
 import numpy as np
 import modules.globals
 import modules.metadata
@@ -20,6 +23,7 @@ from modules.face_analyser import (
     add_blank_map,
     has_valid_map,
     simplify_maps,
+    reset_face_analyser_state,
 )
 from modules.capturer import get_video_frame, get_video_frame_total
 from modules.processors.frame.core import get_frame_processors_modules
@@ -40,20 +44,35 @@ if platform.system() == "Windows":
 # --- Tk 9.0 compatibility patch ---
 # In Tk 9.0, Menu.index("end") returns "" instead of raising TclError
 # when the menu is empty. CustomTkinter's CTkOptionMenu doesn't handle
-# this, causing crashes. This patch adds the missing guard.
+# this consistently in some environments. Keep a safe fallback rebuild.
 try:
-    from customtkinter.windows.widgets.core_widget_classes import DropdownMenu as _DropdownMenu
+    from customtkinter.windows.widgets.core_widget_classes import (
+        DropdownMenu as _DropdownMenu,
+    )
 
     _original_add_menu_commands = _DropdownMenu._add_menu_commands
 
     def _patched_add_menu_commands(self, *args, **kwargs):
         try:
-            end_index = self._menu.index("end")
-            if end_index == "" or end_index is None:
-                return
+            return _original_add_menu_commands(self, *args, **kwargs)
         except Exception:
-            pass
-        _original_add_menu_commands(self, *args, **kwargs)
+            # Fallback for Tk variants where menu internals behave differently.
+            try:
+                self.delete(0, "end")
+            except Exception:
+                pass
+            values = list(getattr(self, "_values", []))
+            min_width = int(getattr(self, "_min_character_width", 0))
+            for value in values:
+                label = value.ljust(min_width)
+                if sys.platform.startswith("linux"):
+                    label = f"  {label}  "
+                self.add_command(
+                    label=label,
+                    command=lambda v=value: self._button_callback(v),
+                    compound="left",
+                )
+            return None
 
     _DropdownMenu._add_menu_commands = _patched_add_menu_commands
 except (ImportError, AttributeError):
@@ -63,14 +82,27 @@ except (ImportError, AttributeError):
 ROOT = None
 POPUP = None
 POPUP_LIVE = None
-ROOT_HEIGHT = 800
-ROOT_WIDTH = 600
+ROOT_HEIGHT = 900
+ROOT_WIDTH = 760
 
 PREVIEW = None
 PREVIEW_MAX_HEIGHT = 700
 PREVIEW_MAX_WIDTH = 1200
-PREVIEW_DEFAULT_WIDTH = 960
-PREVIEW_DEFAULT_HEIGHT = 540
+# 480p resolution for better FPS and more natural look
+PREVIEW_DEFAULT_WIDTH = 854  # 480p width (16:9)
+PREVIEW_DEFAULT_HEIGHT = 480  # 480p height
+LIVE_DETECTION_INTERVAL = 0.033
+DISPLAY_LOOP_INTERVAL_MS = 16
+LIVE_INTERNAL_PROCESS_WIDTH = 320
+LIVE_INTERNAL_PROCESS_HEIGHT = 180
+LIVE_PROCESS_EVERY_N_FRAMES = 1
+
+if platform.system() == "Darwin":
+    PREVIEW_DEFAULT_WIDTH = 854
+    PREVIEW_DEFAULT_HEIGHT = 480
+    LIVE_DETECTION_INTERVAL = 0.02
+    DISPLAY_LOOP_INTERVAL_MS = 12
+    LIVE_PROCESS_EVERY_N_FRAMES = 1
 
 POPUP_WIDTH = 750
 POPUP_HEIGHT = 810
@@ -94,6 +126,7 @@ RECENT_DIRECTORY_OUTPUT = None
 
 _ = None
 preview_label = None
+preview_tk_image = None
 preview_slider = None
 source_label = None
 target_label = None
@@ -103,8 +136,190 @@ popup_status_label_live = None
 source_label_dict = {}
 source_label_dict_live = {}
 target_label_dict_live = {}
+camera_optionmenu = None
+camera_variable = None
+camera_indices = []
+camera_names = []
+live_button = None
+transparency_value_label = None
+sharpness_value_label = None
+enhancer_variables = {}
+face_engine_selector = None
+face_engine_variable = None
+mlx_detector_selector = None
+mlx_detector_variable = None
+
+NO_CAMERAS_LABEL = "No cameras found"
+ENHANCER_KEYS = ("face_enhancer", "face_enhancer_gpen256", "face_enhancer_gpen512")
+FACE_ENGINE_OPTIONS = {
+    "InsightFace (ONNX)": "insightface",
+    "MLX UniFace (Apple Silicon)": "mlx_uniface",
+}
+FACE_ENGINE_OPTIONS_REVERSE = {value: key for key, value in FACE_ENGINE_OPTIONS.items()}
+MLX_DETECTOR_OPTIONS = {
+    "RetinaFace (MLX)": "retinaface",
+}
+MLX_DETECTOR_OPTIONS_REVERSE = {
+    value: key for key, value in MLX_DETECTOR_OPTIONS.items()
+}
+
+_enhancer_toggle_guard = False
+_processor_state_lock = threading.Lock()
+_processor_state_version = 0
+_status_lock = threading.Lock()
+_deferred_status_text: str | None = None
+_deferred_popup_status_text: str | None = None
+_deferred_popup_live_status_text: str | None = None
+_status_poller_started = False
 
 img_ft, vid_ft = modules.globals.file_types
+
+
+def _bump_processor_state_version() -> None:
+    global _processor_state_version
+    with _processor_state_lock:
+        _processor_state_version += 1
+
+
+def _get_processor_state_version() -> int:
+    with _processor_state_lock:
+        return _processor_state_version
+
+
+def _flush_deferred_status_updates() -> None:
+    global \
+        _deferred_status_text, \
+        _deferred_popup_status_text, \
+        _deferred_popup_live_status_text
+
+    if ROOT is None:
+        return
+    try:
+        if not ROOT.winfo_exists():
+            return
+    except Exception:
+        return
+
+    with _status_lock:
+        status_text = _deferred_status_text
+        popup_text = _deferred_popup_status_text
+        popup_live_text = _deferred_popup_live_status_text
+        _deferred_status_text = None
+        _deferred_popup_status_text = None
+        _deferred_popup_live_status_text = None
+
+    if status_text is not None and status_label is not None:
+        try:
+            if status_label.winfo_exists():
+                status_label.configure(text=status_text)
+                ROOT.update_idletasks()
+        except Exception:
+            pass
+
+    if popup_text is not None and popup_status_label is not None:
+        try:
+            if popup_status_label.winfo_exists():
+                popup_status_label.configure(text=popup_text)
+        except Exception:
+            pass
+
+    if popup_live_text is not None and popup_status_label_live is not None:
+        try:
+            if popup_status_label_live.winfo_exists():
+                popup_status_label_live.configure(text=popup_live_text)
+        except Exception:
+            pass
+
+    try:
+        ROOT.after(33, _flush_deferred_status_updates)
+    except Exception:
+        pass
+
+
+def _ensure_status_poller_started() -> None:
+    global _status_poller_started
+    if _status_poller_started or ROOT is None:
+        return
+    try:
+        if not ROOT.winfo_exists():
+            return
+        _status_poller_started = True
+        ROOT.after(33, _flush_deferred_status_updates)
+    except Exception:
+        pass
+
+
+def _normalize_enhancer_states() -> None:
+    enabled_enhancers = [
+        enhancer_key
+        for enhancer_key in ENHANCER_KEYS
+        if modules.globals.fp_ui.get(enhancer_key, False)
+    ]
+    if len(enabled_enhancers) <= 1:
+        return
+
+    preferred_order = (
+        "face_enhancer_gpen512",
+        "face_enhancer_gpen256",
+        "face_enhancer",
+    )
+    active_enhancer = next(
+        (
+            enhancer_key
+            for enhancer_key in preferred_order
+            if enhancer_key in enabled_enhancers
+        ),
+        enabled_enhancers[0],
+    )
+    for enhancer_key in ENHANCER_KEYS:
+        modules.globals.fp_ui[enhancer_key] = enhancer_key == active_enhancer
+
+
+def _get_face_engine_label() -> str:
+    engine = getattr(modules.globals, "face_analyser_engine", "insightface")
+    return FACE_ENGINE_OPTIONS_REVERSE.get(engine, "InsightFace (ONNX)")
+
+
+def _get_mlx_detector_label() -> str:
+    detector = getattr(modules.globals, "mlx_face_detector", "retinaface")
+    return MLX_DETECTOR_OPTIONS_REVERSE.get(detector, "RetinaFace (MLX)")
+
+
+def _set_mlx_detector_selector_state() -> None:
+    if mlx_detector_selector is None:
+        return
+    using_mlx = (
+        getattr(modules.globals, "face_analyser_engine", "insightface") == "mlx_uniface"
+    )
+    mlx_detector_selector.configure(state=("readonly" if using_mlx else "disabled"))
+
+
+def _apply_face_engine_selection() -> None:
+    if face_engine_variable is None:
+        return
+    selected_label = face_engine_variable.get()
+    selected_engine = FACE_ENGINE_OPTIONS.get(selected_label, "insightface")
+    modules.globals.face_analyser_engine = selected_engine
+    reset_face_analyser_state()
+    _set_mlx_detector_selector_state()
+    save_switch_states()
+    if selected_engine == "mlx_uniface":
+        update_status(
+            "MLX face analyser selected. Requires Apple Silicon + mlx-uniface."
+        )
+    else:
+        update_status("InsightFace face analyser selected.")
+
+
+def _apply_mlx_detector_selection() -> None:
+    if mlx_detector_variable is None:
+        return
+    selected_label = mlx_detector_variable.get()
+    selected_detector = MLX_DETECTOR_OPTIONS.get(selected_label, "retinaface")
+    modules.globals.mlx_face_detector = selected_detector
+    reset_face_analyser_state()
+    save_switch_states()
+    update_status(f"MLX detector set to {selected_detector}.")
 
 
 def init(start: Callable[[], None], destroy: Callable[[], None], lang: str) -> ctk.CTk:
@@ -134,6 +349,13 @@ def save_switch_states():
         "show_fps": modules.globals.show_fps,
         "mouth_mask": modules.globals.mouth_mask,
         "show_mouth_mask_box": modules.globals.show_mouth_mask_box,
+        "opacity": modules.globals.opacity,
+        "sharpness": modules.globals.sharpness,
+        "selected_camera_name": camera_variable.get()
+        if camera_variable
+        else modules.globals.camera_input_combobox,
+        "face_analyser_engine": modules.globals.face_analyser_engine,
+        "mlx_face_detector": modules.globals.mlx_face_detector,
     }
     with open("switch_states.json", "w") as f:
         json.dump(switch_states, f)
@@ -153,19 +375,97 @@ def load_switch_states():
         modules.globals.nsfw_filter = switch_states.get("nsfw_filter", False)
         modules.globals.live_mirror = switch_states.get("live_mirror", False)
         modules.globals.live_resizable = switch_states.get("live_resizable", False)
-        modules.globals.fp_ui = switch_states.get("fp_ui", {"face_enhancer": False})
+        loaded_fp_ui = switch_states.get("fp_ui", {})
+        modules.globals.fp_ui = {**modules.globals.fp_ui, **loaded_fp_ui}
+        _normalize_enhancer_states()
         modules.globals.show_fps = switch_states.get("show_fps", False)
         modules.globals.mouth_mask = switch_states.get("mouth_mask", False)
         modules.globals.show_mouth_mask_box = switch_states.get(
             "show_mouth_mask_box", False
         )
+        modules.globals.opacity = float(
+            switch_states.get("opacity", modules.globals.opacity)
+        )
+        modules.globals.sharpness = float(
+            switch_states.get("sharpness", modules.globals.sharpness)
+        )
+        modules.globals.camera_input_combobox = switch_states.get(
+            "selected_camera_name"
+        )
+        modules.globals.face_analyser_engine = switch_states.get(
+            "face_analyser_engine", modules.globals.face_analyser_engine
+        )
+        modules.globals.mlx_face_detector = switch_states.get(
+            "mlx_face_detector", modules.globals.mlx_face_detector
+        )
+        if modules.globals.mlx_face_detector not in MLX_DETECTOR_OPTIONS_REVERSE:
+            modules.globals.mlx_face_detector = "retinaface"
     except FileNotFoundError:
         # If the file doesn't exist, use default values
         pass
 
 
+def _get_selected_camera_index() -> int | None:
+    if not camera_variable or not camera_names or camera_names[0] == NO_CAMERAS_LABEL:
+        return None
+    selected = camera_variable.get()
+    if selected not in camera_names:
+        return None
+    return camera_indices[camera_names.index(selected)]
+
+
+def _set_camera_widgets_state() -> None:
+    has_camera = bool(camera_names and camera_names[0] != NO_CAMERAS_LABEL)
+    if camera_optionmenu is not None:
+        camera_optionmenu.configure(state=("readonly" if has_camera else "disabled"))
+    if live_button is not None:
+        live_button.configure(state=("normal" if has_camera else "disabled"))
+
+
+def refresh_camera_list(show_status: bool = True) -> None:
+    global camera_indices, camera_names
+
+    preferred_camera = (
+        camera_variable.get()
+        if camera_variable
+        else modules.globals.camera_input_combobox
+    )
+    camera_indices, camera_names = get_available_cameras()
+
+    values = camera_names if camera_names else [NO_CAMERAS_LABEL]
+    if camera_optionmenu is not None:
+        camera_optionmenu.configure(values=values)
+
+    if camera_variable is not None:
+        selected_name = None
+        if preferred_camera in camera_names:
+            selected_name = preferred_camera
+        elif camera_names:
+            selected_name = camera_names[0]
+        else:
+            selected_name = NO_CAMERAS_LABEL
+        camera_variable.set(selected_name)
+        modules.globals.camera_input_combobox = selected_name
+
+    _set_camera_widgets_state()
+    save_switch_states()
+
+    if show_status:
+        if camera_names and camera_names[0] != NO_CAMERAS_LABEL:
+            update_status(f"Detected {len(camera_names)} camera(s).")
+        else:
+            update_status("No cameras found.")
+
+
 def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.CTk:
     global source_label, target_label, status_label, show_fps_switch
+    global camera_optionmenu, camera_variable, live_button
+    global transparency_value_label, sharpness_value_label, enhancer_variables
+    global \
+        face_engine_selector, \
+        face_engine_variable, \
+        mlx_detector_selector, \
+        mlx_detector_variable
 
     load_switch_states()
 
@@ -174,6 +474,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     ctk.set_default_color_theme(resolve_relative_path("ui.json"))
 
     root = ctk.CTk()
+    root.geometry(f"{ROOT_WIDTH}x{ROOT_HEIGHT}")
     root.minsize(ROOT_WIDTH, ROOT_HEIGHT)
     root.title(
         f"{modules.metadata.name} {modules.metadata.version} {modules.metadata.edition}"
@@ -181,270 +482,334 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     root.configure()
     root.protocol("WM_DELETE_WINDOW", lambda: destroy())
 
-    source_label = ctk.CTkLabel(root, text=None)
-    source_label.place(relx=0.1, rely=0.05, relwidth=0.275, relheight=0.225)
+    # --- Header ---
+    header_card = ctk.CTkFrame(root, corner_radius=16, border_width=1)
+    header_card.place(relx=0.03, rely=0.02, relwidth=0.94, relheight=0.08)
 
-    target_label = ctk.CTkLabel(root, text=None)
-    target_label.place(relx=0.6, rely=0.05, relwidth=0.275, relheight=0.225)
+    title_label = ctk.CTkLabel(
+        header_card,
+        text="Deep Live Cam",
+        font=ctk.CTkFont(size=30, weight="bold"),
+        anchor="w",
+    )
+    title_label.place(relx=0.03, rely=0.12, relwidth=0.60, relheight=0.50)
+
+    subtitle_label = ctk.CTkLabel(
+        header_card,
+        text=_("Real-time Face Swap"),
+        text_color=("gray30", "gray75"),
+        anchor="w",
+    )
+    subtitle_label.place(relx=0.03, rely=0.60, relwidth=0.60, relheight=0.30)
+
+    meta_label = ctk.CTkLabel(
+        header_card,
+        text=f"v{modules.metadata.version}",
+        corner_radius=10,
+        fg_color=("gray84", "gray22"),
+        text_color=("gray18", "gray90"),
+    )
+    meta_label.place(relx=0.83, rely=0.26, relwidth=0.14, relheight=0.48)
+
+    # --- Media Selection Card ---
+    media_card = ctk.CTkFrame(root, corner_radius=16, border_width=1)
+    media_card.place(relx=0.03, rely=0.11, relwidth=0.94, relheight=0.29)
+
+    source_box = ctk.CTkFrame(media_card, corner_radius=14, border_width=1)
+    source_box.place(relx=0.03, rely=0.08, relwidth=0.43, relheight=0.62)
+    source_box_title = ctk.CTkLabel(
+        source_box, text=_("Source"), font=ctk.CTkFont(size=15, weight="bold")
+    )
+    source_box_title.place(relx=0.03, rely=0.03, relwidth=0.40, relheight=0.12)
+
+    source_label = ctk.CTkLabel(source_box, text=None)
+    source_label.place(relx=0.03, rely=0.17, relwidth=0.94, relheight=0.79)
+
+    target_box = ctk.CTkFrame(media_card, corner_radius=14, border_width=1)
+    target_box.place(relx=0.54, rely=0.08, relwidth=0.43, relheight=0.62)
+    target_box_title = ctk.CTkLabel(
+        target_box, text=_("Target"), font=ctk.CTkFont(size=15, weight="bold")
+    )
+    target_box_title.place(relx=0.03, rely=0.03, relwidth=0.40, relheight=0.12)
+
+    target_label = ctk.CTkLabel(target_box, text=None)
+    target_label.place(relx=0.03, rely=0.17, relwidth=0.94, relheight=0.79)
 
     select_face_button = ctk.CTkButton(
-        root, text=_("Select a face"), cursor="hand2", command=lambda: select_source_path()
+        media_card,
+        text=_("Select a face"),
+        cursor="hand2",
+        command=lambda: select_source_path(),
     )
-    select_face_button.place(relx=0.1, rely=0.30, relwidth=0.3, relheight=0.1)
+    select_face_button.place(relx=0.03, rely=0.77, relwidth=0.33, relheight=0.17)
 
     swap_faces_button = ctk.CTkButton(
-        root, text="↔", cursor="hand2", command=lambda: swap_faces_paths()
+        media_card, text="Swap", cursor="hand2", command=lambda: swap_faces_paths()
     )
-    swap_faces_button.place(relx=0.45, rely=0.30, relwidth=0.1, relheight=0.1)
+    swap_faces_button.place(relx=0.38, rely=0.77, relwidth=0.24, relheight=0.17)
 
     select_target_button = ctk.CTkButton(
-        root,
+        media_card,
         text=_("Select a target"),
         cursor="hand2",
         command=lambda: select_target_path(),
     )
-    select_target_button.place(relx=0.6, rely=0.30, relwidth=0.3, relheight=0.1)
+    select_target_button.place(relx=0.64, rely=0.77, relwidth=0.33, relheight=0.17)
+
+    # --- Processing Cards ---
+    processing_card = ctk.CTkFrame(root, corner_radius=16, border_width=1)
+    processing_card.place(relx=0.03, rely=0.42, relwidth=0.46, relheight=0.38)
+    processing_label = ctk.CTkLabel(
+        processing_card,
+        text=_("Processing"),
+        anchor="w",
+        font=ctk.CTkFont(size=18, weight="bold"),
+    )
+    processing_label.place(relx=0.05, rely=0.03, relwidth=0.90, relheight=0.09)
+
+    live_card = ctk.CTkFrame(root, corner_radius=16, border_width=1)
+    live_card.place(relx=0.51, rely=0.42, relwidth=0.46, relheight=0.38)
+    live_label = ctk.CTkLabel(
+        live_card,
+        text=_("Live & Enhancers"),
+        anchor="w",
+        font=ctk.CTkFont(size=18, weight="bold"),
+    )
+    live_label.place(relx=0.05, rely=0.03, relwidth=0.90, relheight=0.09)
+
+    def create_switch(
+        parent: ctk.CTkFrame,
+        text: str,
+        variable: ctk.BooleanVar,
+        command: Callable[[], None],
+        rely: float,
+        relheight: float = 0.08,
+    ) -> ctk.CTkSwitch:
+        switch = ctk.CTkSwitch(
+            parent, text=text, variable=variable, cursor="hand2", command=command
+        )
+        switch.place(relx=0.06, rely=rely, relwidth=0.88, relheight=relheight)
+        return switch
+
+    face_engine_label = ctk.CTkLabel(live_card, text=_("Face Engine"), anchor="w")
+    face_engine_label.place(relx=0.06, rely=0.13, relwidth=0.34, relheight=0.06)
+
+    face_engine_variable = ctk.StringVar(value=_get_face_engine_label())
+    face_engine_selector = ctk.CTkComboBox(
+        live_card,
+        variable=face_engine_variable,
+        values=list(FACE_ENGINE_OPTIONS.keys()),
+        state="readonly",
+        command=lambda _value: _apply_face_engine_selection(),
+    )
+    face_engine_selector.place(relx=0.40, rely=0.13, relwidth=0.54, relheight=0.07)
+
+    mlx_detector_label = ctk.CTkLabel(live_card, text=_("MLX Detector"), anchor="w")
+    mlx_detector_label.place(relx=0.06, rely=0.22, relwidth=0.34, relheight=0.06)
+
+    mlx_detector_variable = ctk.StringVar(value=_get_mlx_detector_label())
+    mlx_detector_selector = ctk.CTkComboBox(
+        live_card,
+        variable=mlx_detector_variable,
+        values=list(MLX_DETECTOR_OPTIONS.keys()),
+        state="disabled",
+        command=lambda _value: _apply_mlx_detector_selection(),
+    )
+    mlx_detector_selector.place(relx=0.40, rely=0.22, relwidth=0.54, relheight=0.07)
+    _set_mlx_detector_selector_state()
 
     keep_fps_value = ctk.BooleanVar(value=modules.globals.keep_fps)
-    keep_fps_checkbox = ctk.CTkSwitch(
-        root,
+    keep_fps_checkbox = create_switch(
+        processing_card,
         text=_("Keep fps"),
         variable=keep_fps_value,
-        cursor="hand2",
         command=lambda: (
             setattr(modules.globals, "keep_fps", keep_fps_value.get()),
             save_switch_states(),
         ),
+        rely=0.15,
     )
-    keep_fps_checkbox.place(relx=0.1, rely=0.5)
 
     keep_frames_value = ctk.BooleanVar(value=modules.globals.keep_frames)
-    keep_frames_switch = ctk.CTkSwitch(
-        root,
+    keep_frames_switch = create_switch(
+        processing_card,
         text=_("Keep frames"),
         variable=keep_frames_value,
-        cursor="hand2",
         command=lambda: (
             setattr(modules.globals, "keep_frames", keep_frames_value.get()),
             save_switch_states(),
         ),
+        rely=0.26,
     )
-    keep_frames_switch.place(relx=0.1, rely=0.55)
-
-    enhancer_value = ctk.BooleanVar(value=modules.globals.fp_ui["face_enhancer"])
-    enhancer_switch = ctk.CTkSwitch(
-        root,
-        text=_("Face Enhancer"),
-        variable=enhancer_value,
-        cursor="hand2",
-        command=lambda: (
-            update_tumbler("face_enhancer", enhancer_value.get()),
-            save_switch_states(),
-        ),
-    )
-    enhancer_switch.place(relx=0.1, rely=0.6)
-
-    gpen256_value = ctk.BooleanVar(value=modules.globals.fp_ui.get("face_enhancer_gpen256", False))
-    gpen256_switch = ctk.CTkSwitch(
-        root,
-        text=_("GPEN Enhancer 256"),
-        variable=gpen256_value,
-        cursor="hand2",
-        command=lambda: (
-            update_tumbler("face_enhancer_gpen256", gpen256_value.get()),
-            save_switch_states(),
-        ),
-    )
-    gpen256_switch.place(relx=0.1, rely=0.65)
-
-    gpen512_value = ctk.BooleanVar(value=modules.globals.fp_ui.get("face_enhancer_gpen512", False))
-    gpen512_switch = ctk.CTkSwitch(
-        root,
-        text=_("GPEN Enhancer 512"),
-        variable=gpen512_value,
-        cursor="hand2",
-        command=lambda: (
-            update_tumbler("face_enhancer_gpen512", gpen512_value.get()),
-            save_switch_states(),
-        ),
-    )
-    gpen512_switch.place(relx=0.1, rely=0.7)
 
     keep_audio_value = ctk.BooleanVar(value=modules.globals.keep_audio)
-    keep_audio_switch = ctk.CTkSwitch(
-        root,
+    keep_audio_switch = create_switch(
+        live_card,
         text=_("Keep audio"),
         variable=keep_audio_value,
-        cursor="hand2",
         command=lambda: (
             setattr(modules.globals, "keep_audio", keep_audio_value.get()),
             save_switch_states(),
         ),
+        rely=0.33,
     )
-    keep_audio_switch.place(relx=0.6, rely=0.5)
 
     many_faces_value = ctk.BooleanVar(value=modules.globals.many_faces)
-    many_faces_switch = ctk.CTkSwitch(
-        root,
+    many_faces_switch = create_switch(
+        live_card,
         text=_("Many faces"),
         variable=many_faces_value,
-        cursor="hand2",
         command=lambda: (
             setattr(modules.globals, "many_faces", many_faces_value.get()),
             save_switch_states(),
         ),
+        rely=0.41,
     )
-    many_faces_switch.place(relx=0.6, rely=0.55)
 
     color_correction_value = ctk.BooleanVar(value=modules.globals.color_correction)
-    color_correction_switch = ctk.CTkSwitch(
-        root,
+    color_correction_switch = create_switch(
+        live_card,
         text=_("Fix Blueish Cam"),
         variable=color_correction_value,
-        cursor="hand2",
         command=lambda: (
             setattr(modules.globals, "color_correction", color_correction_value.get()),
             save_switch_states(),
         ),
+        rely=0.49,
     )
-    color_correction_switch.place(relx=0.6, rely=0.6)
-
-    #    nsfw_value = ctk.BooleanVar(value=modules.globals.nsfw_filter)
-    #    nsfw_switch = ctk.CTkSwitch(root, text='NSFW filter', variable=nsfw_value, cursor='hand2', command=lambda: setattr(modules.globals, 'nsfw_filter', nsfw_value.get()))
-    #    nsfw_switch.place(relx=0.6, rely=0.7)
 
     map_faces = ctk.BooleanVar(value=modules.globals.map_faces)
-    map_faces_switch = ctk.CTkSwitch(
-        root,
+    map_faces_switch = create_switch(
+        processing_card,
         text=_("Map faces"),
         variable=map_faces,
-        cursor="hand2",
         command=lambda: (
             setattr(modules.globals, "map_faces", map_faces.get()),
             save_switch_states(),
-            close_mapper_window() if not map_faces.get() else None
+            close_mapper_window() if not map_faces.get() else None,
         ),
+        rely=0.37,
     )
-    map_faces_switch.place(relx=0.1, rely=0.75)
 
     poisson_blend_value = ctk.BooleanVar(value=modules.globals.poisson_blend)
-    poisson_blend_switch = ctk.CTkSwitch(
-        root,
+    poisson_blend_switch = create_switch(
+        processing_card,
         text=_("Poisson Blend"),
         variable=poisson_blend_value,
-        cursor="hand2",
         command=lambda: (
             setattr(modules.globals, "poisson_blend", poisson_blend_value.get()),
             save_switch_states(),
         ),
+        rely=0.48,
     )
-    poisson_blend_switch.place(relx=0.1, rely=0.8)
 
     show_fps_value = ctk.BooleanVar(value=modules.globals.show_fps)
-    show_fps_switch = ctk.CTkSwitch(
-        root,
+    show_fps_switch = create_switch(
+        live_card,
         text=_("Show FPS"),
         variable=show_fps_value,
-        cursor="hand2",
         command=lambda: (
             setattr(modules.globals, "show_fps", show_fps_value.get()),
             save_switch_states(),
         ),
+        rely=0.57,
     )
-    show_fps_switch.place(relx=0.6, rely=0.65)
 
     mouth_mask_var = ctk.BooleanVar(value=modules.globals.mouth_mask)
-    mouth_mask_switch = ctk.CTkSwitch(
-        root,
+    mouth_mask_switch = create_switch(
+        processing_card,
         text=_("Mouth Mask"),
         variable=mouth_mask_var,
-        cursor="hand2",
-        command=lambda: setattr(modules.globals, "mouth_mask", mouth_mask_var.get()),
+        command=lambda: (
+            setattr(modules.globals, "mouth_mask", mouth_mask_var.get()),
+            save_switch_states(),
+        ),
+        rely=0.59,
     )
-    mouth_mask_switch.place(relx=0.1, rely=0.45)
 
     show_mouth_mask_box_var = ctk.BooleanVar(value=modules.globals.show_mouth_mask_box)
-    show_mouth_mask_box_switch = ctk.CTkSwitch(
-        root,
+    show_mouth_mask_box_switch = create_switch(
+        processing_card,
         text=_("Show Mouth Mask Box"),
         variable=show_mouth_mask_box_var,
-        cursor="hand2",
-        command=lambda: setattr(
-            modules.globals, "show_mouth_mask_box", show_mouth_mask_box_var.get()
-        ),
-    )
-    show_mouth_mask_box_switch.place(relx=0.6, rely=0.45)
-
-    start_button = ctk.CTkButton(
-        root, text=_("Start"), cursor="hand2", command=lambda: analyze_target(start, root)
-    )
-    start_button.place(relx=0.15, rely=0.86, relwidth=0.2, relheight=0.05)
-
-    stop_button = ctk.CTkButton(
-        root, text=_("Destroy"), cursor="hand2", command=lambda: destroy()
-    )
-    stop_button.place(relx=0.4, rely=0.86, relwidth=0.2, relheight=0.05)
-
-    preview_button = ctk.CTkButton(
-        root, text=_("Preview"), cursor="hand2", command=lambda: toggle_preview()
-    )
-    preview_button.place(relx=0.65, rely=0.86, relwidth=0.2, relheight=0.05)
-
-    # --- Camera Selection ---
-    camera_label = ctk.CTkLabel(root, text=_("Select Camera:"))
-    camera_label.place(relx=0.1, rely=0.92, relwidth=0.2, relheight=0.05)
-
-    available_cameras = get_available_cameras()
-    camera_indices, camera_names = available_cameras
-
-    if not camera_names or camera_names[0] == "No cameras found":
-        camera_variable = ctk.StringVar(value="No cameras found")
-        camera_optionmenu = ctk.CTkOptionMenu(
-            root,
-            variable=camera_variable,
-            values=["No cameras found"],
-            state="disabled",
-        )
-    else:
-        camera_variable = ctk.StringVar(value=camera_names[0])
-        camera_optionmenu = ctk.CTkOptionMenu(
-            root, variable=camera_variable, values=camera_names
-        )
-
-    camera_optionmenu.place(relx=0.35, rely=0.92, relwidth=0.25, relheight=0.05)
-
-    live_button = ctk.CTkButton(
-        root,
-        text=_("Live"),
-        cursor="hand2",
-        command=lambda: webcam_preview(
-            root,
-            (
-                camera_indices[camera_names.index(camera_variable.get())]
-                if camera_names and camera_names[0] != "No cameras found"
-                else None
+        command=lambda: (
+            setattr(
+                modules.globals, "show_mouth_mask_box", show_mouth_mask_box_var.get()
             ),
+            save_switch_states(),
         ),
-        state=(
-            "normal"
-            if camera_names and camera_names[0] != "No cameras found"
-            else "disabled"
-        ),
+        rely=0.70,
     )
-    live_button.place(relx=0.65, rely=0.92, relwidth=0.2, relheight=0.05)
-    # --- End Camera Selection ---
 
-    # 1) Define a DoubleVar for transparency (0 = fully transparent, 1 = fully opaque)
-    transparency_var = ctk.DoubleVar(value=1.0)
+    enhancer_hint = ctk.CTkLabel(
+        live_card,
+        text=_("Enhancers (exclusive mode)"),
+        text_color=("gray36", "gray70"),
+        anchor="w",
+    )
+    enhancer_hint.place(relx=0.06, rely=0.65, relwidth=0.88, relheight=0.06)
+
+    enhancer_value = ctk.BooleanVar(value=modules.globals.fp_ui["face_enhancer"])
+    create_switch(
+        live_card,
+        text=_("Face Enhancer"),
+        variable=enhancer_value,
+        command=lambda: update_tumbler("face_enhancer", enhancer_value.get()),
+        rely=0.72,
+        relheight=0.07,
+    )
+
+    gpen256_value = ctk.BooleanVar(
+        value=modules.globals.fp_ui.get("face_enhancer_gpen256", False)
+    )
+    create_switch(
+        live_card,
+        text=_("GPEN Enhancer 256"),
+        variable=gpen256_value,
+        command=lambda: update_tumbler("face_enhancer_gpen256", gpen256_value.get()),
+        rely=0.80,
+        relheight=0.07,
+    )
+
+    gpen512_value = ctk.BooleanVar(
+        value=modules.globals.fp_ui.get("face_enhancer_gpen512", False)
+    )
+    create_switch(
+        live_card,
+        text=_("GPEN Enhancer 512"),
+        variable=gpen512_value,
+        command=lambda: update_tumbler("face_enhancer_gpen512", gpen512_value.get()),
+        rely=0.88,
+        relheight=0.07,
+    )
+
+    enhancer_variables = {
+        "face_enhancer": enhancer_value,
+        "face_enhancer_gpen256": gpen256_value,
+        "face_enhancer_gpen512": gpen512_value,
+    }
+
+    # --- Fine Tuning ---
+    controls_label = ctk.CTkLabel(
+        root, text=_("Fine Tuning"), font=ctk.CTkFont(size=18, weight="bold")
+    )
+    controls_label.place(relx=0.03, rely=0.81, relwidth=0.30, relheight=0.03)
+
+    tuning_card = ctk.CTkFrame(root, corner_radius=16, border_width=1)
+    tuning_card.place(relx=0.03, rely=0.84, relwidth=0.94, relheight=0.10)
+
+    transparency_var = ctk.DoubleVar(value=float(modules.globals.opacity))
 
     def on_transparency_change(value: float):
-        # Convert slider value to float
         val = float(value)
-        modules.globals.opacity = val  # Set global opacity
+        modules.globals.opacity = val
         percentage = int(val * 100)
+        if transparency_value_label is not None:
+            transparency_value_label.configure(text=f"{percentage}%")
+        save_switch_states()
 
         if percentage == 0:
-            modules.globals.fp_ui["face_enhancer"] = False
+            modules.globals.face_swapper_enabled = False
             update_status("Transparency set to 0% - Face swapping disabled.")
         elif percentage == 100:
             modules.globals.face_swapper_enabled = True
@@ -453,66 +818,138 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             modules.globals.face_swapper_enabled = True
             update_status(f"Transparency set to {percentage}%")
 
-    # 2) Transparency label and slider (placed ABOVE sharpness)
-    transparency_label = ctk.CTkLabel(root, text="Transparency:")
-    transparency_label.place(relx=0.15, rely=0.75, relwidth=0.2, relheight=0.05)
+    transparency_label = ctk.CTkLabel(tuning_card, text="Transparency:")
+    transparency_label.place(relx=0.03, rely=0.12, relwidth=0.16, relheight=0.32)
+
+    transparency_value_label = ctk.CTkLabel(
+        tuning_card,
+        text=f"{int(float(modules.globals.opacity) * 100)}%",
+        text_color=("gray35", "gray70"),
+    )
+    transparency_value_label.place(relx=0.20, rely=0.12, relwidth=0.08, relheight=0.32)
 
     transparency_slider = ctk.CTkSlider(
-        root,
+        tuning_card,
         from_=0.0,
         to=1.0,
         variable=transparency_var,
         command=on_transparency_change,
-        fg_color="#E0E0E0",
-        progress_color="#007BFF",
-        button_color="#FFFFFF",
-        button_hover_color="#CCCCCC",
         height=5,
         border_width=1,
         corner_radius=3,
     )
-    transparency_slider.place(relx=0.35, rely=0.77, relwidth=0.5, relheight=0.02)
+    transparency_slider.place(relx=0.30, rely=0.22, relwidth=0.67, relheight=0.12)
 
-    # 3) Sharpness label & slider
-    sharpness_var = ctk.DoubleVar(value=0.0)  # start at 0.0
+    sharpness_var = ctk.DoubleVar(value=float(modules.globals.sharpness))
+
     def on_sharpness_change(value: float):
         modules.globals.sharpness = float(value)
+        if sharpness_value_label is not None:
+            sharpness_value_label.configure(text=f"{float(value):.1f}")
+        save_switch_states()
         update_status(f"Sharpness set to {value:.1f}")
 
-    sharpness_label = ctk.CTkLabel(root, text="Sharpness:")
-    sharpness_label.place(relx=0.15, rely=0.80, relwidth=0.2, relheight=0.05)
+    sharpness_label = ctk.CTkLabel(tuning_card, text="Sharpness:")
+    sharpness_label.place(relx=0.03, rely=0.54, relwidth=0.16, relheight=0.32)
+
+    sharpness_value_label = ctk.CTkLabel(
+        tuning_card,
+        text=f"{float(modules.globals.sharpness):.1f}",
+        text_color=("gray35", "gray70"),
+    )
+    sharpness_value_label.place(relx=0.20, rely=0.54, relwidth=0.08, relheight=0.32)
 
     sharpness_slider = ctk.CTkSlider(
-        root,
+        tuning_card,
         from_=0.0,
         to=5.0,
         variable=sharpness_var,
         command=on_sharpness_change,
-        fg_color="#E0E0E0",
-        progress_color="#007BFF",
-        button_color="#FFFFFF",
-        button_hover_color="#CCCCCC",
         height=5,
         border_width=1,
         corner_radius=3,
     )
-    sharpness_slider.place(relx=0.35, rely=0.82, relwidth=0.5, relheight=0.02)
+    sharpness_slider.place(relx=0.30, rely=0.64, relwidth=0.67, relheight=0.12)
 
-    # Status and link at the bottom
+    # --- Actions / Camera ---
+    action_row = ctk.CTkFrame(root, corner_radius=16, border_width=1)
+    action_row.place(relx=0.03, rely=0.93, relwidth=0.94, relheight=0.05)
+
+    start_button = ctk.CTkButton(
+        action_row,
+        text=_("Start"),
+        cursor="hand2",
+        command=lambda: analyze_target(start, root),
+    )
+    start_button.place(relx=0.01, rely=0.16, relwidth=0.16, relheight=0.68)
+
+    stop_button = ctk.CTkButton(
+        action_row, text=_("Stop"), cursor="hand2", command=lambda: destroy()
+    )
+    stop_button.place(relx=0.18, rely=0.16, relwidth=0.16, relheight=0.68)
+
+    preview_button = ctk.CTkButton(
+        action_row, text=_("Preview"), cursor="hand2", command=lambda: toggle_preview()
+    )
+    preview_button.place(relx=0.35, rely=0.16, relwidth=0.16, relheight=0.68)
+
+    # --- Camera Selection ---
+    camera_label = ctk.CTkLabel(action_row, text=_("Camera:"), anchor="e")
+    camera_label.place(relx=0.53, rely=0.10, relwidth=0.10, relheight=0.80)
+
+    camera_variable = ctk.StringVar(value=NO_CAMERAS_LABEL)
+    camera_optionmenu = ctk.CTkComboBox(
+        action_row,
+        variable=camera_variable,
+        values=[NO_CAMERAS_LABEL],
+        state="disabled",
+    )
+    camera_optionmenu.place(relx=0.64, rely=0.16, relwidth=0.20, relheight=0.68)
+    camera_variable.trace_add(
+        "write",
+        lambda *_: (
+            setattr(modules.globals, "camera_input_combobox", camera_variable.get()),
+            save_switch_states(),
+        ),
+    )
+
+    refresh_camera_button = ctk.CTkButton(
+        action_row,
+        text=_("Refresh"),
+        cursor="hand2",
+        command=lambda: refresh_camera_list(show_status=True),
+    )
+    refresh_camera_button.place(relx=0.85, rely=0.16, relwidth=0.07, relheight=0.68)
+
+    live_button = ctk.CTkButton(
+        action_row,
+        text=_("Live"),
+        cursor="hand2",
+        command=lambda: webcam_preview(root, _get_selected_camera_index()),
+        state="disabled",
+    )
+    live_button.place(relx=0.93, rely=0.16, relwidth=0.06, relheight=0.68)
+
+    refresh_camera_list(show_status=False)
+    # --- End Camera Selection ---
+
+    # Status and link
     global status_label
-    status_label = ctk.CTkLabel(root, text=None, justify="center")
-    status_label.place(relx=0.1, rely=0.96, relwidth=0.8)
+    status_label = ctk.CTkLabel(root, text=None, justify="left", anchor="w")
+    status_label.place(relx=0.03, rely=0.981, relwidth=0.58, relheight=0.018)
 
     donate_label = ctk.CTkLabel(
-        root, text="Deep Live Cam", justify="center", cursor="hand2"
+        root, text="Deep Live Cam", justify="right", anchor="e", cursor="hand2"
     )
-    donate_label.place(relx=0.1, rely=0.98, relwidth=0.8)
+    donate_label.place(relx=0.62, rely=0.981, relwidth=0.35, relheight=0.018)
     donate_label.configure(
         text_color=ctk.ThemeManager.theme.get("URL").get("text_color")
     )
     donate_label.bind(
         "<Button>", lambda event: webbrowser.open("https://deeplivecam.net")
     )
+
+    _ensure_status_poller_started()
 
     return root
 
@@ -551,7 +988,7 @@ def analyze_target(start: Callable[[], None], root: ctk.CTk):
 
 
 def create_source_target_popup(
-        start: Callable[[], None], root: ctk.CTk, map: list
+    start: Callable[[], None], root: ctk.CTk, map: list
 ) -> None:
     global POPUP, popup_status_label
 
@@ -620,7 +1057,7 @@ def create_source_target_popup(
 
 
 def update_popup_source(
-        scrollable_frame: ctk.CTkScrollableFrame, map: list, button_num: int
+    scrollable_frame: ctk.CTkScrollableFrame, map: list, button_num: int
 ) -> list:
     global source_label_dict
 
@@ -645,7 +1082,7 @@ def update_popup_source(
             x_min, y_min, x_max, y_max = face["bbox"]
 
             map[button_num]["source"] = {
-                "cv2": cv2_img[int(y_min): int(y_max), int(x_min): int(x_max)],
+                "cv2": cv2_img[int(y_min) : int(y_max), int(x_min) : int(x_max)],
                 "face": face,
             }
 
@@ -672,7 +1109,7 @@ def update_popup_source(
 
 
 def create_preview(parent: ctk.CTkToplevel) -> ctk.CTkToplevel:
-    global preview_label, preview_slider
+    global preview_label, preview_slider, preview_tk_image
 
     preview = ctk.CTkToplevel(parent)
     preview.withdraw()
@@ -683,6 +1120,7 @@ def create_preview(parent: ctk.CTkToplevel) -> ctk.CTkToplevel:
 
     preview_label = ctk.CTkLabel(preview, text=None)
     preview_label.pack(fill="both", expand=True)
+    preview_tk_image = None
 
     preview_slider = ctk.CTkSlider(
         preview, from_=0, to=0, command=lambda frame_value: update_preview(frame_value)
@@ -692,27 +1130,80 @@ def create_preview(parent: ctk.CTkToplevel) -> ctk.CTkToplevel:
 
 
 def update_status(text: str) -> None:
-    status_label.configure(text=_(text))
-    ROOT.update()
+    translated = _(text) if _ else text
+
+    if threading.current_thread() is not threading.main_thread():
+        with _status_lock:
+            global _deferred_status_text
+            _deferred_status_text = translated
+        return
+
+    def _apply() -> None:
+        if status_label is not None and status_label.winfo_exists():
+            status_label.configure(text=translated)
+        if ROOT is not None and ROOT.winfo_exists():
+            ROOT.update_idletasks()
+
+    _apply()
 
 
 def update_pop_status(text: str) -> None:
-    popup_status_label.configure(text=_(text))
+    translated = _(text) if _ else text
+
+    if threading.current_thread() is not threading.main_thread():
+        with _status_lock:
+            global _deferred_popup_status_text
+            _deferred_popup_status_text = translated
+        return
+
+    def _apply() -> None:
+        if popup_status_label is not None and popup_status_label.winfo_exists():
+            popup_status_label.configure(text=translated)
+
+    _apply()
 
 
 def update_pop_live_status(text: str) -> None:
-    popup_status_label_live.configure(text=_(text))
+    translated = _(text) if _ else text
+
+    if threading.current_thread() is not threading.main_thread():
+        with _status_lock:
+            global _deferred_popup_live_status_text
+            _deferred_popup_live_status_text = translated
+        return
+
+    def _apply() -> None:
+        if (
+            popup_status_label_live is not None
+            and popup_status_label_live.winfo_exists()
+        ):
+            popup_status_label_live.configure(text=translated)
+
+    _apply()
 
 
 def update_tumbler(var: str, value: bool) -> None:
-    modules.globals.fp_ui[var] = value
+    global _enhancer_toggle_guard
+
+    if var in ENHANCER_KEYS and _enhancer_toggle_guard:
+        return
+
+    if var in ENHANCER_KEYS and value:
+        _enhancer_toggle_guard = True
+        try:
+            for enhancer_key in ENHANCER_KEYS:
+                is_enabled = enhancer_key == var
+                modules.globals.fp_ui[enhancer_key] = is_enabled
+                enhancer_var = enhancer_variables.get(enhancer_key)
+                if enhancer_var is not None and enhancer_var.get() != is_enabled:
+                    enhancer_var.set(is_enabled)
+        finally:
+            _enhancer_toggle_guard = False
+    else:
+        modules.globals.fp_ui[var] = value
+
+    _bump_processor_state_version()
     save_switch_states()
-    # If we're currently in a live preview, update the frame processors
-    if PREVIEW.state() == "normal":
-        global frame_processors
-        frame_processors = get_frame_processors_modules(
-            modules.globals.frame_processors
-        )
 
 
 def select_source_path() -> None:
@@ -729,9 +1220,11 @@ def select_source_path() -> None:
         RECENT_DIRECTORY_SOURCE = os.path.dirname(modules.globals.source_path)
         image = render_image_preview(modules.globals.source_path, (200, 200))
         source_label.configure(image=image)
+        update_status(f"Source selected: {os.path.basename(source_path)}")
     else:
         modules.globals.source_path = None
         source_label.configure(image=None)
+        update_status("Source cleared.")
 
 
 def swap_faces_paths() -> None:
@@ -772,14 +1265,17 @@ def select_target_path() -> None:
         RECENT_DIRECTORY_TARGET = os.path.dirname(modules.globals.target_path)
         image = render_image_preview(modules.globals.target_path, (200, 200))
         target_label.configure(image=image)
+        update_status(f"Target image selected: {os.path.basename(target_path)}")
     elif is_video(target_path):
         modules.globals.target_path = target_path
         RECENT_DIRECTORY_TARGET = os.path.dirname(modules.globals.target_path)
         video_frame = render_video_preview(target_path, (200, 200))
         target_label.configure(image=video_frame)
+        update_status(f"Target video selected: {os.path.basename(target_path)}")
     else:
         modules.globals.target_path = None
         target_label.configure(image=None)
+        update_status("Target cleared.")
 
 
 def select_output_path(start: Callable[[], None]) -> None:
@@ -814,11 +1310,19 @@ def check_and_ignore_nsfw(target, destroy: Callable = None) -> bool:
     TODO: Consider to make blur the target.
     """
     from numpy import ndarray
-    from modules.predicter import predict_image, predict_video, predict_frame
 
-    if type(target) is str:  # image/video file path
+    try:
+        from modules.predicter import predict_image, predict_video, predict_frame
+    except ModuleNotFoundError:
+        update_status(
+            "NSFW filter dependencies are missing on this platform. Continuing."
+        )
+        return False
+
+    check_nsfw = None
+    if isinstance(target, str):  # image/video file path
         check_nsfw = predict_image if has_image_extension(target) else predict_video
-    elif type(target) is ndarray:  # frame object
+    elif isinstance(target, ndarray):  # frame object
         check_nsfw = predict_frame
     if check_nsfw and check_nsfw(target):
         if destroy:
@@ -831,19 +1335,74 @@ def check_and_ignore_nsfw(target, destroy: Callable = None) -> bool:
         return False
 
 
+def _ensure_bgr_uint8_frame(frame):
+    if frame is None:
+        return None
+    if not isinstance(frame, np.ndarray):
+        return None
+    if frame.dtype != np.uint8:
+        frame = np.clip(frame, 0, 255).astype(np.uint8)
+    if frame.ndim == 2:
+        try:
+            return cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+        except Exception:
+            return None
+    if frame.ndim == 3 and frame.shape[2] == 4:
+        try:
+            return cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
+        except Exception:
+            return None
+    if frame.ndim == 3 and frame.shape[2] == 3:
+        return frame
+    return None
+
+
 def fit_image_to_size(image, width: int, height: int):
-    if width is None and height is None:
+    if image is None:
         return image
-    h, w, _ = image.shape
-    ratio_h = 0.0
-    ratio_w = 0.0
-    if width > height:
-        ratio_h = height / h
-    else:
-        ratio_w = width / w
-    ratio = max(ratio_w, ratio_h)
-    new_size = (int(ratio * w), int(ratio * h))
-    return gpu_resize(image, dsize=new_size)
+    if width is None or height is None or width <= 1 or height <= 1:
+        return image
+
+    h, w = image.shape[:2]
+    if h <= 0 or w <= 0:
+        return image
+
+    scale = min(width / w, height / h)
+    if scale <= 0:
+        return image
+
+    new_w = max(1, int(round(w * scale)))
+    new_h = max(1, int(round(h * scale)))
+    if new_w == w and new_h == h:
+        return image
+
+    interpolation = cv2.INTER_AREA if scale < 1.0 else cv2.INTER_LINEAR
+    return gpu_resize(image, dsize=(new_w, new_h), interpolation=interpolation)
+
+
+def fit_image_to_canvas(image, width: int, height: int):
+    image = _ensure_bgr_uint8_frame(image)
+    if image is None:
+        return None
+    if width is None or height is None or width <= 1 or height <= 1:
+        return image
+
+    fitted = fit_image_to_size(image, width, height)
+    fitted = _ensure_bgr_uint8_frame(fitted)
+    if fitted is None:
+        return None
+
+    out_h, out_w = fitted.shape[:2]
+    if out_w == width and out_h == height:
+        return fitted
+
+    canvas = np.zeros((height, width, 3), dtype=np.uint8)
+    x0 = max(0, (width - out_w) // 2)
+    y0 = max(0, (height - out_h) // 2)
+    x1 = min(width, x0 + out_w)
+    y1 = min(height, y0 + out_h)
+    canvas[y0:y1, x0:x1] = fitted[: y1 - y0, : x1 - x0]
+    return canvas
 
 
 def render_image_preview(image_path: str, size: Tuple[int, int]) -> ctk.CTkImage:
@@ -854,7 +1413,7 @@ def render_image_preview(image_path: str, size: Tuple[int, int]) -> ctk.CTkImage
 
 
 def render_video_preview(
-        video_path: str, size: Tuple[int, int], frame_number: int = 0
+    video_path: str, size: Tuple[int, int], frame_number: int = 0
 ) -> ctk.CTkImage:
     capture = cv2.VideoCapture(video_path)
     if frame_number:
@@ -888,13 +1447,14 @@ def init_preview() -> None:
 
 
 def update_preview(frame_number: int = 0) -> None:
+    global preview_tk_image
     if modules.globals.source_path and modules.globals.target_path:
         update_status("Processing...")
         temp_frame = get_video_frame(modules.globals.target_path, frame_number)
         if modules.globals.nsfw_filter and check_and_ignore_nsfw(temp_frame):
             return
         for frame_processor in get_frame_processors_modules(
-                modules.globals.frame_processors
+            modules.globals.frame_processors
         ):
             temp_frame = frame_processor.process_frame(
                 get_one_face(cv2.imread(modules.globals.source_path)), temp_frame
@@ -903,8 +1463,14 @@ def update_preview(frame_number: int = 0) -> None:
         image = ImageOps.contain(
             image, (PREVIEW_MAX_WIDTH, PREVIEW_MAX_HEIGHT), Image.LANCZOS
         )
-        image = ctk.CTkImage(image, size=image.size)
-        preview_label.configure(image=image)
+        if preview_tk_image is None or preview_tk_image.cget("size") != image.size:
+            preview_tk_image = ctk.CTkImage(image, size=image.size)
+        else:
+            preview_tk_image.configure(
+                light_image=image, dark_image=image, size=image.size
+            )
+        preview_label.configure(image=preview_tk_image)
+        preview_label.image = preview_tk_image
         update_status("Processing succeed!")
         PREVIEW.deiconify()
 
@@ -912,22 +1478,104 @@ def update_preview(frame_number: int = 0) -> None:
 def webcam_preview(root: ctk.CTk, camera_index: int):
     global POPUP_LIVE
 
-    if POPUP_LIVE and POPUP_LIVE.winfo_exists():
-        update_status("Source x Target Mapper is already open.")
-        POPUP_LIVE.focus()
+    if camera_index is None:
+        update_status("No camera selected.")
         return
 
     if not modules.globals.map_faces:
         if modules.globals.source_path is None:
             update_status("Please select a source image first")
             return
-        create_webcam_preview(camera_index)
+        source_frame = cv2.imread(modules.globals.source_path)
+        if source_frame is None:
+            update_status("Unable to read source image.")
+            return
+        if get_one_face(source_frame) is None:
+            update_status("No face detected in the selected source image.")
+            return
     else:
-        modules.globals.source_target_map = []
-        create_source_target_popup_for_webcam(
-            root, modules.globals.source_target_map, camera_index
-        )
+        # Live must always open camera directly, even with map mode enabled.
+        # Mapping can be configured separately without blocking startup.
+        if POPUP_LIVE and POPUP_LIVE.winfo_exists():
+            POPUP_LIVE.destroy()
+            POPUP_LIVE = None
+        if not modules.globals.simple_map and not has_valid_map():
+            update_status("Live opened. Configure face maps to apply swaps.")
 
+    create_webcam_preview(camera_index)
+
+
+def _get_macos_cameras_via_ffmpeg():
+    """Return AVFoundation video devices as (indices, names)."""
+    try:
+        proc = subprocess.run(
+            [
+                "ffmpeg",
+                "-hide_banner",
+                "-f",
+                "avfoundation",
+                "-list_devices",
+                "true",
+                "-i",
+                "",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=6,
+            check=False,
+        )
+    except Exception:
+        return [], []
+
+    output = f"{proc.stdout}\n{proc.stderr}"
+    camera_indices = []
+    camera_names = []
+    in_video_section = False
+
+    for raw_line in output.splitlines():
+        line = raw_line.strip()
+        if "AVFoundation video devices" in line:
+            in_video_section = True
+            continue
+        if "AVFoundation audio devices" in line:
+            in_video_section = False
+            continue
+        if not in_video_section:
+            continue
+        match = re.search(r"\[(\d+)\]\s+(.+)$", line)
+        if match:
+            idx = int(match.group(1))
+            name = match.group(2).strip()
+            lower_name = name.lower()
+            # Skip ffmpeg "screen capture" pseudo-devices from camera list.
+            if "capture screen" in lower_name:
+                continue
+            camera_indices.append(idx)
+            camera_names.append(name)
+
+    return camera_indices, camera_names
+
+
+def _probe_macos_cameras_with_opencv(max_index: int = 8) -> Tuple[list[int], list[str]]:
+    """Probe AVFoundation indices when ffmpeg list_devices is unavailable."""
+    camera_indices: list[int] = []
+    camera_names: list[str] = []
+    for idx in range(max_index):
+        cap = None
+        try:
+            cap = cv2.VideoCapture(idx, cv2.CAP_AVFOUNDATION)
+            if not cap.isOpened():
+                continue
+            has_frame, _ = cap.read()
+            if has_frame:
+                camera_indices.append(idx)
+                camera_names.append(f"Camera {idx}")
+        except Exception:
+            continue
+        finally:
+            if cap is not None:
+                cap.release()
+    return camera_indices, camera_names
 
 
 def get_available_cameras():
@@ -958,25 +1606,24 @@ def get_available_cameras():
 
             # If still no cameras found, return empty lists
             if not camera_names:
-                return [], ["No cameras found"]
+                return [], [NO_CAMERAS_LABEL]
 
             return camera_indices, camera_names
 
         except Exception as e:
             print(f"Error detecting cameras: {str(e)}")
-            return [], ["No cameras found"]
+            return [], [NO_CAMERAS_LABEL]
     else:
         # Unix-like systems (Linux/Mac) camera detection
         camera_indices = []
         camera_names = []
 
         if platform.system() == "Darwin":
-            # Do NOT probe cameras with cv2.VideoCapture on macOS — probing
-            # invalid indices triggers the OBSENSOR backend and causes SIGSEGV.
-            # Default to indices 0 and 1 (covers FaceTime + one USB camera).
-            # The user can select the correct index from the UI dropdown.
-            camera_indices = [0, 1]
-            camera_names = ["Camera 0", "Camera 1"]
+            # Avoid probing random indices with OpenCV on macOS.
+            # Parse AVFoundation device list from ffmpeg output instead.
+            camera_indices, camera_names = _get_macos_cameras_via_ffmpeg()
+            if not camera_names:
+                camera_indices, camera_names = _probe_macos_cameras_with_opencv()
         else:
             # Linux camera detection - test first 10 indices
             for i in range(10):
@@ -987,7 +1634,7 @@ def get_available_cameras():
                     cap.release()
 
         if not camera_names:
-            return [], ["No cameras found"]
+            return [], [NO_CAMERAS_LABEL]
 
         return camera_indices, camera_names
 
@@ -995,11 +1642,33 @@ def get_available_cameras():
 def _capture_thread_func(cap, capture_queue, stop_event):
     """Capture thread: reads frames from camera and puts them into the queue.
     Drops frames when the queue is full to avoid backpressure on the camera."""
+    flat_frame_streak = 0
+    flat_stream_warned = False
     while not stop_event.is_set():
         ret, frame = cap.read()
         if not ret:
             stop_event.set()
             break
+
+        try:
+            sample = frame
+            if sample is not None and sample.ndim == 3 and sample.shape[2] >= 3:
+                sample = sample[::8, ::8, :3]
+            elif sample is not None and sample.ndim == 2:
+                sample = sample[::8, ::8]
+            stream_std = float(np.std(sample)) if sample is not None else 0.0
+            if stream_std < 2.0:
+                flat_frame_streak += 1
+            else:
+                flat_frame_streak = 0
+            if flat_frame_streak >= 20 and not flat_stream_warned:
+                update_status(
+                    "Camera feed appears flat/gray. Check selected camera device and avoid screen-capture virtual inputs."
+                )
+                flat_stream_warned = True
+        except Exception:
+            pass
+
         try:
             capture_queue.put_nowait(frame)
         except queue.Full:
@@ -1014,13 +1683,68 @@ def _capture_thread_func(cap, capture_queue, stop_event):
                 pass
 
 
-def _detection_thread_func(latest_frame_holder, detection_result, detection_lock, stop_event):
+def _is_informative_camera_frame(frame: np.ndarray) -> bool:
+    frame = _ensure_bgr_uint8_frame(frame)
+    if frame is None:
+        return False
+    sample = frame[::8, ::8, :3]
+    std_val = float(np.std(sample))
+    dynamic_range = float(np.max(sample) - np.min(sample))
+    return std_val >= 3.0 and dynamic_range >= 10.0
+
+
+def _start_validated_camera_capture(
+    preferred_index: int,
+    width: int,
+    height: int,
+    fps: int,
+):
+    candidate_indices: list[int] = []
+    for idx in [preferred_index, *camera_indices]:
+        if idx is None or idx in candidate_indices:
+            continue
+        candidate_indices.append(idx)
+
+    for idx in candidate_indices:
+        cap = VideoCapturer(idx)
+        if not cap.start(width, height, fps):
+            continue
+
+        # Reduced validation frames for faster startup on macOS
+        informative_hits = 0
+        for _ in range(10):  # Was 20
+            ret, frame = cap.read()
+            if ret and _is_informative_camera_frame(frame):
+                informative_hits += 1
+                if informative_hits >= 2:
+                    return cap, idx
+            time.sleep(0.01)  # Reduced from 0.01
+
+        cap.release()
+
+    return None, None
+
+
+def _detection_thread_func(
+    latest_frame_holder, detection_result, detection_lock, stop_event
+):
     """Detection thread: continuously runs face detection on the latest
     captured frame and stores results in detection_result under detection_lock.
 
     This decouples face detection (~15-30ms) from face swapping (~5-10ms)
     so the swap loop never blocks on detection, significantly improving
     live mode FPS."""
+    last_detection_time = 0.0
+    last_valid_face = None
+    last_valid_many_faces = None
+    last_valid_ts = 0.0
+    # Reduced stale face TTL for more responsive updates on macOS
+    stale_face_ttl = 0.25  # Was 0.35
+    mlx_no_face_streak = 0
+    mlx_adaptive_warned = False
+    mlx_fallback_probe_interval = 45
+    # Optimized detection interval for macOS
+    detection_interval = LIVE_DETECTION_INTERVAL
     while not stop_event.is_set():
         with detection_lock:
             frame = latest_frame_holder[0]
@@ -1028,100 +1752,342 @@ def _detection_thread_func(latest_frame_holder, detection_result, detection_lock
         if frame is None:
             time.sleep(0.005)
             continue
+        now = time.perf_counter()
+        if now - last_detection_time < detection_interval:
+            time.sleep(0.001)
+            continue
 
-        if modules.globals.many_faces:
-            many = get_many_faces(frame)
-            with detection_lock:
-                detection_result['target_face'] = None
-                detection_result['many_faces'] = many
-        else:
-            face = get_one_face(frame)
-            with detection_lock:
-                detection_result['target_face'] = face
-                detection_result['many_faces'] = None
+        try:
+            using_mlx_engine = (
+                getattr(modules.globals, "face_analyser_engine", "insightface")
+                == "mlx_uniface"
+            )
+            # Adaptive fallback strategy optimized for realtime:
+            # - MLX path stays primary.
+            # - Fallback is sparse to avoid tanking FPS.
+            if not using_mlx_engine:
+                allow_fallback = True
+            else:
+                allow_fallback = (
+                    mlx_no_face_streak >= mlx_fallback_probe_interval
+                    and (mlx_no_face_streak % mlx_fallback_probe_interval) == 0
+                )
+
+            if modules.globals.many_faces:
+                many = get_many_faces(
+                    frame, require_embedding=False, allow_fallback=allow_fallback
+                )
+                if many:
+                    mlx_no_face_streak = 0
+                    last_valid_many_faces = many
+                    last_valid_ts = now
+                elif (
+                    last_valid_many_faces is not None
+                    and (now - last_valid_ts) <= stale_face_ttl
+                ):
+                    many = last_valid_many_faces
+                else:
+                    mlx_no_face_streak += 1
+                with detection_lock:
+                    detection_result["target_face"] = None
+                    detection_result["many_faces"] = many
+            else:
+                face = get_one_face(
+                    frame, require_embedding=False, allow_fallback=allow_fallback
+                )
+                if face is not None:
+                    mlx_no_face_streak = 0
+                    last_valid_face = face
+                    last_valid_ts = now
+                elif (
+                    last_valid_face is not None
+                    and (now - last_valid_ts) <= stale_face_ttl
+                ):
+                    face = last_valid_face
+                else:
+                    mlx_no_face_streak += 1
+                with detection_lock:
+                    detection_result["target_face"] = face
+                    detection_result["many_faces"] = None
+
+            if (
+                using_mlx_engine
+                and mlx_no_face_streak >= 10
+                and not mlx_adaptive_warned
+            ):
+                update_status(
+                    "MLX detector is missing faces in live mode. Adaptive fallback enabled to keep swaps active."
+                )
+                mlx_adaptive_warned = True
+            elif mlx_no_face_streak == 0:
+                mlx_adaptive_warned = False
+            last_detection_time = now
+        except Exception as e:
+            print(f"Detection thread error: {e}")
+            time.sleep(0.01)
 
 
-def _processing_thread_func(capture_queue, processed_queue, stop_event,
-                             latest_frame_holder, detection_result, detection_lock):
+def _processing_thread_func(
+    capture_queue,
+    processed_queue,
+    stop_event,
+    latest_frame_holder,
+    detection_result,
+    detection_lock,
+    initial_source_face,
+):
     """Processing thread: takes raw frames from capture_queue, reads the
     latest detection result from the shared detection_result dict, applies
     face swap/enhancement, and puts results into processed_queue.
 
     Face detection runs concurrently in _detection_thread_func — this thread
     only reads cached results so it never blocks on detection."""
-    frame_processors = get_frame_processors_modules(modules.globals.frame_processors)
-    source_image = None
+    frame_processors = []
+    last_processor_state_version = -1
+    source_image = initial_source_face
     last_source_path = None
     prev_time = time.time()
     fps_update_interval = 0.5
     frame_count = 0
     fps = 0
+    map_fallback_warned = False
+    live_frame_index = 0
+    gpen512_cadence_warned = False
+    last_processed_frame = None
+    is_live_mode = bool(getattr(modules.globals, "live_mode", False))
 
     while not stop_event.is_set():
+        current_processor_state_version = _get_processor_state_version()
+        if current_processor_state_version != last_processor_state_version:
+            frame_processors = get_frame_processors_modules(
+                modules.globals.frame_processors
+            )
+            last_processor_state_version = current_processor_state_version
+
         try:
             frame = capture_queue.get(timeout=0.05)
         except queue.Empty:
             continue
 
-        temp_frame = frame
+        raw_frame = _ensure_bgr_uint8_frame(frame)
+        if raw_frame is None:
+            continue
+        temp_frame = raw_frame
+        live_frame_index += 1
 
         if modules.globals.live_mirror:
             temp_frame = gpu_flip(temp_frame, 1)
+            mirrored = _ensure_bgr_uint8_frame(temp_frame)
+            temp_frame = mirrored if mirrored is not None else raw_frame
+
+        # Process live frames at lower internal resolution to reduce swap/detection cost.
+        if is_live_mode and (
+            temp_frame.shape[1] > LIVE_INTERNAL_PROCESS_WIDTH
+            or temp_frame.shape[0] > LIVE_INTERNAL_PROCESS_HEIGHT
+        ):
+            try:
+                temp_frame = gpu_resize(
+                    temp_frame,
+                    (LIVE_INTERNAL_PROCESS_WIDTH, LIVE_INTERNAL_PROCESS_HEIGHT),
+                    interpolation=cv2.INTER_AREA,
+                )
+                resized = _ensure_bgr_uint8_frame(temp_frame)
+                if resized is not None:
+                    temp_frame = resized
+                else:
+                    temp_frame = raw_frame
+            except Exception:
+                temp_frame = raw_frame
 
         # Publish the mirrored frame for the detection thread to pick up
         with detection_lock:
-            latest_frame_holder[0] = temp_frame
+            latest_frame_holder[0] = temp_frame.copy()
 
-        if not modules.globals.map_faces:
-            if modules.globals.source_path and modules.globals.source_path != last_source_path:
-                last_source_path = modules.globals.source_path
-                source_image = get_one_face(cv2.imread(modules.globals.source_path))
+        source_path = modules.globals.source_path
+        if source_path and source_path != last_source_path:
+            last_source_path = source_path
+            source_frame = cv2.imread(source_path)
+            source_image = (
+                get_one_face(source_frame, require_embedding=True, allow_fallback=True)
+                if source_frame is not None
+                else None
+            )
 
-            # Read latest detection results (brief lock to avoid blocking detection thread)
-            with detection_lock:
-                cached_target_face = detection_result.get('target_face')
-                cached_many_faces = detection_result.get('many_faces')
+        # Read latest detection results (brief lock to avoid blocking detection thread)
+        with detection_lock:
+            cached_target_face = detection_result.get("target_face")
+            cached_many_faces = detection_result.get("many_faces")
 
-            for frame_processor in frame_processors:
-                if frame_processor.NAME == "DLC.FACE-ENHANCER":
-                    if modules.globals.fp_ui["face_enhancer"]:
-                        temp_frame = frame_processor.process_frame(None, temp_frame)
-                elif frame_processor.NAME == "DLC.FACE-ENHANCER-GPEN256":
-                    if modules.globals.fp_ui.get("face_enhancer_gpen256", False):
-                        temp_frame = frame_processor.process_frame(None, temp_frame)
-                elif frame_processor.NAME == "DLC.FACE-ENHANCER-GPEN512":
-                    if modules.globals.fp_ui.get("face_enhancer_gpen512", False):
-                        temp_frame = frame_processor.process_frame(None, temp_frame)
-                elif frame_processor.NAME == "DLC.FACE-SWAPPER":
-                    # Use cached face positions from detection thread
-                    swapped_bboxes = []
-                    if modules.globals.many_faces and cached_many_faces:
-                        result = temp_frame.copy()
-                        for t_face in cached_many_faces:
-                            result = frame_processor.swap_face(source_image, t_face, result)
-                            if hasattr(t_face, 'bbox') and t_face.bbox is not None:
-                                swapped_bboxes.append(t_face.bbox.astype(int))
-                        temp_frame = result
-                    elif cached_target_face is not None:
-                        temp_frame = frame_processor.swap_face(source_image, cached_target_face, temp_frame)
-                        if hasattr(cached_target_face, 'bbox') and cached_target_face.bbox is not None:
-                            swapped_bboxes.append(cached_target_face.bbox.astype(int))
-                    # Apply post-processing (sharpening, interpolation)
-                    temp_frame = frame_processor.apply_post_processing(temp_frame, swapped_bboxes)
-                else:
-                    temp_frame = frame_processor.process_frame(source_image, temp_frame)
+        skip_expensive_live_processing = (
+            is_live_mode
+            and last_processed_frame is not None
+            and (live_frame_index % LIVE_PROCESS_EVERY_N_FRAMES) != 0
+        )
+        if skip_expensive_live_processing:
+            temp_frame = last_processed_frame.copy()
         else:
-            modules.globals.target_path = None
-            for frame_processor in frame_processors:
-                if frame_processor.NAME == "DLC.FACE-ENHANCER":
-                    if modules.globals.fp_ui["face_enhancer"]:
-                        temp_frame = frame_processor.process_frame_v2(temp_frame)
-                elif frame_processor.NAME in ("DLC.FACE-ENHANCER-GPEN256", "DLC.FACE-ENHANCER-GPEN512"):
-                    fp_key = frame_processor.NAME.split(".")[-1].lower().replace("-", "_")
-                    if modules.globals.fp_ui.get(fp_key, False):
-                        temp_frame = frame_processor.process_frame_v2(temp_frame)
-                else:
-                    temp_frame = frame_processor.process_frame_v2(temp_frame)
+            has_live_map = bool(modules.globals.simple_map) or has_valid_map()
+            use_simple_live_mode = (not modules.globals.map_faces) or (not has_live_map)
+            if modules.globals.map_faces and not has_live_map:
+                if not map_fallback_warned:
+                    update_status(
+                        "Map faces is ON but no map is loaded. Using simple live swap."
+                    )
+                    map_fallback_warned = True
+            else:
+                map_fallback_warned = False
+
+            if use_simple_live_mode:
+                for frame_processor in frame_processors:
+                    try:
+                        if frame_processor.NAME == "DLC.FACE-ENHANCER":
+                            if modules.globals.fp_ui["face_enhancer"]:
+                                if modules.globals.many_faces and cached_many_faces:
+                                    temp_frame = frame_processor.enhance_faces(
+                                        temp_frame, cached_many_faces
+                                    )
+                                elif cached_target_face is not None:
+                                    temp_frame = frame_processor.enhance_faces(
+                                        temp_frame, [cached_target_face]
+                                    )
+                        elif frame_processor.NAME == "DLC.FACE-ENHANCER-GPEN256":
+                            if modules.globals.fp_ui.get(
+                                "face_enhancer_gpen256", False
+                            ):
+                                if modules.globals.many_faces and cached_many_faces:
+                                    for detected_face in cached_many_faces:
+                                        temp_frame = frame_processor.enhance_face(
+                                            temp_frame, detected_face
+                                        )
+                                elif cached_target_face is not None:
+                                    temp_frame = frame_processor.enhance_face(
+                                        temp_frame, cached_target_face
+                                    )
+                        elif frame_processor.NAME == "DLC.FACE-ENHANCER-GPEN512":
+                            if modules.globals.fp_ui.get(
+                                "face_enhancer_gpen512", False
+                            ):
+                                enhance_interval = 1
+                                if platform.system() == "Darwin" and getattr(
+                                    modules.globals, "live_mode", False
+                                ):
+                                    enhance_interval = 3
+                                    if not gpen512_cadence_warned:
+                                        update_status(
+                                            "Live GPEN512 running in adaptive cadence (every 3 frames) for FPS."
+                                        )
+                                        gpen512_cadence_warned = True
+
+                                should_enhance = (
+                                    live_frame_index % enhance_interval
+                                ) == 0
+                                if should_enhance:
+                                    if modules.globals.many_faces and cached_many_faces:
+                                        for detected_face in cached_many_faces:
+                                            temp_frame = frame_processor.enhance_face(
+                                                temp_frame, detected_face
+                                            )
+                                    elif cached_target_face is not None:
+                                        temp_frame = frame_processor.enhance_face(
+                                            temp_frame, cached_target_face
+                                        )
+                        elif frame_processor.NAME == "DLC.FACE-SWAPPER":
+                            # Use cached face positions from detection thread
+                            swapped_bboxes = []
+                            if modules.globals.many_faces and cached_many_faces:
+                                result = temp_frame.copy()
+                                for t_face in cached_many_faces:
+                                    result = frame_processor.swap_face(
+                                        source_image, t_face, result
+                                    )
+                                    if (
+                                        hasattr(t_face, "bbox")
+                                        and t_face.bbox is not None
+                                    ):
+                                        swapped_bboxes.append(t_face.bbox.astype(int))
+                                temp_frame = result
+                            elif cached_target_face is not None:
+                                temp_frame = frame_processor.swap_face(
+                                    source_image, cached_target_face, temp_frame
+                                )
+                                if (
+                                    hasattr(cached_target_face, "bbox")
+                                    and cached_target_face.bbox is not None
+                                ):
+                                    swapped_bboxes.append(
+                                        cached_target_face.bbox.astype(int)
+                                    )
+                            # Apply post-processing (sharpening, interpolation)
+                            temp_frame = frame_processor.apply_post_processing(
+                                temp_frame, swapped_bboxes
+                            )
+                        else:
+                            temp_frame = frame_processor.process_frame(
+                                source_image, temp_frame
+                            )
+                    except Exception as e:
+                        print(
+                            f"Processing thread: frame processor {getattr(frame_processor, 'NAME', 'UNKNOWN')} failed: {e}"
+                        )
+                        continue
+            else:
+                modules.globals.target_path = None
+                for frame_processor in frame_processors:
+                    try:
+                        if frame_processor.NAME == "DLC.FACE-ENHANCER":
+                            if modules.globals.fp_ui["face_enhancer"]:
+                                temp_frame = frame_processor.process_frame_v2(
+                                    temp_frame
+                                )
+                        elif frame_processor.NAME in (
+                            "DLC.FACE-ENHANCER-GPEN256",
+                            "DLC.FACE-ENHANCER-GPEN512",
+                        ):
+                            fp_key = (
+                                frame_processor.NAME.split(".")[-1]
+                                .lower()
+                                .replace("-", "_")
+                            )
+                            if modules.globals.fp_ui.get(fp_key, False):
+                                if (
+                                    frame_processor.NAME == "DLC.FACE-ENHANCER-GPEN512"
+                                    and platform.system() == "Darwin"
+                                    and getattr(modules.globals, "live_mode", False)
+                                    and (live_frame_index % 3) != 0
+                                ):
+                                    pass
+                                else:
+                                    temp_frame = frame_processor.process_frame_v2(
+                                        temp_frame
+                                    )
+                        else:
+                            temp_frame = frame_processor.process_frame_v2(temp_frame)
+                    except Exception as e:
+                        print(
+                            f"Processing thread: frame processor {getattr(frame_processor, 'NAME', 'UNKNOWN')} failed: {e}"
+                        )
+                        continue
+
+        temp_frame = _ensure_bgr_uint8_frame(temp_frame)
+        if temp_frame is None:
+            temp_frame = raw_frame.copy()
+        elif is_live_mode and (
+            temp_frame.shape[1] != raw_frame.shape[1]
+            or temp_frame.shape[0] != raw_frame.shape[0]
+        ):
+            try:
+                upscaled = gpu_resize(
+                    temp_frame,
+                    (raw_frame.shape[1], raw_frame.shape[0]),
+                    interpolation=cv2.INTER_LINEAR,
+                )
+                upscaled = _ensure_bgr_uint8_frame(upscaled)
+                if upscaled is not None:
+                    temp_frame = upscaled
+            except Exception:
+                pass
+
+        last_processed_frame = temp_frame.copy()
 
         # Calculate and display FPS
         current_time = time.time()
@@ -1157,20 +2123,62 @@ def _processing_thread_func(capture_queue, processed_queue, stop_event,
 
 
 def create_webcam_preview(camera_index: int):
-    global preview_label, PREVIEW
+    global preview_label, PREVIEW, preview_tk_image
 
-    cap = VideoCapturer(camera_index)
-    if not cap.start(PREVIEW_DEFAULT_WIDTH, PREVIEW_DEFAULT_HEIGHT, 60):
-        update_status("Failed to start camera")
+    initial_source_face = None
+    source_path = modules.globals.source_path
+    if source_path:
+        source_frame = cv2.imread(source_path)
+        if source_frame is not None:
+            initial_source_face = get_one_face(
+                source_frame, require_embedding=True, allow_fallback=True
+            )
+    if not modules.globals.map_faces and initial_source_face is None:
+        update_status(
+            "Live started, but no source face is locked. Select a clearer frontal source image for swapping."
+        )
+
+    modules.globals.live_mode = True
+    target_fps = 24 if platform.system() == "Darwin" else 60
+    cap, actual_camera_index = _start_validated_camera_capture(
+        camera_index,
+        PREVIEW_DEFAULT_WIDTH,
+        PREVIEW_DEFAULT_HEIGHT,
+        target_fps,
+    )
+    if cap is None:
+        modules.globals.live_mode = False
+        update_status(
+            "Failed to start camera. On macOS, allow camera access for Terminal/iTerm in System Settings > Privacy & Security > Camera."
+        )
         return
+    if actual_camera_index != camera_index:
+        try:
+            if actual_camera_index in camera_indices:
+                resolved_name = camera_names[camera_indices.index(actual_camera_index)]
+                if camera_variable is not None:
+                    camera_variable.set(resolved_name)
+                modules.globals.camera_input_combobox = resolved_name
+                save_switch_states()
+                update_status(
+                    f"Selected camera stream looked invalid. Switched to {resolved_name}."
+                )
+        except Exception:
+            pass
 
     preview_label.configure(width=PREVIEW_DEFAULT_WIDTH, height=PREVIEW_DEFAULT_HEIGHT)
+    preview_tk_image = None
+    if modules.globals.live_resizable:
+        PREVIEW.resizable(width=True, height=True)
+    else:
+        PREVIEW.resizable(width=False, height=False)
+        PREVIEW.geometry(f"{PREVIEW_DEFAULT_WIDTH}x{PREVIEW_DEFAULT_HEIGHT}")
     PREVIEW.deiconify()
 
     # Queues for decoupling capture from processing and processing from display.
-    # Small maxsize ensures we always work on recent frames and drop stale ones.
-    capture_queue = queue.Queue(maxsize=2)
-    processed_queue = queue.Queue(maxsize=2)
+    # Increased maxsize for smoother playback on macOS while keeping latency low
+    capture_queue = queue.Queue(maxsize=3)
+    processed_queue = queue.Queue(maxsize=3)
     stop_event = threading.Event()
 
     # Shared state for the detection pipeline.
@@ -1179,7 +2187,7 @@ def create_webcam_preview(camera_index: int):
     # processing thread to read.  Both are guarded by detection_lock.
     detection_lock = threading.Lock()
     latest_frame_holder = [None]
-    detection_result = {'target_face': None, 'many_faces': None}
+    detection_result = {"target_face": None, "many_faces": None}
 
     # Start capture thread
     cap_thread = threading.Thread(
@@ -1201,24 +2209,35 @@ def create_webcam_preview(camera_index: int):
     # Start processing thread
     proc_thread = threading.Thread(
         target=_processing_thread_func,
-        args=(capture_queue, processed_queue, stop_event,
-              latest_frame_holder, detection_result, detection_lock),
+        args=(
+            capture_queue,
+            processed_queue,
+            stop_event,
+            latest_frame_holder,
+            detection_result,
+            detection_lock,
+            initial_source_face,
+        ),
         daemon=True,
     )
     proc_thread.start()
 
     # Cleanup helper called from the display loop when preview closes
     def _cleanup():
+        global preview_tk_image
         stop_event.set()
         cap_thread.join(timeout=2.0)
         det_thread.join(timeout=2.0)
         proc_thread.join(timeout=2.0)
         cap.release()
+        preview_tk_image = None
+        modules.globals.live_mode = False
         PREVIEW.withdraw()
 
     # Non-blocking display loop using ROOT.after() — avoids blocking the
     # Tk event loop which could cause UI freezes or re-entrancy issues
     def _display_next_frame():
+        global preview_tk_image
         if stop_event.is_set() or PREVIEW.state() == "withdrawn":
             _cleanup()
             return
@@ -1226,34 +2245,40 @@ def create_webcam_preview(camera_index: int):
         try:
             temp_frame = processed_queue.get_nowait()
         except queue.Empty:
-            ROOT.after(16, _display_next_frame)
+            ROOT.after(DISPLAY_LOOP_INTERVAL_MS, _display_next_frame)
             return
 
         if modules.globals.live_resizable:
-            temp_frame = fit_image_to_size(
-                temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
-            )
+            target_width = PREVIEW.winfo_width()
+            target_height = PREVIEW.winfo_height()
         else:
-            temp_frame = fit_image_to_size(
-                temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
-            )
+            target_width = PREVIEW_DEFAULT_WIDTH
+            target_height = PREVIEW_DEFAULT_HEIGHT
 
-        image = gpu_cvt_color(temp_frame, cv2.COLOR_BGR2RGB)
+        temp_frame = fit_image_to_canvas(temp_frame, target_width, target_height)
+        if temp_frame is None:
+            ROOT.after(DISPLAY_LOOP_INTERVAL_MS, _display_next_frame)
+            return
+
+        # Optimized color conversion - avoid redundant operations
+        try:
+            # Frame is already in BGR format from processing, convert directly to RGB
+            image = gpu_cvt_color(temp_frame, cv2.COLOR_BGR2RGB)
+        except Exception:
+            image = cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB)
         image = Image.fromarray(image)
-        image = ImageOps.contain(
-            image, (temp_frame.shape[1], temp_frame.shape[0]), Image.LANCZOS
-        )
-        image = ctk.CTkImage(image, size=image.size)
-        preview_label.configure(image=image)
+        preview_tk_image = ctk.CTkImage(image, size=image.size)
+        preview_label.configure(image=preview_tk_image)
+        preview_label.image = preview_tk_image
 
-        ROOT.after(16, _display_next_frame)
+        ROOT.after(DISPLAY_LOOP_INTERVAL_MS, _display_next_frame)
 
     # Kick off the non-blocking display loop
     ROOT.after(0, _display_next_frame)
 
 
 def create_source_target_popup_for_webcam(
-        root: ctk.CTk, map: list, camera_index: int
+    root: ctk.CTk, map: list, camera_index: int
 ) -> None:
     global POPUP_LIVE, popup_status_label_live
 
@@ -1283,17 +2308,20 @@ def create_source_target_popup_for_webcam(
     popup_status_label_live = ctk.CTkLabel(POPUP_LIVE, text=None, justify="center")
     popup_status_label_live.grid(row=1, column=0, pady=15)
 
-    add_button = ctk.CTkButton(POPUP_LIVE, text=_("Add"), command=lambda: on_add_click())
+    add_button = ctk.CTkButton(
+        POPUP_LIVE, text=_("Add"), command=lambda: on_add_click()
+    )
     add_button.place(relx=0.1, rely=0.92, relwidth=0.2, relheight=0.05)
 
-    clear_button = ctk.CTkButton(POPUP_LIVE, text=_("Clear"), command=lambda: on_clear_click())
+    clear_button = ctk.CTkButton(
+        POPUP_LIVE, text=_("Clear"), command=lambda: on_clear_click()
+    )
     clear_button.place(relx=0.4, rely=0.92, relwidth=0.2, relheight=0.05)
 
     close_button = ctk.CTkButton(
         POPUP_LIVE, text=_("Submit"), command=lambda: on_submit_click()
     )
     close_button.place(relx=0.7, rely=0.92, relwidth=0.2, relheight=0.05)
-
 
 
 def clear_source_target_images(map: list):
@@ -1395,7 +2423,7 @@ def refresh_data(map: list):
 
 
 def update_webcam_source(
-        scrollable_frame: ctk.CTkScrollableFrame, map: list, button_num: int
+    scrollable_frame: ctk.CTkScrollableFrame, map: list, button_num: int
 ) -> list:
     global source_label_dict_live
 
@@ -1420,7 +2448,7 @@ def update_webcam_source(
             x_min, y_min, x_max, y_max = face["bbox"]
 
             map[button_num]["source"] = {
-                "cv2": cv2_img[int(y_min): int(y_max), int(x_min): int(x_max)],
+                "cv2": cv2_img[int(y_min) : int(y_max), int(x_min) : int(x_max)],
                 "face": face,
             }
 
@@ -1447,7 +2475,7 @@ def update_webcam_source(
 
 
 def update_webcam_target(
-        scrollable_frame: ctk.CTkScrollableFrame, map: list, button_num: int
+    scrollable_frame: ctk.CTkScrollableFrame, map: list, button_num: int
 ) -> list:
     global target_label_dict_live
 
@@ -1472,7 +2500,7 @@ def update_webcam_target(
             x_min, y_min, x_max, y_max = face["bbox"]
 
             map[button_num]["target"] = {
-                "cv2": cv2_img[int(y_min): int(y_max), int(x_min): int(x_max)],
+                "cv2": cv2_img[int(y_min) : int(y_max), int(x_min) : int(x_max)],
                 "face": face,
             }
 
