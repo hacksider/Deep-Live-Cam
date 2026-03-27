@@ -1,3 +1,6 @@
+import os
+os.environ.setdefault('TK_SILENCE_DEPRECATION', '1')
+
 import tkinter
 
 # Only needs to be imported once at the beginning of the application
