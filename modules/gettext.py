@@ -28,6 +28,6 @@ class LanguageManager:
     def _(self, key, default=None) -> str:
         """get translate text"""
         text = self.translations.get(key, default if default else key)
-        if self.current_language in RTL_LANGUAGES and not text.startswith(RTL_MARK):
-            return f"{RTL_MARK}{text}"
+        if self.current_language in RTL_LANGUAGES:
+            return f"{RTL_MARK}{text.lstrip(RTL_MARK)}"
         return text
