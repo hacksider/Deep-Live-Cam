@@ -1,6 +1,10 @@
 import json
 from pathlib import Path
 
+RTL_LANGUAGES = {"ar", "fa", "he", "ur"}
+RTL_MARK = "\u200f"
+
+
 class LanguageManager:
     def __init__(self, default_language="en"):
         self.current_language = default_language
@@ -23,4 +27,7 @@ class LanguageManager:
 
     def _(self, key, default=None) -> str:
         """get translate text"""
-        return self.translations.get(key, default if default else key)
+        text = self.translations.get(key, default if default else key)
+        if self.current_language in RTL_LANGUAGES and not text.startswith(RTL_MARK):
+            return f"{RTL_MARK}{text}"
+        return text
