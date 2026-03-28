@@ -56,6 +56,8 @@
     "Start real-time face swap using webcam": "התחל החלפת פנים בזמן אמת באמצעות מצלמת רשת",
     "Stop processing and close the application": "עצור את העיבוד וסגור את היישום",
     "Submit": "שלח",
+    "Transparency": "שקיפות",
+    "Sharpness": "חדות",
     "Swap every detected face, not just the primary one": "החלף כל פנים שזוהו, לא רק את הפנים הראשיות",
     "Swap source and target images": "החלף בין תמונות המקור והיעד",
     "save image output file": "שמור קובץ פלט תמונה",

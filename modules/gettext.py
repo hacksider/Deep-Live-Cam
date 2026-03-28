@@ -26,9 +26,10 @@ class LanguageManager:
             return False
 
     def _(self, key, default=None) -> str:
-        """get translate text"""
+        """Get translated text"""
         text = self.translations.get(key, default if default else key)
-        if self.current_language in RTL_LANGUAGES:
+        normalized_lang = str(self.current_language).lower().split("-", 1)[0]
+        if normalized_lang in RTL_LANGUAGES:
             if text.startswith(RTL_MARK):
                 return text
             return f"{RTL_MARK}{text}"
