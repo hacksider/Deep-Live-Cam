@@ -27,10 +27,12 @@ class LanguageManager:
 
     def _(self, key, default=None) -> str:
         """Get translated text"""
-        text = self.translations.get(key, default if default else key)
-        normalized_lang = str(self.current_language).lower().split("-", 1)[0]
+        text = self.translations.get(key, default if default is not None else key)
+        normalized_lang = str(self.current_language).lower().replace("_", "-").split("-", 1)[0]
         if normalized_lang in RTL_LANGUAGES:
-            if text.startswith(RTL_MARK):
+            stripped_text = text.lstrip()
+            if stripped_text.startswith(RTL_MARK):
                 return text
-            return f"{RTL_MARK}{text}"
+            leading_whitespace = text[: len(text) - len(stripped_text)]
+            return f"{leading_whitespace}{RTL_MARK}{stripped_text}"
         return text
