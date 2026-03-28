@@ -433,7 +433,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             update_tumbler(selected_key, True)
         save_switch_states()
 
-    enhancer_label = ctk.CTkLabel(root, text=f'{_("Face Enhancer")}:')
+    enhancer_label = ctk.CTkLabel(root, text=_("Face Enhancer:"))
     enhancer_label.place(relx=0.1, rely=0.62, relwidth=0.2, relheight=0.03)
 
     enhancer_dropdown = ctk.CTkOptionMenu(
@@ -465,7 +465,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             update_status(f"Transparency set to {percentage}%")
 
     # 2) Transparency label and slider
-    transparency_label = ctk.CTkLabel(root, text=f'{_("Transparency")}:')
+    transparency_label = ctk.CTkLabel(root, text=_("Transparency:"))
     transparency_label.place(relx=0.15, rely=0.66, relwidth=0.2, relheight=0.03)
 
     transparency_slider = ctk.CTkSlider(
@@ -491,7 +491,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         modules.globals.sharpness = float(value)
         update_status(f"Sharpness set to {value:.1f}")
 
-    sharpness_label = ctk.CTkLabel(root, text=f'{_("Sharpness")}:')
+    sharpness_label = ctk.CTkLabel(root, text=_("Sharpness:"))
     sharpness_label.place(relx=0.15, rely=0.69, relwidth=0.2, relheight=0.03)
 
     sharpness_slider = ctk.CTkSlider(
@@ -535,7 +535,7 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
         if modules.globals.mouth_mask_size > 0:
             modules.globals.show_mouth_mask_box = True
 
-    mouth_mask_size_label = ctk.CTkLabel(root, text=f'{_("Mouth Mask")}:')
+    mouth_mask_size_label = ctk.CTkLabel(root, text=_("Mouth Mask:"))
     mouth_mask_size_label.place(relx=0.15, rely=0.72, relwidth=0.2, relheight=0.03)
 
     mouth_mask_size_slider = ctk.CTkSlider(
