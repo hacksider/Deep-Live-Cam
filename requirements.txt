@@ -13,4 +13,4 @@ onnxruntime-gpu==1.24.2; sys_platform != 'darwin'
 tensorflow; sys_platform != 'darwin'
 opennsfw2==0.10.2
 protobuf==4.25.1
-pygrabber
+pygrabber; sys_platform == 'win32'

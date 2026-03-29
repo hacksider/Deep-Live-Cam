@@ -33,7 +33,7 @@ IS_APPLE_SILICON = platform.system() == 'Darwin' and platform.machine() == 'arm6
 FRAME_CACHE = deque(maxlen=3)  # Cache for frame reuse
 FACE_DETECTION_CACHE = {}  # Cache face detections
 LAST_DETECTION_TIME = 0
-DETECTION_INTERVAL = 0.033  # ~30 FPS detection rate for live mode
+DETECTION_INTERVAL = 0.066  # ~15 FPS detection rate for live mode
 FRAME_SKIP_COUNTER = 0
 ADAPTIVE_QUALITY = True
 # --- END: Mac M1-M5 Optimizations ---
@@ -85,10 +85,21 @@ def get_face_swapper() -> Any:
 
     with THREAD_LOCK:
         if FACE_SWAPPER is None:
-            model_name = "inswapper_128.onnx"
+            candidate_models = []
             if "CUDAExecutionProvider" in modules.globals.execution_providers:
-                model_name = "inswapper_128_fp16.onnx"
-            model_path = os.path.join(models_dir, model_name)
+                candidate_models = ["inswapper_128_fp16.onnx", "inswapper_128.onnx"]
+            else:
+                candidate_models = ["inswapper_128_fp16.onnx", "inswapper_128.onnx"]
+
+            model_path = None
+            for model_name in candidate_models:
+                candidate_path = os.path.join(models_dir, model_name)
+                if os.path.exists(candidate_path):
+                    model_path = candidate_path
+                    break
+
+            if model_path is None:
+                model_path = os.path.join(models_dir, candidate_models[0])
             update_status(f"Loading face swapper model from: {model_path}", NAME)
             try:
                 # Optimized provider configuration for Apple Silicon

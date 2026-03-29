@@ -17,6 +17,7 @@ class VideoCapturer:
         self._frame_ready = threading.Event()
         self.is_running = False
         self.cap = None
+        self.last_error = None
 
         # Initialize Windows-specific components if on Windows
         if platform.system() == "Windows":
@@ -49,10 +50,30 @@ class VideoCapturer:
                     except Exception:
                         continue
             else:
-                # Unix-like systems (Linux/Mac) capture method
-                self.cap = cv2.VideoCapture(self.device_index)
+                # Unix-like systems (Linux/Mac) capture method.
+                # On macOS, OpenCV is more reliable when AVFoundation is tried
+                # explicitly before falling back to the default backend.
+                capture_methods = [
+                    (self.device_index, getattr(cv2, "CAP_AVFOUNDATION", cv2.CAP_ANY)),
+                    (self.device_index, cv2.CAP_ANY),
+                    (self.device_index, -1),
+                ]
+
+                for dev_id, backend in capture_methods:
+                    try:
+                        self.cap = cv2.VideoCapture(dev_id, backend)
+                        if self.cap.isOpened():
+                            break
+                        self.cap.release()
+                    except Exception:
+                        continue
 
             if not self.cap or not self.cap.isOpened():
+                if platform.system() == "Darwin":
+                    raise RuntimeError(
+                        "Failed to open camera on macOS. Check Camera permission in System Settings, "
+                        "then try a different camera index."
+                    )
                 raise RuntimeError("Failed to open camera")
 
             # Configure format
@@ -64,6 +85,7 @@ class VideoCapturer:
             return True
 
         except Exception as e:
+            self.last_error = str(e)
             print(f"Failed to start capture: {str(e)}")
             if self.cap:
                 self.cap.release()
