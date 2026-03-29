@@ -87,7 +87,19 @@ def get_unique_faces_from_target_image() -> Any:
     try:
         modules.globals.source_target_map = []
         target_frame = cv2.imread(modules.globals.target_path)
+        
+        # Fix #1640: Check if image was loaded successfully
+        if target_frame is None:
+            print(f"Error: Could not read image from {modules.globals.target_path}")
+            return None
+            
         many_faces = get_many_faces(target_frame)
+        
+        # Check if faces were detected
+        if many_faces is None:
+            print("Warning: No faces detected in target image")
+            return None
+            
         i = 0
 
         for face in many_faces:
@@ -121,7 +133,17 @@ def get_unique_faces_from_target_video() -> Any:
         i = 0
         for temp_frame_path in tqdm(temp_frame_paths, desc="Extracting face embeddings from frames"):
             temp_frame = cv2.imread(temp_frame_path)
+            
+            # Fix #1640: Skip frames that couldn't be read
+            if temp_frame is None:
+                print(f"Warning: Could not read frame from {temp_frame_path}")
+                continue
+                
             many_faces = get_many_faces(temp_frame)
+            
+            # Skip frames with no faces detected
+            if many_faces is None:
+                continue
 
             for face in many_faces:
                 face_embeddings.append(face.normed_embedding)
