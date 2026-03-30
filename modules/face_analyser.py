@@ -33,12 +33,21 @@ def get_face_analyser() -> Any:
                     )
                     FACE_ANALYSER.prepare(ctx_id=0, det_size=(640, 640))
                 except Exception as e:
-                    print(
-                        "[DLC.FACE-ANALYSER] Failed to initialize buffalo_l face analyser. "
-                        "Ensure InsightFace model 'buffalo_l' is available. "
-                        f"Error: {e}"
+                    msg = (
+                        f"[DLC.FACE-ANALYSER] Failed to initialize buffalo_l face analyser. "
+                        f"Ensure InsightFace model 'buffalo_l' is available. Error: {e}"
                     )
-                    FACE_ANALYSER = None
+                    try:
+                        update_status = getattr(modules.globals, "update_status", None)
+                        if callable(update_status):
+                            # update_status(message, scope)
+                            update_status(msg, "DLC.FACE-ANALYSER")
+                        else:
+                            logger = getattr(modules.globals, "logger", None)
+                            if logger and hasattr(logger, "error"):
+                                logger.error(msg)
+                    finally:
+                        FACE_ANALYSER = None
                     raise
     return FACE_ANALYSER
 
