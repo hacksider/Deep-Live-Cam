@@ -1347,8 +1347,9 @@ def create_webcam_preview(camera_index: int):
 
         ROOT.after(16, _display_next_frame)
 
-    # Kick off the non-blocking display loop
-    ROOT.after(0, _display_next_frame)
+    # Kick off the non-blocking display loop (small delay to let PREVIEW
+    # finish deiconify before the first state check)
+    ROOT.after(100, _display_next_frame)
 
 
 def create_source_target_popup_for_webcam(
