@@ -757,7 +757,7 @@ def update_status(text: str) -> None:
         if status_label is not None:
             status_label.configure(text=translated)
 
-    if ROOT is not None:
+    if ROOT is not None and ROOT.winfo_exists():
         ROOT.after(0, _do)
 
 
@@ -768,7 +768,7 @@ def update_pop_status(text: str) -> None:
         if popup_status_label is not None and POPUP is not None and POPUP.winfo_exists():
             popup_status_label.configure(text=translated)
 
-    if ROOT is not None:
+    if ROOT is not None and ROOT.winfo_exists():
         ROOT.after(0, _do)
 
 
@@ -779,7 +779,7 @@ def update_pop_live_status(text: str) -> None:
         if popup_status_label_live is not None and POPUP_LIVE is not None and POPUP_LIVE.winfo_exists():
             popup_status_label_live.configure(text=translated)
 
-    if ROOT is not None:
+    if ROOT is not None and ROOT.winfo_exists():
         ROOT.after(0, _do)
 
 
