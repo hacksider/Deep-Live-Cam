@@ -107,6 +107,11 @@ def get_unique_faces_from_target_image() -> Any:
         
         # Handle case where no faces detected (empty list)
         if not many_faces:  # Works for both None and empty list
+            logger.warning(
+                f"No faces detected in target image {modules.globals.target_path}. "
+                f"Ensure the image contains at least one detectable face."
+            )
+            return None
             logger.warning("No faces detected in target image.")
             return None
             
