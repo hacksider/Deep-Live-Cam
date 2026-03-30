@@ -751,16 +751,36 @@ def create_preview(parent: ctk.CTkToplevel) -> ctk.CTkToplevel:
 
 
 def update_status(text: str) -> None:
-    status_label.configure(text=_(text))
-    ROOT.update()
+    translated = _(text)
+
+    def _do():
+        if status_label is not None:
+            status_label.configure(text=translated)
+
+    if ROOT is not None:
+        ROOT.after(0, _do)
 
 
 def update_pop_status(text: str) -> None:
-    popup_status_label.configure(text=_(text))
+    translated = _(text)
+
+    def _do():
+        if popup_status_label is not None and POPUP is not None and POPUP.winfo_exists():
+            popup_status_label.configure(text=translated)
+
+    if ROOT is not None:
+        ROOT.after(0, _do)
 
 
 def update_pop_live_status(text: str) -> None:
-    popup_status_label_live.configure(text=_(text))
+    translated = _(text)
+
+    def _do():
+        if popup_status_label_live is not None and POPUP_LIVE is not None and POPUP_LIVE.winfo_exists():
+            popup_status_label_live.configure(text=translated)
+
+    if ROOT is not None:
+        ROOT.after(0, _do)
 
 
 def update_tumbler(var: str, value: bool) -> None:
