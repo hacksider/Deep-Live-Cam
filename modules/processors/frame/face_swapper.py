@@ -23,6 +23,8 @@ import time
 FACE_SWAPPER = None
 THREAD_LOCK = threading.Lock()
 NAME = "DLC.FACE-SWAPPER"
+NO_SOURCE_FACE_LOGGED = False
+NO_TARGET_FACES_LOGGED = False
 
 # --- START: Added for Interpolation ---
 PREVIOUS_FRAME_RESULT = None # Stores the final processed frame from the previous step
@@ -43,6 +45,42 @@ models_dir = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(abs_dir))), "models"
 )
 
+
+def _log_no_source_face_once() -> None:
+    global NO_SOURCE_FACE_LOGGED
+    if not NO_SOURCE_FACE_LOGGED:
+        update_status("No source face detected", NAME)
+        NO_SOURCE_FACE_LOGGED = True
+
+
+def _log_no_target_faces_once() -> None:
+    global NO_TARGET_FACES_LOGGED
+    if not NO_TARGET_FACES_LOGGED:
+        update_status("No target faces detected", NAME)
+        NO_TARGET_FACES_LOGGED = True
+
+
+def _reset_no_source_face_log() -> None:
+    global NO_SOURCE_FACE_LOGGED
+    NO_SOURCE_FACE_LOGGED = False
+
+
+def _reset_no_target_faces_log() -> None:
+    global NO_TARGET_FACES_LOGGED
+    NO_TARGET_FACES_LOGGED = False
+
+
+def _get_existing_swapper_model_paths() -> List[str]:
+    fp16_path = os.path.join(models_dir, "inswapper_128_fp16.onnx")
+    cpu_path = os.path.join(models_dir, "inswapper_128.onnx")
+
+    candidates: List[str] = []
+    if os.path.exists(fp16_path):
+        candidates.append(fp16_path)
+    if os.path.exists(cpu_path):
+        candidates.append(cpu_path)
+    return candidates
+
 def pre_check() -> bool:
     # Use models_dir instead of abs_dir to save to the correct location
     download_directory_path = models_dir
@@ -51,24 +89,25 @@ def pre_check() -> bool:
     try:
         os.makedirs(download_directory_path, exist_ok=True)
     except OSError as e:
-        logging.error(f"Failed to create directory {download_directory_path} due to permission error: {e}")
+        update_status(f"Failed to create directory {download_directory_path}: {e}", NAME)
         return False
-    
-    # Use the direct download URL from Hugging Face
-    conditional_download(
-        download_directory_path,
-        [
-            "https://huggingface.co/hacksider/deep-live-cam/resolve/main/inswapper_128_fp16.onnx"
-        ],
-    )
+
+    # Keep existing behavior (auto-download fp16) but do not require both model files.
+    if not _get_existing_swapper_model_paths():
+        conditional_download(
+            download_directory_path,
+            [
+                "https://huggingface.co/hacksider/deep-live-cam/resolve/main/inswapper_128_fp16.onnx"
+            ],
+        )
     return True
 
 
 def pre_start() -> bool:
-    # Simplified pre_start, assuming checks happen before calling process functions
-    model_path = os.path.join(models_dir, "inswapper_128_fp16.onnx")
-    if not os.path.exists(model_path):
-        update_status(f"Model not found: {model_path}. Please download it.", NAME)
+    # Accept whichever supported swapper model file exists.
+    available_models = _get_existing_swapper_model_paths()
+    if not available_models:
+        update_status("Failed to load face swapper model: no inswapper model file found.", NAME)
         return False
 
     # Try to get the face swapper to ensure it loads correctly
@@ -85,40 +124,51 @@ def get_face_swapper() -> Any:
 
     with THREAD_LOCK:
         if FACE_SWAPPER is None:
-            model_name = "inswapper_128.onnx"
-            if "CUDAExecutionProvider" in modules.globals.execution_providers:
-                model_name = "inswapper_128_fp16.onnx"
-            model_path = os.path.join(models_dir, model_name)
-            update_status(f"Loading face swapper model from: {model_path}", NAME)
-            try:
-                # Optimized provider configuration for Apple Silicon
-                providers_config = []
-                for p in modules.globals.execution_providers:
-                    if p == "CoreMLExecutionProvider" and IS_APPLE_SILICON:
-                        # Enhanced CoreML configuration for M1-M5
-                        providers_config.append((
-                            "CoreMLExecutionProvider",
-                            {
-                                "ModelFormat": "MLProgram",
-                                "MLComputeUnits": "ALL",  # Use Neural Engine + GPU + CPU
-                                "SpecializationStrategy": "FastPrediction",
-                                "AllowLowPrecisionAccumulationOnGPU": 1,
-                                "EnableOnSubgraphs": 1,
-                                "RequireStaticShapes": 0,
-                                "MaximumCacheSize": 1024 * 1024 * 512,  # 512MB cache
-                            }
-                        ))
-                    else:
-                        providers_config.append(p)
-                
-                FACE_SWAPPER = insightface.model_zoo.get_model(
-                    model_path,
-                    providers=providers_config,
-                )
-                update_status("Face swapper model loaded successfully.", NAME)
-            except Exception as e:
-                update_status(f"Error loading face swapper model: {e}", NAME)
+            model_paths = _get_existing_swapper_model_paths()
+            if not model_paths:
+                update_status("Failed to load face swapper model: no inswapper model file found.", NAME)
                 FACE_SWAPPER = None
+                return None
+
+            # Optimized provider configuration for Apple Silicon
+            providers_config = []
+            for p in modules.globals.execution_providers:
+                if p == "CoreMLExecutionProvider" and IS_APPLE_SILICON:
+                    # Enhanced CoreML configuration for M1-M5
+                    providers_config.append((
+                        "CoreMLExecutionProvider",
+                        {
+                            "ModelFormat": "MLProgram",
+                            "MLComputeUnits": "ALL",  # Use Neural Engine + GPU + CPU
+                            "SpecializationStrategy": "FastPrediction",
+                            "AllowLowPrecisionAccumulationOnGPU": 1,
+                            "EnableOnSubgraphs": 1,
+                            "RequireStaticShapes": 0,
+                            "MaximumCacheSize": 1024 * 1024 * 512,  # 512MB cache
+                        }
+                    ))
+                else:
+                    providers_config.append(p)
+
+            last_error: Optional[Exception] = None
+            for model_path in model_paths:
+                update_status(f"Loading face swapper model from: {model_path}", NAME)
+                try:
+                    FACE_SWAPPER = insightface.model_zoo.get_model(
+                        model_path,
+                        providers=providers_config,
+                    )
+                    update_status("Face swapper model loaded successfully.", NAME)
+                    break
+                except Exception as e:
+                    last_error = e
+                    FACE_SWAPPER = None
+
+            if FACE_SWAPPER is None:
+                if last_error is not None:
+                    update_status(f"Failed to load face swapper model: {last_error}", NAME)
+                else:
+                    update_status("Failed to load face swapper model", NAME)
                 return None
     return FACE_SWAPPER
 
@@ -132,8 +182,16 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
 
     # Safety check for faces
     if source_face is None or target_face is None:
+        if source_face is None:
+            _log_no_source_face_once()
+        if target_face is None:
+            _log_no_target_faces_once()
         return temp_frame
+    _reset_no_source_face_log()
+    _reset_no_target_faces_log()
+
     if not hasattr(source_face, 'normed_embedding') or source_face.normed_embedding is None:
+        _log_no_source_face_once()
         return temp_frame
 
     # Store a copy of the original frame before swapping for opacity blending and mouth mask
@@ -389,18 +447,24 @@ def process_frame(source_face: Face, temp_frame: Frame) -> Frame:
     if modules.globals.many_faces:
         many_faces = get_many_faces(processed_frame)
         if many_faces:
+            _reset_no_target_faces_log()
             current_swap_target = processed_frame.copy() # Apply swaps sequentially on a copy
             for target_face in many_faces:
                 current_swap_target = swap_face(source_face, target_face, current_swap_target)
                 if target_face is not None and hasattr(target_face, "bbox") and target_face.bbox is not None:
                     swapped_face_bboxes.append(target_face.bbox.astype(int))
             processed_frame = current_swap_target # Assign the final result after all swaps
+        else:
+            _log_no_target_faces_once()
     else:
         target_face = get_one_face(processed_frame)
         if target_face:
+            _reset_no_target_faces_log()
             processed_frame = swap_face(source_face, target_face, processed_frame)
             if target_face is not None and hasattr(target_face, "bbox") and target_face.bbox is not None:
                     swapped_face_bboxes.append(target_face.bbox.astype(int))
+        else:
+            _log_no_target_faces_once()
 
     # Apply sharpening and interpolation
     final_frame = apply_post_processing(processed_frame, swapped_face_bboxes)
@@ -480,6 +544,7 @@ def process_frame_v2(temp_frame: Frame, temp_frame_path: str = "") -> Frame:
         # Live stream or webcam processing (analyze faces on the fly)
         detected_faces = get_many_faces(processed_frame)
         if detected_faces:
+            _reset_no_target_faces_log()
             if modules.globals.many_faces:
                  source_face = default_source_face() # Use default source for all detected targets
                  if source_face:
@@ -515,6 +580,8 @@ def process_frame_v2(temp_frame: Frame, temp_frame_path: str = "") -> Frame:
                 target_face = get_one_face(processed_frame, detected_faces) # Use faces already detected
                 if source_face and target_face:
                     source_target_pairs.append((source_face, target_face))
+        else:
+            _log_no_target_faces_once()
 
 
     # Perform swaps based on the collected pairs
@@ -560,6 +627,7 @@ def process_frames(
                 else:
                     source_face = get_one_face(source_img)
                     if source_face is None:
+                        _log_no_source_face_once()
                         # Specific message for no face detected after successful read
                         update_status(f"Warning: Successfully read source image {source_path}, but no face was detected. Swaps will be skipped.", NAME)
                     # Free memory immediately after extracting face
@@ -684,6 +752,7 @@ def process_image(source_path: str, target_path: str, output_path: str) -> None:
                     return
                 source_face = get_one_face(source_img)
                 if not source_face:
+                    _log_no_source_face_once()
                     update_status(f"Error: No face found in source image: {source_path}", NAME)
                     return
             except Exception as src_e:

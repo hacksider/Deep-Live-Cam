@@ -25,12 +25,21 @@ def get_face_analyser() -> Any:
         with FACE_ANALYSER_LOCK:
             # Double-check after acquiring lock
             if FACE_ANALYSER is None:
-                FACE_ANALYSER = insightface.app.FaceAnalysis(
-                    name='buffalo_l',
-                    providers=modules.globals.execution_providers,
-                    allowed_modules=['detection', 'recognition', 'landmark_2d_106']
-                )
-                FACE_ANALYSER.prepare(ctx_id=0, det_size=(640, 640))
+                try:
+                    FACE_ANALYSER = insightface.app.FaceAnalysis(
+                        name='buffalo_l',
+                        providers=modules.globals.execution_providers,
+                        allowed_modules=['detection', 'recognition', 'landmark_2d_106']
+                    )
+                    FACE_ANALYSER.prepare(ctx_id=0, det_size=(640, 640))
+                except Exception as e:
+                    print(
+                        "[DLC.FACE-ANALYSER] Failed to initialize buffalo_l face analyser. "
+                        "Ensure InsightFace model 'buffalo_l' is available. "
+                        f"Error: {e}"
+                    )
+                    FACE_ANALYSER = None
+                    raise
     return FACE_ANALYSER
 
 
