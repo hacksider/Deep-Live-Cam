@@ -12,7 +12,7 @@
   <img src="media/demo.gif" alt="Demo GIF" width="800">
 </p>
 
-##  Disclaimer
+## Disclaimer
 
 This deepfake software is designed to be a productive tool for the AI-generated media industry. It can assist artists in animating custom characters, creating engaging content, and even using models for clothing design.
 
@@ -32,14 +32,16 @@ Users are expected to use this software responsibly and legally. If using a real
 
 ## Exclusive v2.7 beta Quick Start - Pre-built (Windows/Mac Silicon/CPU)
 
-  <a href="https://deeplivecam.net/index.php/quickstart"> <img src="media/Download.png" width="285" height="77" />
+<a href="https://deeplivecam.net/index.php/quickstart"> <img src="media/Download.png" width="285" height="77" />
 
 ##### This is the fastest build you can get if you have a discrete NVIDIA or AMD GPU, CPU or Mac Silicon, And you'll receive special priority support. 2.7 beta is the best you can have with 30+ extra features than the open source version.
- 
-###### These Pre-builts are perfect for non-technical users or those who don't have time to, or can't manually install all the requirements. Just a heads-up: this is an open-source project, so you can also install it manually. 
+
+###### These Pre-builts are perfect for non-technical users or those who don't have time to, or can't manually install all the requirements. Just a heads-up: this is an open-source project, so you can also install it manually.
 
 ## TLDR; Live Deepfake in just 3 Clicks
+
 ![easysteps](https://github.com/user-attachments/assets/af825228-852c-411b-b787-ffd9aac72fc6)
+
 1. Select a face
 2. Select which camera to use
 3. Press live!
@@ -105,211 +107,115 @@ Users are expected to use this software responsibly and legally. If using a real
 
 ### Installation
 
-This is more likely to work on your computer but will be slower as it utilizes the CPU.
+This setup follows the current code and `requirements.txt`.
 
-**1. Set up Your Platform**
+**1. Prerequisites**
 
--   Python (3.11 recommended)
--   pip
--   git
--   [ffmpeg](https://www.youtube.com/watch?v=OlNWCpFdVMA) - ```iex (irm ffmpeg.tc.ht)```
--   [Visual Studio 2022 Runtimes (Windows)](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
+- Python 3.9+ (3.11 recommended)
+- pip
+- git
+- `ffmpeg` and `ffprobe` available in PATH (required for video extraction/encoding)
+- GUI runtime (`tkinter`) available in your Python installation
+- [Visual Studio 2022 Runtimes (Windows)](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
 
-**2. Clone the Repository**
+Dependency notes from `requirements.txt`:
+
+- `insightface==0.7.3`
+- `opencv-python==4.10.0.84`
+- `customtkinter==5.2.2`
+- `pygrabber` (Windows webcam device listing)
+- `tensorflow` on non-macOS systems
+- `onnxruntime-gpu` on non-macOS systems
+- `onnxruntime-silicon` on Apple Silicon macOS
+
+**2. Clone**
 
 ```bash
 git clone https://github.com/hacksider/Deep-Live-Cam.git
 cd Deep-Live-Cam
 ```
 
-**3. Download the Models**
+**3. Create a virtual environment and install dependencies**
 
-1. [GFPGANv1.4](https://huggingface.co/hacksider/deep-live-cam/resolve/main/GFPGANv1.4.onnx)
-2. [inswapper\_128\_fp16.onnx](https://huggingface.co/hacksider/deep-live-cam/resolve/main/inswapper_128_fp16.onnx)
+Windows:
 
-Place these files in the "**models**" folder.
-
-**4. Install Dependencies**
-
-We highly recommend using a `venv` to avoid issues.
-
-
-For Windows:
 ```bash
 python -m venv venv
 venv\Scripts\activate
 pip install -r requirements.txt
 ```
-For Linux:
+
+Linux/macOS:
+
 ```bash
-# Ensure you use the installed Python 3.10
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-**For macOS:**
+**4. Models and how they are loaded**
 
-Apple Silicon (M1/M2/M3) requires specific setup:
+Place manual models in the `models` folder.
 
-```bash
-# Install Python 3.11 (specific version is important)
-brew install python@3.11
+| Model                     | Path                             | Required               | Download                                    | Notes                                                                                  |
+| ------------------------- | -------------------------------- | ---------------------- | ------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `inswapper_128_fp16.onnx` | `models/inswapper_128_fp16.onnx` | Recommended            | Auto on first run (face swapper pre-check)  | Preferred swapper model when present.                                                  |
+| `inswapper_128.onnx`      | `models/inswapper_128.onnx`      | Optional fallback      | Manual                                      | Used as fallback when fp16 model is not available.                                     |
+| `gfpgan-1024.onnx`        | `models/gfpgan-1024.onnx`        | Optional               | Manual                                      | Required only when `face_enhancer` is enabled.                                         |
+| `GFPGANv1.4.onnx`         | `models/GFPGANv1.4.onnx`         | Optional (legacy file) | Manual                                      | Current enhancer code loads `gfpgan-1024.onnx`; keep this as an optional legacy asset. |
+| `buffalo_l`               | InsightFace model cache          | Required for swapping  | Auto by InsightFace at first initialization | Needed for detection/recognition; must be available for source/target face analysis.   |
 
-# Install tkinter package (required for the GUI)
-brew install python-tk@3.10
-
-# Create and activate virtual environment with Python 3.11
-python3.11 -m venv venv
-source venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-```
-
-** In case something goes wrong and you need to reinstall the virtual environment **
+**5. Run**
 
 ```bash
-# Deactivate the virtual environment
-rm -rf venv
-
-# Reinstall the virtual environment
-python -m venv venv
-source venv/bin/activate
-
-# install the dependencies again
-pip install -r requirements.txt
-
-# gfpgan and basicsrs issue fix
-pip install git+https://github.com/xinntao/BasicSR.git@master
-pip uninstall gfpgan -y
-pip install git+https://github.com/TencentARC/GFPGAN.git@master
+python run.py
 ```
 
-**Run:** If you don't have a GPU, you can run Deep-Live-Cam using `python run.py`. Note that initial execution will download models (~300MB).
+This starts CPU mode by default.
 
-### GPU Acceleration
+### Execution Modes
 
-**CUDA Execution Provider (Nvidia)**
+- CPU (default): `python run.py`
+- CUDA: `python run.py --execution-provider cuda`
+- CoreML (Apple Silicon): `python run.py --execution-provider coreml`
+- DirectML (Windows): `python run.py --execution-provider directml`
+- OpenVINO (Intel): `python run.py --execution-provider openvino`
 
-1. Install [CUDA Toolkit 12.8.0](https://developer.nvidia.com/cuda-12-8-0-download-archive)
-2. Install [cuDNN v8.9.7 for CUDA 12.x](https://developer.nvidia.com/rdp/cudnn-archive) (required for onnxruntime-gpu):
-   - Download cuDNN v8.9.7 for CUDA 12.x
-   - Make sure the cuDNN bin directory is in your system PATH
-3. Install dependencies:
+Model selection behavior in runtime:
 
-```bash
-pip install -U torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
-pip uninstall onnxruntime onnxruntime-gpu
-pip install onnxruntime-gpu==1.21.0
-```
+- If `models/inswapper_128_fp16.onnx` exists, it is used first.
+- If fp16 model is missing and `models/inswapper_128.onnx` exists, runtime falls back to it.
+- You do not need both swapper files to run.
 
-3. Usage:
+### Video and Live Mode Notes
 
-```bash
-python run.py --execution-provider cuda
-```
-
-**CoreML Execution Provider (Apple Silicon)**
-
-Apple Silicon (M1/M2/M3) specific installation:
-
-1. Make sure you've completed the macOS setup above using Python 3.10.
-2. Install dependencies:
-
-```bash
-pip uninstall onnxruntime onnxruntime-silicon
-pip install onnxruntime-silicon==1.13.1
-```
-
-3. Usage (important: specify Python 3.10):
-
-```bash
-python3.10 run.py --execution-provider coreml
-```
-
-**Important Notes for macOS:**
-- You **must** use Python 3.10, not newer versions like 3.11 or 3.13
-- Always run with `python3.10` command not just `python` if you have multiple Python versions installed
-- If you get error about `_tkinter` missing, reinstall the tkinter package: `brew reinstall python-tk@3.10`
-- If you get model loading errors, check that your models are in the correct folder
-- If you encounter conflicts with other Python versions, consider uninstalling them:
-  ```bash
-  # List all installed Python versions
-  brew list | grep python
-  
-  # Uninstall conflicting versions if needed
-  brew uninstall --ignore-dependencies python@3.11 python@3.13
-  
-  # Keep only Python 3.11
-  brew cleanup
-  ```
-
-**CoreML Execution Provider (Apple Legacy)**
-
-1. Install dependencies:
-
-```bash
-pip uninstall onnxruntime onnxruntime-coreml
-pip install onnxruntime-coreml==1.21.0
-```
-
-2. Usage:
-
-```bash
-python run.py --execution-provider coreml
-```
-
-**DirectML Execution Provider (Windows)**
-
-1. Install dependencies:
-
-```bash
-pip uninstall onnxruntime onnxruntime-directml
-pip install onnxruntime-directml==1.21.0
-```
-
-2. Usage:
-
-```bash
-python run.py --execution-provider directml
-```
-
-**OpenVINO™ Execution Provider (Intel)**
-
-1. Install dependencies:
-
-```bash
-pip uninstall onnxruntime onnxruntime-openvino
-pip install onnxruntime-openvino==1.21.0
-```
-
-2. Usage:
-
-```bash
-python run.py --execution-provider openvino
-```
+- Video processing requires `ffmpeg` and `ffprobe` in PATH.
+- Webcam mode requires camera access permissions.
+- On Windows, webcam device names are read through `pygrabber` / DirectShow.
+- If no source face or target faces are detected, swapping is skipped and status logs are shown.
 </details>
 
 ## Usage
 
 **1. Image/Video Mode**
 
--   Execute `python run.py`.
--   Choose a source face image and a target image/video.
--   Click "Start".
--   The output will be saved in a directory named after the target video.
+- Execute `python run.py`.
+- Choose a source face image and a target image/video.
+- Click "Start".
+- The output will be saved in a directory named after the target video.
 
 **2. Webcam Mode**
 
--   Execute `python run.py`.
--   Select a source face image.
--   Click "Live".
--   Wait for the preview to appear (10-30 seconds).
--   Use a screen capture tool like OBS to stream.
--   To change the face, select a new source image.
+- Execute `python run.py`.
+- Select a source face image.
+- Confirm your camera appears in the camera dropdown (Windows uses DirectShow via `pygrabber`).
+- Click "Live".
+- Wait for the preview to appear (10-30 seconds).
+- Use a screen capture tool like OBS to stream.
+- To change the face, select a new source image.
 
 ## Download all models in this huggingface link
+
 - [**Download models here**](https://huggingface.co/hacksider/deep-live-cam/tree/main)
 
 ## Command Line Arguments (Unmaintained)
@@ -341,33 +247,32 @@ Looking for a CLI mode? Using the -s/--source argument will make the run program
 
 ## Press
 
- - [**Ars Technica**](https://arstechnica.com/information-technology/2024/08/new-ai-tool-enables-real-time-face-swapping-on-webcams-raising-fraud-concerns/) - *"Deep-Live-Cam goes viral, allowing anyone to become a digital doppelganger"*
- - [**Yahoo!**](https://www.yahoo.com/tech/ok-viral-ai-live-stream-080041056.html) - *"OK, this viral AI live stream software is truly terrifying"*
- - [**CNN Brasil**](https://www.cnnbrasil.com.br/tecnologia/ia-consegue-clonar-rostos-na-webcam-entenda-funcionamento/) - *"AI can clone faces on webcam; understand how it works"*
- - [**Bloomberg Technoz**](https://www.bloombergtechnoz.com/detail-news/71032/kenalan-dengan-teknologi-deep-live-cam-bisa-jadi-alat-menipu) - *"Get to know Deep Live Cam technology, it can be used as a tool for deception."*
- - [**TrendMicro**](https://www.trendmicro.com/vinfo/gb/security/news/cyber-attacks/ai-vs-ai-deepfakes-and-ekyc) - *"AI vs AI: DeepFakes and eKYC"*
- - [**PetaPixel**](https://petapixel.com/2024/08/14/deep-live-cam-deepfake-ai-tool-lets-you-become-anyone-in-a-video-call-with-single-photo-mark-zuckerberg-jd-vance-elon-musk/) - *"Deepfake AI Tool Lets You Become Anyone in a Video Call With Single Photo"*
- - [**SomeOrdinaryGamers**](https://www.youtube.com/watch?time_continue=1074&v=py4Tc-Y8BcY) - *"That's Crazy, Oh God. That's Fucking Freaky Dude... That's So Wild Dude"*
- - [**IShowSpeed**](https://www.youtube.com/live/mFsCe7AIxq8?feature=shared&t=2686) - *"Alright look look look, now look chat, we can do any face we want to look like chat"*
- - [**TechLinked (Linus Tech Tips)**](https://www.youtube.com/watch?v=wnCghLjqv3s&t=551s) - *"They do a pretty good job matching poses, expression and even the lighting"*
- - [**IShowSpeed**](https://youtu.be/JbUPRmXRUtE?t=3964) - *"What the F***! Why do I look like Vinny Jr? I look exactly like Vinny Jr!? No, this shit is crazy! Bro This is F*** Crazy!"*
-
+- [**Ars Technica**](https://arstechnica.com/information-technology/2024/08/new-ai-tool-enables-real-time-face-swapping-on-webcams-raising-fraud-concerns/) - _"Deep-Live-Cam goes viral, allowing anyone to become a digital doppelganger"_
+- [**Yahoo!**](https://www.yahoo.com/tech/ok-viral-ai-live-stream-080041056.html) - _"OK, this viral AI live stream software is truly terrifying"_
+- [**CNN Brasil**](https://www.cnnbrasil.com.br/tecnologia/ia-consegue-clonar-rostos-na-webcam-entenda-funcionamento/) - _"AI can clone faces on webcam; understand how it works"_
+- [**Bloomberg Technoz**](https://www.bloombergtechnoz.com/detail-news/71032/kenalan-dengan-teknologi-deep-live-cam-bisa-jadi-alat-menipu) - _"Get to know Deep Live Cam technology, it can be used as a tool for deception."_
+- [**TrendMicro**](https://www.trendmicro.com/vinfo/gb/security/news/cyber-attacks/ai-vs-ai-deepfakes-and-ekyc) - _"AI vs AI: DeepFakes and eKYC"_
+- [**PetaPixel**](https://petapixel.com/2024/08/14/deep-live-cam-deepfake-ai-tool-lets-you-become-anyone-in-a-video-call-with-single-photo-mark-zuckerberg-jd-vance-elon-musk/) - _"Deepfake AI Tool Lets You Become Anyone in a Video Call With Single Photo"_
+- [**SomeOrdinaryGamers**](https://www.youtube.com/watch?time*continue=1074&v=py4Tc-Y8BcY) - *"That's Crazy, Oh God. That's Fucking Freaky Dude... That's So Wild Dude"\_
+- [**IShowSpeed**](https://www.youtube.com/live/mFsCe7AIxq8?feature=shared&t=2686) - _"Alright look look look, now look chat, we can do any face we want to look like chat"_
+- [**TechLinked (Linus Tech Tips)**](https://www.youtube.com/watch?v=wnCghLjqv3s&t=551s) - _"They do a pretty good job matching poses, expression and even the lighting"_
+- [**IShowSpeed**](https://youtu.be/JbUPRmXRUtE?t=3964) - \*"What the F***! Why do I look like Vinny Jr? I look exactly like Vinny Jr!? No, this shit is crazy! Bro This is F*** Crazy!"\*
 
 ## Credits
 
--   [ffmpeg](https://ffmpeg.org/): for making video-related operations easy
--   [Henry](https://github.com/henryruhs): One of the major contributor in this repo
--   [deepinsight](https://github.com/deepinsight): for their [insightface](https://github.com/deepinsight/insightface) project which provided a well-made library and models. Please be reminded that the [use of the model is for non-commercial research purposes only](https://github.com/deepinsight/insightface?tab=readme-ov-file#license).
--   [havok2-htwo](https://github.com/havok2-htwo): for sharing the code for webcam
--   [GosuDRM](https://github.com/GosuDRM): for the open version of roop
--   [pereiraroland26](https://github.com/pereiraroland26): Multiple faces support
--   [vic4key](https://github.com/vic4key): For supporting/contributing to this project
--   [kier007](https://github.com/kier007): for improving the user experience
--   [qitianai](https://github.com/qitianai): for multi-lingual support
--   [laurigates](https://github.com/laurigates): Decoupling stuffs to make everything faster!
--   and [all developers](https://github.com/hacksider/Deep-Live-Cam/graphs/contributors) behind libraries used in this project.
--   Footnote: Please be informed that the base author of the code is [s0md3v](https://github.com/s0md3v/roop)
--   All the wonderful users who helped make this project go viral by starring the repo ❤️
+- [ffmpeg](https://ffmpeg.org/): for making video-related operations easy
+- [Henry](https://github.com/henryruhs): One of the major contributor in this repo
+- [deepinsight](https://github.com/deepinsight): for their [insightface](https://github.com/deepinsight/insightface) project which provided a well-made library and models. Please be reminded that the [use of the model is for non-commercial research purposes only](https://github.com/deepinsight/insightface?tab=readme-ov-file#license).
+- [havok2-htwo](https://github.com/havok2-htwo): for sharing the code for webcam
+- [GosuDRM](https://github.com/GosuDRM): for the open version of roop
+- [pereiraroland26](https://github.com/pereiraroland26): Multiple faces support
+- [vic4key](https://github.com/vic4key): For supporting/contributing to this project
+- [kier007](https://github.com/kier007): for improving the user experience
+- [qitianai](https://github.com/qitianai): for multi-lingual support
+- [laurigates](https://github.com/laurigates): Decoupling stuffs to make everything faster!
+- and [all developers](https://github.com/hacksider/Deep-Live-Cam/graphs/contributors) behind libraries used in this project.
+- Footnote: Please be informed that the base author of the code is [s0md3v](https://github.com/s0md3v/roop)
+- All the wonderful users who helped make this project go viral by starring the repo ❤️
 
 [![Stargazers](https://reporoster.com/stars/hacksider/Deep-Live-Cam)](https://github.com/hacksider/Deep-Live-Cam/stargazers)
 
