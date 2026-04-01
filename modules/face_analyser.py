@@ -34,8 +34,16 @@ def get_face_analyser() -> Any:
     return FACE_ANALYSER
 
 
+def _is_dml() -> bool:
+    return any("DmlExecutionProvider" in p for p in modules.globals.execution_providers)
+
+
 def get_one_face(frame: Frame) -> Any:
-    face = get_face_analyser().get(frame)
+    if _is_dml():
+        with modules.globals.dml_lock:
+            face = get_face_analyser().get(frame)
+    else:
+        face = get_face_analyser().get(frame)
     try:
         return min(face, key=lambda x: x.bbox[0])
     except ValueError:
@@ -44,7 +52,11 @@ def get_one_face(frame: Frame) -> Any:
 
 def get_many_faces(frame: Frame) -> Any:
     try:
-        return get_face_analyser().get(frame)
+        if _is_dml():
+            with modules.globals.dml_lock:
+                return get_face_analyser().get(frame)
+        else:
+            return get_face_analyser().get(frame)
     except IndexError:
         return None
 
