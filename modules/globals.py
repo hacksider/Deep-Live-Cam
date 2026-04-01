@@ -71,3 +71,6 @@ interpolation_weight: float = 0  # Blend weight for current frame (0.0-1.0). Low
 # --- END: Added for Frame Interpolation ---
 
 # --- END OF FILE globals.py ---
+
+import threading
+dml_lock = threading.Lock()

@@ -2,7 +2,7 @@ import os
 import sys
 # single thread doubles cuda performance - needs to be set before torch import
 if any(arg.startswith('--execution-provider') for arg in sys.argv):
-    os.environ['OMP_NUM_THREADS'] = '1'
+    os.environ['OMP_NUM_THREADS'] = '6'
 # reduce tensorflow log level
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import warnings
@@ -291,6 +291,9 @@ def run() -> None:
     for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
         if not frame_processor.pre_check():
             return
+    # Pre-load face analyser in main thread before GUI starts
+    #from modules.face_analyser import get_face_analyser
+    #get_face_analyser()
     limit_resources()
     if modules.globals.headless:
         start()
