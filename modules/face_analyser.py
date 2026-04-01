@@ -35,9 +35,7 @@ def get_face_analyser() -> Any:
 
 
 def get_one_face(frame: Frame) -> Any:
-    import modules.globals as g
-    with g.dml_lock:
-        face = get_face_analyser().get(frame)
+    face = get_face_analyser().get(frame)
     try:
         return min(face, key=lambda x: x.bbox[0])
     except ValueError:
@@ -45,10 +43,8 @@ def get_one_face(frame: Frame) -> Any:
 
 
 def get_many_faces(frame: Frame) -> Any:
-    import modules.globals as g
     try:
-        with g.dml_lock:
-            return get_face_analyser().get(frame)
+        return get_face_analyser().get(frame)
     except IndexError:
         return None
 

@@ -12,7 +12,7 @@
   <img src="media/demo.gif" alt="Demo GIF" width="800">
 </p>
 
-## Disclaimer
+##  Disclaimer
 
 This deepfake software is designed to be a productive tool for the AI-generated media industry. It can assist artists in animating custom characters, creating engaging content, and even using models for clothing design.
 
@@ -32,16 +32,14 @@ Users are expected to use this software responsibly and legally. If using a real
 
 ## Exclusive v2.7 beta Quick Start - Pre-built (Windows/Mac Silicon/CPU)
 
-<a href="https://deeplivecam.net/index.php/quickstart"> <img src="media/Download.png" width="285" height="77" />
+  <a href="https://deeplivecam.net/index.php/quickstart"> <img src="media/Download.png" width="285" height="77" />
 
 ##### This is the fastest build you can get if you have a discrete NVIDIA or AMD GPU, CPU or Mac Silicon, And you'll receive special priority support. 2.7 beta is the best you can have with 30+ extra features than the open source version.
-
-###### These Pre-builts are perfect for non-technical users or those who don't have time to, or can't manually install all the requirements. Just a heads-up: this is an open-source project, so you can also install it manually.
+ 
+###### These Pre-builts are perfect for non-technical users or those who don't have time to, or can't manually install all the requirements. Just a heads-up: this is an open-source project, so you can also install it manually. 
 
 ## TLDR; Live Deepfake in just 3 Clicks
-
 ![easysteps](https://github.com/user-attachments/assets/af825228-852c-411b-b787-ffd9aac72fc6)
-
 1. Select a face
 2. Select which camera to use
 3. Press live!
@@ -111,11 +109,11 @@ This is more likely to work on your computer but will be slower as it utilizes t
 
 **1. Set up Your Platform**
 
-- Python (3.11 recommended)
-- pip
-- git
-- [ffmpeg](https://www.youtube.com/watch?v=OlNWCpFdVMA) - `iex (irm ffmpeg.tc.ht)`
-- [Visual Studio 2022 Runtimes (Windows)](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
+-   Python (3.11 recommended)
+-   pip
+-   git
+-   [ffmpeg](https://www.youtube.com/watch?v=OlNWCpFdVMA) - ```iex (irm ffmpeg.tc.ht)```
+-   [Visual Studio 2022 Runtimes (Windows)](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
 
 **2. Clone the Repository**
 
@@ -127,7 +125,7 @@ cd Deep-Live-Cam
 **3. Download the Models**
 
 1. [GFPGANv1.4](https://huggingface.co/hacksider/deep-live-cam/resolve/main/GFPGANv1.4.onnx)
-2. [inswapper_128_fp16.onnx](https://huggingface.co/hacksider/deep-live-cam/resolve/main/inswapper_128_fp16.onnx)
+2. [inswapper\_128\_fp16.onnx](https://huggingface.co/hacksider/deep-live-cam/resolve/main/inswapper_128_fp16.onnx)
 
 Place these files in the "**models**" folder.
 
@@ -135,16 +133,14 @@ Place these files in the "**models**" folder.
 
 We highly recommend using a `venv` to avoid issues.
 
-For Windows:
 
+For Windows:
 ```bash
 python -m venv venv
 venv\Scripts\activate
 pip install -r requirements.txt
 ```
-
 For Linux:
-
 ```bash
 # Ensure you use the installed Python 3.10
 python3 -m venv venv
@@ -158,10 +154,10 @@ Apple Silicon (M1/M2/M3) requires specific setup:
 
 ```bash
 # Install Python 3.11 (specific version is important)
-brew install <span class="__cf_email__" data-cfemail="a8d8d1dcc0c7c6e89b869999">[email&#160;protected]</span>
+brew install python@3.11
 
 # Install tkinter package (required for the GUI)
-brew install <span class="__cf_email__" data-cfemail="50202924383f3e7d243b10637e6160">[email&#160;protected]</span>
+brew install python-tk@3.10
 
 # Create and activate virtual environment with Python 3.11
 python3.11 -m venv venv
@@ -233,20 +229,18 @@ python3.10 run.py --execution-provider coreml
 ```
 
 **Important Notes for macOS:**
-
 - You **must** use Python 3.10, not newer versions like 3.11 or 3.13
 - Always run with `python3.10` command not just `python` if you have multiple Python versions installed
-- If you get error about `_tkinter` missing, reinstall the tkinter package: `brew reinstall <span class="__cf_email__" data-cfemail="63131a170b0c0d4e170823504d5253">[email&#160;protected]</span>`
+- If you get error about `_tkinter` missing, reinstall the tkinter package: `brew reinstall python-tk@3.10`
 - If you get model loading errors, check that your models are in the correct folder
 - If you encounter conflicts with other Python versions, consider uninstalling them:
-
   ```bash
   # List all installed Python versions
   brew list | grep python
-
+  
   # Uninstall conflicting versions if needed
-  brew uninstall --ignore-dependencies <span class="__cf_email__" data-cfemail="e898919c808786a8dbc6d9d9">[email&#160;protected]</span> <span class="__cf_email__" data-cfemail="a5d5dcd1cdcacbe5968b9496">[email&#160;protected]</span>
-
+  brew uninstall --ignore-dependencies python@3.11 python@3.13
+  
   # Keep only Python 3.11
   brew cleanup
   ```
@@ -266,7 +260,7 @@ pip install onnxruntime-coreml==1.21.0
 python run.py --execution-provider coreml
 ```
 
-**DirectML Execution Provider (Windows AMD/Intel GPU)**
+**DirectML Execution Provider (Windows)**
 
 1. Install dependencies:
 
@@ -275,35 +269,11 @@ pip uninstall onnxruntime onnxruntime-directml
 pip install onnxruntime-directml==1.21.0
 ```
 
-2. Additional packages required:
+2. Usage:
 
 ```bash
-pip install opencv-python customtkinter pillow insightface pygrabber tensorflow "numpy<2"
+python run.py --execution-provider directml
 ```
-
-3. Usage:
-
-```bash
-python run.py --execution-provider dml
-```
-
-> **AMD GPU Optimization Notes (RX 5000/6000/7000 series)**
->
-> Due to a known `amdxc64.dll` multi-session crash on AMD GPUs, this branch includes the following fixes:
->
-> - All models (face analyser + face swapper) are pre-loaded in the main thread before GUI starts to prevent concurrent DML session initialization crashes
-> - Face detection is throttled (every 5th frame by default) to maximize GPU swap throughput
-> - A global `dml_lock` serializes DML inference calls to prevent race conditions
-> - Detection runs inline in the processing thread (detection thread disabled) to avoid concurrent DML access
->
-> **Performance on RX 6700 (10GB):**
->
-> - No enhancer: ~24 FPS
-> - GPEN-256: ~11 FPS
-> - GFPGAN: ~8 FPS
-> - CPU usage: ~20%, GPU usage: ~60-100%
->
-> For quick launch on AMD, use the included `run-dml.bat` file.
 
 **OpenVINO™ Execution Provider (Intel)**
 
@@ -319,29 +289,27 @@ pip install onnxruntime-openvino==1.21.0
 ```bash
 python run.py --execution-provider openvino
 ```
-
 </details>
 
 ## Usage
 
 **1. Image/Video Mode**
 
-- Execute `python run.py`.
-- Choose a source face image and a target image/video.
-- Click "Start".
-- The output will be saved in a directory named after the target video.
+-   Execute `python run.py`.
+-   Choose a source face image and a target image/video.
+-   Click "Start".
+-   The output will be saved in a directory named after the target video.
 
 **2. Webcam Mode**
 
-- Execute `python run.py`.
-- Select a source face image.
-- Click "Live".
-- Wait for the preview to appear (10-30 seconds).
-- Use a screen capture tool like OBS to stream.
-- To change the face, select a new source image.
+-   Execute `python run.py`.
+-   Select a source face image.
+-   Click "Live".
+-   Wait for the preview to appear (10-30 seconds).
+-   Use a screen capture tool like OBS to stream.
+-   To change the face, select a new source image.
 
 ## Download all models in this huggingface link
-
 - [**Download models here**](https://huggingface.co/hacksider/deep-live-cam/tree/main)
 
 ## Command Line Arguments (Unmaintained)
@@ -373,32 +341,33 @@ Looking for a CLI mode? Using the -s/--source argument will make the run program
 
 ## Press
 
-- [**Ars Technica**](https://arstechnica.com/information-technology/2024/08/new-ai-tool-enables-real-time-face-swapping-on-webcams-raising-fraud-concerns/) - _"Deep-Live-Cam goes viral, allowing anyone to become a digital doppelganger"_
-- [**Yahoo!**](https://www.yahoo.com/tech/ok-viral-ai-live-stream-080041056.html) - _"OK, this viral AI live stream software is truly terrifying"_
-- [**CNN Brasil**](https://www.cnnbrasil.com.br/tecnologia/ia-consegue-clonar-rostos-na-webcam-entenda-funcionamento/) - _"AI can clone faces on webcam; understand how it works"_
-- [**Bloomberg Technoz**](https://www.bloombergtechnoz.com/detail-news/71032/kenalan-dengan-teknologi-deep-live-cam-bisa-jadi-alat-menipu) - _"Get to know Deep Live Cam technology, it can be used as a tool for deception."_
-- [**TrendMicro**](https://www.trendmicro.com/vinfo/gb/security/news/cyber-attacks/ai-vs-ai-deepfakes-and-ekyc) - _"AI vs AI: DeepFakes and eKYC"_
-- [**PetaPixel**](https://petapixel.com/2024/08/14/deep-live-cam-deepfake-ai-tool-lets-you-become-anyone-in-a-video-call-with-single-photo-mark-zuckerberg-jd-vance-elon-musk/) - _"Deepfake AI Tool Lets You Become Anyone in a Video Call With Single Photo"_
-- [**SomeOrdinaryGamers**](https://www.youtube.com/watch?time_continue=1074&v=py4Tc-Y8BcY) - _"That's Crazy, Oh God. That's Fucking Freaky Dude... That's So Wild Dude"_
-- [**IShowSpeed**](https://www.youtube.com/live/mFsCe7AIxq8?feature=shared&t=2686) - _"Alright look look look, now look chat, we can do any face we want to look like chat"_
-- [**TechLinked (Linus Tech Tips)**](https://www.youtube.com/watch?v=wnCghLjqv3s&t=551s) - _"They do a pretty good job matching poses, expression and even the lighting"_
-- [**IShowSpeed**](https://youtu.be/JbUPRmXRUtE?t=3964) - \*"What the F***! Why do I look like Vinny Jr? I look exactly like Vinny Jr!? No, this shit is crazy! Bro This is F*** Crazy!"\*
+ - [**Ars Technica**](https://arstechnica.com/information-technology/2024/08/new-ai-tool-enables-real-time-face-swapping-on-webcams-raising-fraud-concerns/) - *"Deep-Live-Cam goes viral, allowing anyone to become a digital doppelganger"*
+ - [**Yahoo!**](https://www.yahoo.com/tech/ok-viral-ai-live-stream-080041056.html) - *"OK, this viral AI live stream software is truly terrifying"*
+ - [**CNN Brasil**](https://www.cnnbrasil.com.br/tecnologia/ia-consegue-clonar-rostos-na-webcam-entenda-funcionamento/) - *"AI can clone faces on webcam; understand how it works"*
+ - [**Bloomberg Technoz**](https://www.bloombergtechnoz.com/detail-news/71032/kenalan-dengan-teknologi-deep-live-cam-bisa-jadi-alat-menipu) - *"Get to know Deep Live Cam technology, it can be used as a tool for deception."*
+ - [**TrendMicro**](https://www.trendmicro.com/vinfo/gb/security/news/cyber-attacks/ai-vs-ai-deepfakes-and-ekyc) - *"AI vs AI: DeepFakes and eKYC"*
+ - [**PetaPixel**](https://petapixel.com/2024/08/14/deep-live-cam-deepfake-ai-tool-lets-you-become-anyone-in-a-video-call-with-single-photo-mark-zuckerberg-jd-vance-elon-musk/) - *"Deepfake AI Tool Lets You Become Anyone in a Video Call With Single Photo"*
+ - [**SomeOrdinaryGamers**](https://www.youtube.com/watch?time_continue=1074&v=py4Tc-Y8BcY) - *"That's Crazy, Oh God. That's Fucking Freaky Dude... That's So Wild Dude"*
+ - [**IShowSpeed**](https://www.youtube.com/live/mFsCe7AIxq8?feature=shared&t=2686) - *"Alright look look look, now look chat, we can do any face we want to look like chat"*
+ - [**TechLinked (Linus Tech Tips)**](https://www.youtube.com/watch?v=wnCghLjqv3s&t=551s) - *"They do a pretty good job matching poses, expression and even the lighting"*
+ - [**IShowSpeed**](https://youtu.be/JbUPRmXRUtE?t=3964) - *"What the F***! Why do I look like Vinny Jr? I look exactly like Vinny Jr!? No, this shit is crazy! Bro This is F*** Crazy!"*
+
 
 ## Credits
 
-- [ffmpeg](https://ffmpeg.org/): for making video-related operations easy
-- [Henry](https://github.com/henryruhs): One of the major contributor in this repo
-- [deepinsight](https://github.com/deepinsight): for their [insightface](https://github.com/deepinsight/insightface) project which provided a well-made library and models. Please be reminded that the [use of the model is for non-commercial research purposes only](https://github.com/deepinsight/insightface?tab=readme-ov-file#license).
-- [havok2-htwo](https://github.com/havok2-htwo): for sharing the code for webcam
-- [GosuDRM](https://github.com/GosuDRM): for the open version of roop
-- [pereiraroland26](https://github.com/pereiraroland26): Multiple faces support
-- [vic4key](https://github.com/vic4key): For supporting/contributing to this project
-- [kier007](https://github.com/kier007): for improving the user experience
-- [qitianai](https://github.com/qitianai): for multi-lingual support
-- [laurigates](https://github.com/laurigates): Decoupling stuffs to make everything faster!
-- and [all developers](https://github.com/hacksider/Deep-Live-Cam/graphs/contributors) behind libraries used in this project.
-- Footnote: Please be informed that the base author of the code is [s0md3v](https://github.com/s0md3v/roop)
-- All the wonderful users who helped make this project go viral by starring the repo ❤️
+-   [ffmpeg](https://ffmpeg.org/): for making video-related operations easy
+-   [Henry](https://github.com/henryruhs): One of the major contributor in this repo
+-   [deepinsight](https://github.com/deepinsight): for their [insightface](https://github.com/deepinsight/insightface) project which provided a well-made library and models. Please be reminded that the [use of the model is for non-commercial research purposes only](https://github.com/deepinsight/insightface?tab=readme-ov-file#license).
+-   [havok2-htwo](https://github.com/havok2-htwo): for sharing the code for webcam
+-   [GosuDRM](https://github.com/GosuDRM): for the open version of roop
+-   [pereiraroland26](https://github.com/pereiraroland26): Multiple faces support
+-   [vic4key](https://github.com/vic4key): For supporting/contributing to this project
+-   [kier007](https://github.com/kier007): for improving the user experience
+-   [qitianai](https://github.com/qitianai): for multi-lingual support
+-   [laurigates](https://github.com/laurigates): Decoupling stuffs to make everything faster!
+-   and [all developers](https://github.com/hacksider/Deep-Live-Cam/graphs/contributors) behind libraries used in this project.
+-   Footnote: Please be informed that the base author of the code is [s0md3v](https://github.com/s0md3v/roop)
+-   All the wonderful users who helped make this project go viral by starring the repo ❤️
 
 [![Stargazers](https://reporoster.com/stars/hacksider/Deep-Live-Cam)](https://github.com/hacksider/Deep-Live-Cam/stargazers)
 
@@ -408,4 +377,10 @@ Looking for a CLI mode? Using the -s/--source argument will make the run program
 
 ## Stars to the Moon 🚀
 
-<a href="https://star-history.com/#hacksider/deep-live-cam&Date
+<a href="https://star-history.com/#hacksider/deep-live-cam&Date">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=hacksider/deep-live-cam&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=hacksider/deep-live-cam&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=hacksider/deep-live-cam&type=Date" />
+ </picture>
+</a>

@@ -110,6 +110,7 @@ def get_face_swapper() -> Any:
                         ))
                     else:
                         providers_config.append(p)
+                
                 FACE_SWAPPER = insightface.model_zoo.get_model(
                     model_path,
                     providers=providers_config,
@@ -152,10 +153,9 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
         if not temp_frame.flags['C_CONTIGUOUS']:
             temp_frame = np.ascontiguousarray(temp_frame)
         
-        with modules.globals.dml_lock:
-            swapped_frame_raw = face_swapper.get(
-                temp_frame, target_face, source_face, paste_back=True
-            )
+        swapped_frame_raw = face_swapper.get(
+            temp_frame, target_face, source_face, paste_back=True
+        )
 
         # --- START: CRITICAL FIX FOR ORT 1.17 ---
         # Check the output type and range from the model

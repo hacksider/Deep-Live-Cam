@@ -72,8 +72,8 @@ ROOT_WIDTH = 600
 PREVIEW = None
 PREVIEW_MAX_HEIGHT = 700
 PREVIEW_MAX_WIDTH = 1200
-PREVIEW_DEFAULT_WIDTH = 640
-PREVIEW_DEFAULT_HEIGHT = 360
+PREVIEW_DEFAULT_WIDTH = 960
+PREVIEW_DEFAULT_HEIGHT = 540
 
 POPUP_WIDTH = 750
 POPUP_HEIGHT = 810
@@ -1000,10 +1000,6 @@ def webcam_preview(root: ctk.CTk, camera_index: int):
         if modules.globals.source_path is None:
             update_status("Please select a source image first")
             return
-        from modules.processors.frame.face_swapper import get_face_swapper
-        from modules.face_analyser import get_face_analyser
-        get_face_analyser()
-        get_face_swapper()
         create_webcam_preview(camera_index)
     else:
         modules.globals.source_target_map = []
@@ -1109,7 +1105,7 @@ def _detection_thread_func(latest_frame_holder, detection_result, detection_lock
             frame = latest_frame_holder[0]
 
         if frame is None:
-            time.sleep(0.2)
+            time.sleep(0.005)
             continue
 
         if modules.globals.many_faces:
@@ -1161,22 +1157,7 @@ def _processing_thread_func(capture_queue, processed_queue, stop_event,
                 source_image = get_one_face(cv2.imread(modules.globals.source_path))
 
             # Read latest detection results (brief lock to avoid blocking detection thread)
-            # Run detection inline since detection thread is disabled
-            # Run detection every 3 frames, reuse cached result otherwise
-            if not hasattr(_processing_thread_func, '_det_count'):
-                _processing_thread_func._det_count = 0
-            _processing_thread_func._det_count += 1
-
-            if _processing_thread_func._det_count % 3 == 0:
-                if modules.globals.many_faces:
-                    cached_target_face = None
-                    cached_many_faces = get_many_faces(temp_frame)
-                    detection_result['many_faces'] = cached_many_faces
-                else:
-                    cached_target_face = get_one_face(temp_frame)
-                    cached_many_faces = None
-                    detection_result['target_face'] = cached_target_face
-            else:
+            with detection_lock:
                 cached_target_face = detection_result.get('target_face')
                 cached_many_faces = detection_result.get('many_faces')
 
@@ -1294,7 +1275,7 @@ def create_webcam_preview(camera_index: int):
         args=(latest_frame_holder, detection_result, detection_lock, stop_event),
         daemon=True,
     )
-    # det_thread.start()
+    det_thread.start()
 
     # Start processing thread
     proc_thread = threading.Thread(
@@ -1335,7 +1316,7 @@ def create_webcam_preview(camera_index: int):
             temp_frame = fit_image_to_size(
                 temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
             )
-        temp_frame = temp_frame.copy()
+
         image = gpu_cvt_color(temp_frame, cv2.COLOR_BGR2RGB)
         image = Image.fromarray(image)
         image = ImageOps.contain(
@@ -1594,4 +1575,3 @@ def update_webcam_target(
         else:
             update_pop_live_status("Face could not be detected in last upload!")
         return map
-
