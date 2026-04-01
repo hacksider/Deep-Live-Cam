@@ -277,7 +277,7 @@ def start() -> None:
     
     total_time = time.time() - start_time
     if is_video(modules.globals.target_path) and modules.globals.output_path and os.path.isfile(modules.globals.output_path):
-        update_status(f'Processing to video succeed! Total time: {total_time:.2f}s')
+        update_status(f'Video processing succeeded! Total time: {total_time:.2f}s')
     else:
         update_status('Processing to video failed!')
 
