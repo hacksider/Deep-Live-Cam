@@ -30,8 +30,12 @@ def run_ffmpeg(args: List[str]) -> bool:
     try:
         subprocess.check_output(commands, stderr=subprocess.STDOUT)
         return True
-    except Exception:
-        pass
+    except subprocess.CalledProcessError as error:
+        output = error.output.decode(errors="ignore").strip()
+        if output:
+            print(output)
+    except Exception as error:
+        print(f"ffmpeg execution failed: {error}")
     return False
 
 
@@ -61,19 +65,19 @@ def extract_frames(target_path: str) -> None:
     """Extract frames with hardware acceleration and optimized settings."""
     temp_directory_path = get_temp_directory_path(target_path)
     
-    # Use hardware-accelerated decoding and optimized pixel format
+    # Write a contiguous image sequence so the later "%04d.png" input pattern
+    # used during encoding can consume every frame reliably.
     run_ffmpeg(
         [
             "-i", target_path,
             "-vf", "format=rgb24",  # Use video filter for format conversion (faster)
             "-vsync", "0",  # Prevent frame duplication
-            "-frame_pts", "1",  # Preserve frame timing
             os.path.join(temp_directory_path, "%04d.png"),
         ]
     )
 
 
-def create_video(target_path: str, fps: float = 30.0) -> None:
+def create_video(target_path: str, fps: float = 30.0) -> bool:
     """Create video with hardware-accelerated encoding and optimized settings."""
     temp_output_path = get_temp_output_path(target_path)
     temp_directory_path = get_temp_directory_path(target_path)
@@ -182,7 +186,8 @@ def create_video(target_path: str, fps: float = 30.0) -> None:
             "-y",
             temp_output_path,
         ]
-        run_ffmpeg(ffmpeg_args_fallback)
+        success = run_ffmpeg(ffmpeg_args_fallback)
+    return success and os.path.isfile(temp_output_path)
 
 
 def restore_audio(target_path: str, output_path: str) -> None:

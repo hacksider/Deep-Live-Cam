@@ -251,11 +251,15 @@ def start() -> None:
         update_status('Detecting fps...')
         fps = detect_fps(modules.globals.target_path)
         update_status(f'Creating video with {fps} fps...')
-        create_video(modules.globals.target_path, fps)
+        video_created = create_video(modules.globals.target_path, fps)
     else:
         update_status('Creating video with 30.0 fps...')
-        create_video(modules.globals.target_path)
+        video_created = create_video(modules.globals.target_path)
     encoding_time = time.time() - encoding_start
+    if not video_created:
+        update_status('Video encoding failed. No temporary output video was created.')
+        clean_temp(modules.globals.target_path)
+        return
     update_status(f'Video encoding completed in {encoding_time:.2f}s')
     
     # handle audio
@@ -272,8 +276,8 @@ def start() -> None:
     clean_temp(modules.globals.target_path)
     
     total_time = time.time() - start_time
-    if is_video(modules.globals.target_path):
-        update_status(f'Processing to video succeed! Total time: {total_time:.2f}s')
+    if is_video(modules.globals.target_path) and modules.globals.output_path and os.path.isfile(modules.globals.output_path):
+        update_status(f'Video processing succeeded! Total time: {total_time:.2f}s')
     else:
         update_status('Processing to video failed!')
 
