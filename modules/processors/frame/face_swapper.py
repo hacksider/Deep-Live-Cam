@@ -152,7 +152,12 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
         if not temp_frame.flags['C_CONTIGUOUS']:
             temp_frame = np.ascontiguousarray(temp_frame)
         
-        with modules.globals.dml_lock:
+        if any("DmlExecutionProvider" in p for p in modules.globals.execution_providers):
+            with modules.globals.dml_lock:
+                swapped_frame_raw = face_swapper.get(
+                    temp_frame, target_face, source_face, paste_back=True
+                )
+        else:
             swapped_frame_raw = face_swapper.get(
                 temp_frame, target_face, source_face, paste_back=True
             )
