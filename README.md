@@ -188,6 +188,16 @@ pip install git+https://github.com/TencentARC/GFPGAN.git@master
 
 **Run:** If you don't have a GPU, you can run Deep-Live-Cam using `python run.py`. Note that initial execution will download models (~300MB).
 
+#### macOS launcher
+
+If you already set up the venv, you can launch the app with:
+
+```bash
+./launch.command
+```
+
+The launcher prefers `./venv/bin/python`, then `./.venv/bin/python`, then `/opt/homebrew/bin/python3.10`.
+
 ### GPU Acceleration
 
 **CUDA Execution Provider (Nvidia)**

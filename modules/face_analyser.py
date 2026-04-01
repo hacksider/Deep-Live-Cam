@@ -15,6 +15,15 @@ from pathlib import Path
 
 FACE_ANALYSER = None
 FACE_ANALYSER_LOCK = threading.Lock()
+IS_APPLE_SILICON = os.uname().sysname == "Darwin" and os.uname().machine == "arm64"
+
+
+def face_analyser_providers() -> list[str]:
+    # InsightFace detection models are unstable on CoreML with this repo's
+    # ONNXRuntime/CoreML combination. Keep detection on CPU for correctness.
+    if IS_APPLE_SILICON:
+        return ["CPUExecutionProvider"]
+    return modules.globals.execution_providers
 
 
 def get_face_analyser() -> Any:
@@ -27,10 +36,11 @@ def get_face_analyser() -> Any:
             if FACE_ANALYSER is None:
                 FACE_ANALYSER = insightface.app.FaceAnalysis(
                     name='buffalo_l',
-                    providers=modules.globals.execution_providers,
+                    providers=face_analyser_providers(),
                     allowed_modules=['detection', 'recognition', 'landmark_2d_106']
                 )
-                FACE_ANALYSER.prepare(ctx_id=0, det_size=(640, 640))
+                det_size = (320, 320) if IS_APPLE_SILICON else (640, 640)
+                FACE_ANALYSER.prepare(ctx_id=0, det_size=det_size)
     return FACE_ANALYSER
 
 

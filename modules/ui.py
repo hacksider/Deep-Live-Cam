@@ -10,8 +10,6 @@ import json
 import queue
 import threading
 import numpy as np
-import requests
-import tempfile
 import modules.globals
 import modules.metadata
 from modules.face_analyser import (
@@ -72,8 +70,14 @@ ROOT_WIDTH = 600
 PREVIEW = None
 PREVIEW_MAX_HEIGHT = 700
 PREVIEW_MAX_WIDTH = 1200
-PREVIEW_DEFAULT_WIDTH = 960
-PREVIEW_DEFAULT_HEIGHT = 540
+if platform.system() == "Darwin" and platform.machine() == "arm64":
+    PREVIEW_DEFAULT_WIDTH = 640
+    PREVIEW_DEFAULT_HEIGHT = 360
+    LIVE_CAPTURE_FPS = 30
+else:
+    PREVIEW_DEFAULT_WIDTH = 960
+    PREVIEW_DEFAULT_HEIGHT = 540
+    LIVE_CAPTURE_FPS = 60
 
 POPUP_WIDTH = 750
 POPUP_HEIGHT = 810
@@ -108,6 +112,9 @@ source_label_dict_live = {}
 target_label_dict_live = {}
 
 img_ft, vid_ft = modules.globals.file_types
+
+_LIVE_FACE_CACHE = {"timestamp": 0.0, "faces": None}
+_LIVE_DETECTION_INTERVAL = 0.066 if platform.system() == "Darwin" and platform.machine() == "arm64" else 0.033
 
 
 def init(start: Callable[[], None], destroy: Callable[[], None], lang: str) -> ctk.CTk:
@@ -196,12 +203,6 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     )
     select_face_button.place(relx=0.1, rely=0.30, relwidth=0.24, relheight=0.1)
     ToolTip(select_face_button, _("Choose the source face image to swap onto the target"))
-
-    random_face_button = ctk.CTkButton(
-        root, text="🔄", cursor="hand2", width=30, command=lambda: fetch_random_face()
-    )
-    random_face_button.place(relx=0.35, rely=0.30, relwidth=0.05, relheight=0.1)
-    ToolTip(random_face_button, _("Get a random face from thispersondoesnotexist.com"))
 
     swap_faces_button = ctk.CTkButton(
         root, text="↔", cursor="hand2", command=lambda: swap_faces_paths()
@@ -774,26 +775,6 @@ def update_tumbler(var: str, value: bool) -> None:
         )
 
 
-def fetch_random_face() -> None:
-    PREVIEW.withdraw()
-    try:
-        response = requests.get(
-            "https://thispersondoesnotexist.com/",
-            headers={"User-Agent": "Mozilla/5.0"},
-            timeout=10,
-        )
-        response.raise_for_status()
-        temp_dir = tempfile.gettempdir()
-        temp_path = os.path.join(temp_dir, "deep_live_cam_random_face.jpg")
-        with open(temp_path, "wb") as f:
-            f.write(response.content)
-        modules.globals.source_path = temp_path
-        image = render_image_preview(temp_path, (200, 200))
-        source_label.configure(image=image)
-    except Exception as e:
-        print(f"Failed to fetch random face: {e}")
-
-
 def select_source_path() -> None:
     global RECENT_DIRECTORY_SOURCE, img_ft, vid_ft
 
@@ -804,10 +785,18 @@ def select_source_path() -> None:
         filetypes=[img_ft],
     )
     if is_image(source_path):
-        modules.globals.source_path = source_path
-        RECENT_DIRECTORY_SOURCE = os.path.dirname(modules.globals.source_path)
-        image = render_image_preview(modules.globals.source_path, (200, 200))
-        source_label.configure(image=image)
+        cv2_img = cv2.imread(source_path)
+        face = get_one_face(cv2_img) if cv2_img is not None else None
+        if face:
+            modules.globals.source_path = source_path
+            RECENT_DIRECTORY_SOURCE = os.path.dirname(modules.globals.source_path)
+            image = render_image_preview(modules.globals.source_path, (200, 200))
+            source_label.configure(image=image)
+            update_status("Source face loaded")
+        else:
+            modules.globals.source_path = None
+            source_label.configure(image=None)
+            update_status("No face detected in source image. Use a clear, front-facing photo.")
     else:
         modules.globals.source_path = None
         source_label.configure(image=None)
@@ -1108,15 +1097,24 @@ def _detection_thread_func(latest_frame_holder, detection_result, detection_lock
             time.sleep(0.005)
             continue
 
+        now = time.time()
+        if now - _LIVE_FACE_CACHE["timestamp"] < _LIVE_DETECTION_INTERVAL:
+            optimized_faces = _LIVE_FACE_CACHE["faces"]
+        else:
+            if modules.globals.many_faces:
+                optimized_faces = get_many_faces(frame)
+            else:
+                face = get_one_face(frame)
+                optimized_faces = [face] if face else None
+            _LIVE_FACE_CACHE["timestamp"] = now
+            _LIVE_FACE_CACHE["faces"] = optimized_faces
         if modules.globals.many_faces:
-            many = get_many_faces(frame)
             with detection_lock:
                 detection_result['target_face'] = None
-                detection_result['many_faces'] = many
+                detection_result['many_faces'] = optimized_faces
         else:
-            face = get_one_face(frame)
             with detection_lock:
-                detection_result['target_face'] = face
+                detection_result['target_face'] = optimized_faces[0] if optimized_faces else None
                 detection_result['many_faces'] = None
 
 
@@ -1239,8 +1237,12 @@ def create_webcam_preview(camera_index: int):
     global preview_label, PREVIEW
 
     cap = VideoCapturer(camera_index)
-    if not cap.start(PREVIEW_DEFAULT_WIDTH, PREVIEW_DEFAULT_HEIGHT, 60):
-        update_status("Failed to start camera")
+    if not cap.start(PREVIEW_DEFAULT_WIDTH, PREVIEW_DEFAULT_HEIGHT, LIVE_CAPTURE_FPS):
+        error = getattr(cap, "last_error", None)
+        if error:
+            update_status(f"Failed to start camera: {error}")
+        else:
+            update_status("Failed to start camera")
         return
 
     preview_label.configure(width=PREVIEW_DEFAULT_WIDTH, height=PREVIEW_DEFAULT_HEIGHT)

@@ -3,6 +3,8 @@ import sys
 # single thread doubles cuda performance - needs to be set before torch import
 if any(arg.startswith('--execution-provider') for arg in sys.argv):
     os.environ['OMP_NUM_THREADS'] = '1'
+# prevent dependency-level update checks during startup
+os.environ.setdefault('NO_ALBUMENTATIONS_UPDATE', '1')
 # reduce tensorflow log level
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import warnings
@@ -17,7 +19,12 @@ try:
 except ImportError:
     HAS_TORCH = False
 import onnxruntime
-import tensorflow
+try:
+    import tensorflow
+    HAS_TENSORFLOW = True
+except ImportError:
+    tensorflow = None
+    HAS_TENSORFLOW = False
 
 import modules.globals
 import modules.metadata
@@ -31,6 +38,17 @@ if HAS_TORCH and 'ROCMExecutionProvider' in modules.globals.execution_providers:
 warnings.filterwarnings('ignore', category=FutureWarning, module='insightface')
 if HAS_TORCH:
     warnings.filterwarnings('ignore', category=UserWarning, module='torchvision')
+
+
+def default_execution_provider_args() -> List[str]:
+    if platform.system().lower() == 'darwin' and platform.machine().lower() == 'arm64':
+        available = suggest_execution_providers()
+        if 'coreml' in available:
+            defaults = ['coreml']
+            if 'cpu' in available:
+                defaults.append('cpu')
+            return defaults
+    return ['cpu']
 
 
 def parse_args() -> None:
@@ -53,7 +71,7 @@ def parse_args() -> None:
     program.add_argument('--live-mirror', help='The live camera display as you see it in the front-facing camera frame', dest='live_mirror', action='store_true', default=False)
     program.add_argument('--live-resizable', help='The live camera frame is resizable', dest='live_resizable', action='store_true', default=False)
     program.add_argument('--max-memory', help='maximum amount of RAM in GB', dest='max_memory', type=int, default=suggest_max_memory())
-    program.add_argument('--execution-provider', help='execution provider', dest='execution_provider', default=['cpu'], choices=suggest_execution_providers(), nargs='+')
+    program.add_argument('--execution-provider', help='execution provider', dest='execution_provider', default=default_execution_provider_args(), choices=suggest_execution_providers(), nargs='+')
     program.add_argument('--execution-threads', help='number of execution threads', dest='execution_threads', type=int, default=suggest_execution_threads())
     program.add_argument('-v', '--version', action='version', version=f'{modules.metadata.name} {modules.metadata.version}')
 
@@ -151,10 +169,11 @@ def suggest_execution_threads() -> int:
 
 
 def limit_resources() -> None:
-    # prevent tensorflow memory leak
-    gpus = tensorflow.config.experimental.list_physical_devices('GPU')
-    for gpu in gpus:
-        tensorflow.config.experimental.set_memory_growth(gpu, True)
+    # prevent tensorflow memory leak when TensorFlow is available
+    if HAS_TENSORFLOW:
+        gpus = tensorflow.config.experimental.list_physical_devices('GPU')
+        for gpu in gpus:
+            tensorflow.config.experimental.set_memory_growth(gpu, True)
     # limit memory usage
     if modules.globals.max_memory:
         memory = modules.globals.max_memory * 1024 ** 3
