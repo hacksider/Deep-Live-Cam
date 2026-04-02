@@ -127,6 +127,38 @@ def get_face_swapper() -> Any:
             model_paths = _get_existing_swapper_model_paths()
             if not model_paths:
                 update_status("Failed to load face swapper model: no inswapper model file found.", NAME)
+            model_name = "inswapper_128.onnx"
+            if "CUDAExecutionProvider" in modules.globals.execution_providers:
+                model_name = "inswapper_128_fp16.onnx"
+            model_path = os.path.join(models_dir, model_name)
+            update_status(f"Loading face swapper model from: {model_path}", NAME)
+            try:
+                # Optimized provider configuration for Apple Silicon
+                providers_config = []
+                for p in modules.globals.execution_providers:
+                    if p == "CoreMLExecutionProvider" and IS_APPLE_SILICON:
+                        # Enhanced CoreML configuration for M1-M5
+                        providers_config.append((
+                            "CoreMLExecutionProvider",
+                            {
+                                "ModelFormat": "MLProgram",
+                                "MLComputeUnits": "ALL",  # Use Neural Engine + GPU + CPU
+                                "SpecializationStrategy": "FastPrediction",
+                                "AllowLowPrecisionAccumulationOnGPU": 1,
+                                "EnableOnSubgraphs": 1,
+                                "RequireStaticShapes": 0,
+                                "MaximumCacheSize": 1024 * 1024 * 512,  # 512MB cache
+                            }
+                        ))
+                    else:
+                        providers_config.append(p)
+                FACE_SWAPPER = insightface.model_zoo.get_model(
+                    model_path,
+                    providers=providers_config,
+                )
+                update_status("Face swapper model loaded successfully.", NAME)
+            except Exception as e:
+                update_status(f"Error loading face swapper model: {e}", NAME)
                 FACE_SWAPPER = None
                 return None
 
@@ -211,9 +243,15 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
         if not temp_frame.flags['C_CONTIGUOUS']:
             temp_frame = np.ascontiguousarray(temp_frame)
         
-        swapped_frame_raw = face_swapper.get(
-            temp_frame, target_face, source_face, paste_back=True
-        )
+        if any("DmlExecutionProvider" in p for p in modules.globals.execution_providers):
+            with modules.globals.dml_lock:
+                swapped_frame_raw = face_swapper.get(
+                    temp_frame, target_face, source_face, paste_back=True
+                )
+        else:
+            swapped_frame_raw = face_swapper.get(
+                temp_frame, target_face, source_face, paste_back=True
+            )
 
         # --- START: CRITICAL FIX FOR ORT 1.17 ---
         # Check the output type and range from the model
