@@ -142,7 +142,7 @@ pip install -r requirements.txt
 ```
 For Linux:
 ```bash
-# Ensure you use the installed Python 3.10
+# Ensure you use the installed Python 3.11
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -157,7 +157,7 @@ Apple Silicon (M1/M2/M3) requires specific setup:
 brew install python@3.11
 
 # Install tkinter package (required for the GUI)
-brew install python-tk@3.10
+brew install python-tk@3.11
 
 # Create and activate virtual environment with Python 3.11
 python3.11 -m venv venv
@@ -214,7 +214,7 @@ python run.py --execution-provider cuda
 
 Apple Silicon (M1/M2/M3) specific installation:
 
-1. Make sure you've completed the macOS setup above using Python 3.10.
+1. Make sure you've completed the macOS setup above using Python 3.11.
 2. Install dependencies:
 
 ```bash
@@ -222,25 +222,25 @@ pip uninstall onnxruntime onnxruntime-silicon
 pip install onnxruntime-silicon==1.13.1
 ```
 
-3. Usage (important: specify Python 3.10):
+3. Usage:
 
 ```bash
-python3.10 run.py --execution-provider coreml
+python3.11 run.py --execution-provider coreml
 ```
 
 **Important Notes for macOS:**
-- You **must** use Python 3.10, not newer versions like 3.11 or 3.13
-- Always run with `python3.10` command not just `python` if you have multiple Python versions installed
-- If you get error about `_tkinter` missing, reinstall the tkinter package: `brew reinstall python-tk@3.10`
+- You **must** use Python 3.11, not newer versions like 3.13
+- Always run with `python3.11` command not just `python` if you have multiple Python versions installed
+- If you get error about `_tkinter` missing, reinstall the tkinter package: `brew reinstall python-tk@3.11`
 - If you get model loading errors, check that your models are in the correct folder
 - If you encounter conflicts with other Python versions, consider uninstalling them:
   ```bash
   # List all installed Python versions
   brew list | grep python
-  
+
   # Uninstall conflicting versions if needed
-  brew uninstall --ignore-dependencies python@3.11 python@3.13
-  
+  brew uninstall --ignore-dependencies python@3.13
+
   # Keep only Python 3.11
   brew cleanup
   ```
