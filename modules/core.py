@@ -33,6 +33,23 @@ if HAS_TORCH:
     warnings.filterwarnings('ignore', category=UserWarning, module='torchvision')
 
 
+def prepare_execution_provider_runtime() -> None:
+    """Preload runtime DLLs needed by CUDA/TensorRT-enabled ONNX Runtime."""
+    needs_cuda_runtime = any(
+        provider in modules.globals.execution_providers
+        for provider in ('CUDAExecutionProvider', 'TensorrtExecutionProvider')
+    )
+    if not needs_cuda_runtime:
+        return
+    try:
+        onnxruntime.preload_dlls()
+    except Exception as exception:
+        update_status(
+            f'Could not preload CUDA/cuDNN runtime libraries: {exception}',
+            'DLC.RUNTIME'
+        )
+
+
 def parse_args() -> None:
     signal.signal(signal.SIGINT, lambda signal_number, frame: destroy())
     program = argparse.ArgumentParser()
@@ -286,6 +303,7 @@ def destroy(to_quit=True) -> None:
 
 def run() -> None:
     parse_args()
+    prepare_execution_provider_runtime()
     if not pre_check():
         return
     for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
