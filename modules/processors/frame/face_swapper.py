@@ -108,6 +108,14 @@ def get_face_swapper() -> Any:
                                 "MaximumCacheSize": 1024 * 1024 * 512,  # 512MB cache
                             }
                         ))
+                    elif p == "CUDAExecutionProvider":
+                        providers_config.append((
+                            "CUDAExecutionProvider",
+                            {
+                                "arena_extend_strategy": "kSameAsRequested",
+                                "cudnn_conv_algo_search": "DEFAULT",
+                            }
+                        ))
                     else:
                         providers_config.append(p)
                 FACE_SWAPPER = insightface.model_zoo.get_model(
