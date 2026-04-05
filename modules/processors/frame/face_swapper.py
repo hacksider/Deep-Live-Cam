@@ -14,6 +14,7 @@ from modules.utilities import (
     is_image,
     is_video,
 )
+from modules.processors.frame._face_swapper_model import resolve_face_swapper_model_path
 from modules.cluster_analysis import find_closest_centroid
 from modules.gpu_processing import gpu_gaussian_blur, gpu_sharpen, gpu_add_weighted, gpu_resize, gpu_cvt_color
 import os
@@ -66,7 +67,7 @@ def pre_check() -> bool:
 
 def pre_start() -> bool:
     # Simplified pre_start, assuming checks happen before calling process functions
-    model_path = os.path.join(models_dir, "inswapper_128_fp16.onnx")
+    model_path = resolve_face_swapper_model_path(models_dir)
     if not os.path.exists(model_path):
         update_status(f"Model not found: {model_path}. Please download it.", NAME)
         return False
@@ -87,8 +88,7 @@ def get_face_swapper() -> Any:
         if FACE_SWAPPER is None:
             # Use FP32 model by default for broad GPU compatibility.
             # FP16 can produce NaN on GPUs without Tensor Cores (e.g. GTX 16xx).
-            model_name = "inswapper_128.onnx"
-            model_path = os.path.join(models_dir, model_name)
+            model_path = resolve_face_swapper_model_path(models_dir)
             update_status(f"Loading face swapper model from: {model_path}", NAME)
             try:
                 # Optimized provider configuration for Apple Silicon
