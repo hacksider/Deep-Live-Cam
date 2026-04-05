@@ -167,8 +167,9 @@ def limit_resources() -> None:
             resource.setrlimit(resource.RLIMIT_DATA, (memory, memory))
 
 
-def release_resources() -> None:
-    gc.collect()
+def release_resources(force_gc: bool = False) -> None:
+    if force_gc:
+        gc.collect()
     if 'CUDAExecutionProvider' in modules.globals.execution_providers:
         if HAS_TORCH:
             torch.cuda.empty_cache()
@@ -211,7 +212,7 @@ def start() -> None:
         for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
             update_status('Progressing...', frame_processor.NAME)
             frame_processor.process_image(modules.globals.source_path, modules.globals.output_path, modules.globals.output_path)
-            release_resources()
+            release_resources(force_gc=True)
         if is_image(modules.globals.target_path):
             elapsed = time.time() - start_time
             update_status(f'Processing to image succeed! (Time: {elapsed:.2f}s)')

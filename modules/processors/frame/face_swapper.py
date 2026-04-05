@@ -207,7 +207,6 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
         if any(token in error_str for token in (
             "Failed to allocate memory",
             "CUBLAS_STATUS_ALLOC_FAILED",
-            "RUNTIME_EXCEPTION",
             "BFCArena",
         )):
             global FACE_SWAPPER
