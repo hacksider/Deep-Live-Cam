@@ -114,6 +114,8 @@ def get_face_swapper() -> Any:
                             {
                                 "arena_extend_strategy": "kSameAsRequested",
                                 "cudnn_conv_algo_search": "DEFAULT",
+                                "do_copy_in_default_stream": 1,
+                                "enable_cuda_graph": 0,
                             }
                         ))
                     else:
@@ -197,10 +199,22 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
         # --- END: CRITICAL FIX FOR ORT 1.17 ---
 
     except Exception as e:
-        print(f"Error during face swap using face_swapper.get: {e}") # More specific error
-        # import traceback
-        # traceback.print_exc() # Print full traceback for debugging
-        return original_frame # Return original if swap fails
+        print(f"Error during face swap using face_swapper.get: {e}")
+        # If the ONNX Runtime CUDA memory arena failed to allocate, the session is
+        # in a broken state and will fail on every subsequent frame.  Reset it so
+        # get_face_swapper() rebuilds the session on the next call.
+        error_str = str(e)
+        if any(token in error_str for token in (
+            "Failed to allocate memory",
+            "CUBLAS_STATUS_ALLOC_FAILED",
+            "RUNTIME_EXCEPTION",
+            "BFCArena",
+        )):
+            global FACE_SWAPPER
+            with THREAD_LOCK:
+                FACE_SWAPPER = None
+            update_status("GPU memory allocation failed — face swapper session reset. Will reinitialize on next frame.", NAME)
+        return original_frame
 
     # --- Post-swap Processing (Masking, Opacity, etc.) ---
     # Now, work with the guaranteed uint8 'swapped_frame'

@@ -1,9 +1,7 @@
 import os
 import sys
-# single thread doubles cuda performance - needs to be set before torch import
 if any(arg.startswith('--execution-provider') for arg in sys.argv):
     os.environ['OMP_NUM_THREADS'] = '6'
-# reduce tensorflow log level
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import warnings
 from typing import List
@@ -11,6 +9,7 @@ import platform
 import signal
 import shutil
 import argparse
+import gc
 try:
     import torch
     HAS_TORCH = True
@@ -169,8 +168,10 @@ def limit_resources() -> None:
 
 
 def release_resources() -> None:
-    if 'CUDAExecutionProvider' in modules.globals.execution_providers and HAS_TORCH:
-        torch.cuda.empty_cache()
+    gc.collect()
+    if 'CUDAExecutionProvider' in modules.globals.execution_providers:
+        if HAS_TORCH:
+            torch.cuda.empty_cache()
 
 
 def pre_check() -> bool:
