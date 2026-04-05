@@ -319,6 +319,11 @@ def process_frame(source_face: Face | None, temp_frame: Frame) -> Frame:
     return temp_frame
 
 
+def process_frame_v2(temp_frame: Frame) -> Frame:
+    """Processes a frame without source face (used by live webcam preview)."""
+    return enhance_face(temp_frame)
+
+
 def process_frames(
     source_path: str | None, temp_frame_paths: List[str], progress: Any = None
 ) -> None:
