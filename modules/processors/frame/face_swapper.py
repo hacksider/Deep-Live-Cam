@@ -1,6 +1,7 @@
 from typing import Any, List, Optional
 import cv2
 import insightface
+import logging
 import threading
 import numpy as np
 import platform
@@ -26,6 +27,7 @@ NAME = "DLC.FACE-SWAPPER"
 
 # --- START: Added for Interpolation ---
 PREVIOUS_FRAME_RESULT = None # Stores the final processed frame from the previous step
+INTERPOLATION_LOCK = threading.Lock()  # Protects PREVIOUS_FRAME_RESULT across threads
 # --- END: Added for Interpolation ---
 
 # --- START: Mac M1-M5 Optimizations ---
@@ -66,7 +68,7 @@ def pre_check() -> bool:
 
 def pre_start() -> bool:
     # Simplified pre_start, assuming checks happen before calling process functions
-    model_path = os.path.join(models_dir, "inswapper_128_fp16.onnx")
+    model_path = os.path.join(models_dir, "inswapper_128.onnx")
     if not os.path.exists(model_path):
         update_status(f"Model not found: {model_path}. Please download it.", NAME)
         return False
@@ -349,34 +351,30 @@ def apply_post_processing(current_frame: Frame, swapped_face_bboxes: List[np.nda
 
     final_frame = processed_frame # Start with the current (potentially sharpened) frame
 
-    if enable_interpolation and 0 < interpolation_weight < 1:
-        if PREVIOUS_FRAME_RESULT is not None and PREVIOUS_FRAME_RESULT.shape == processed_frame.shape and PREVIOUS_FRAME_RESULT.dtype == processed_frame.dtype:
-            # Perform interpolation
-            try:
-                 final_frame = gpu_add_weighted(
-                    PREVIOUS_FRAME_RESULT, 1.0 - interpolation_weight,
-                    processed_frame, interpolation_weight,
-                    0
-                 )
-                 # Ensure final frame is uint8
-                 final_frame = np.clip(final_frame, 0, 255).astype(np.uint8)
-            except cv2.error as interp_e:
-                 # print(f"Warning: OpenCV error during interpolation: {interp_e}") # Debug
-                 final_frame = processed_frame # Use current frame if interpolation fails
-                 PREVIOUS_FRAME_RESULT = None # Reset state if error occurs
+    with INTERPOLATION_LOCK:
+        if enable_interpolation and 0 < interpolation_weight < 1:
+            if PREVIOUS_FRAME_RESULT is not None and PREVIOUS_FRAME_RESULT.shape == processed_frame.shape and PREVIOUS_FRAME_RESULT.dtype == processed_frame.dtype:
+                # Perform interpolation
+                try:
+                     final_frame = gpu_add_weighted(
+                        PREVIOUS_FRAME_RESULT, 1.0 - interpolation_weight,
+                        processed_frame, interpolation_weight,
+                        0
+                     )
+                     # Ensure final frame is uint8
+                     final_frame = np.clip(final_frame, 0, 255).astype(np.uint8)
+                except cv2.error:
+                     final_frame = processed_frame # Use current frame if interpolation fails
+                     PREVIOUS_FRAME_RESULT = None # Reset state if error occurs
 
-            # Update the state for the next frame *with the interpolated result*
-            PREVIOUS_FRAME_RESULT = final_frame.copy()
+                # Update the state for the next frame *with the interpolated result*
+                PREVIOUS_FRAME_RESULT = final_frame.copy()
+            else:
+                # If previous frame invalid or doesn't match, use current frame and update state
+                PREVIOUS_FRAME_RESULT = processed_frame.copy()
         else:
-            # If previous frame invalid or doesn't match, use current frame and update state
-            if PREVIOUS_FRAME_RESULT is not None and PREVIOUS_FRAME_RESULT.shape != processed_frame.shape:
-                # print("Info: Frame shape changed, resetting interpolation state.") # Debug
-                pass
-            PREVIOUS_FRAME_RESULT = processed_frame.copy()
-    else:
-         # Interpolation is off or weight is invalid — no need to cache
-         PREVIOUS_FRAME_RESULT = None
-
+             # Interpolation is off or weight is invalid — no need to cache
+             PREVIOUS_FRAME_RESULT = None
 
     return final_frame
 # --- END: Helper function for interpolation and sharpening ---
@@ -388,13 +386,10 @@ def process_frame(source_face: Face, temp_frame: Frame) -> Frame:
     Consider using process_frame_v2 for more complex scenarios.
     """
     if getattr(modules.globals, "opacity", 1.0) == 0:
-        # If opacity is 0, no swap happens, so no post-processing needed.
-        # Also reset interpolation state if it was active.
-        global PREVIOUS_FRAME_RESULT
-        PREVIOUS_FRAME_RESULT = None
+        with INTERPOLATION_LOCK:
+            global PREVIOUS_FRAME_RESULT
+            PREVIOUS_FRAME_RESULT = None
         return temp_frame
-
-    # Color correction removed from here (better applied before swap if needed)
 
     processed_frame = temp_frame # Start with the input frame
     swapped_face_bboxes = [] # Keep track of where swaps happened
@@ -424,10 +419,9 @@ def process_frame(source_face: Face, temp_frame: Frame) -> Frame:
 def process_frame_v2(temp_frame: Frame, temp_frame_path: str = "") -> Frame:
     """Handles complex mapping scenarios (map_faces=True) and live streams."""
     if getattr(modules.globals, "opacity", 1.0) == 0:
-        # If opacity is 0, no swap happens, so no post-processing needed.
-        # Also reset interpolation state if it was active.
-        global PREVIOUS_FRAME_RESULT
-        PREVIOUS_FRAME_RESULT = None
+        with INTERPOLATION_LOCK:
+            global PREVIOUS_FRAME_RESULT
+            PREVIOUS_FRAME_RESULT = None
         return temp_frame
 
     processed_frame = temp_frame # Start with the input frame
@@ -665,7 +659,8 @@ def process_image(source_path: str, target_path: str, output_path: str) -> None:
     """Processes a single target image."""
     # --- Reset interpolation state for single image processing ---
     global PREVIOUS_FRAME_RESULT
-    PREVIOUS_FRAME_RESULT = None
+    with INTERPOLATION_LOCK:
+        PREVIOUS_FRAME_RESULT = None
     # ---
 
     use_v2 = getattr(modules.globals, "map_faces", False)
@@ -726,7 +721,8 @@ def process_video(source_path: str, temp_frame_paths: List[str]) -> None:
     """Sets up and calls the frame processing for video."""
     # --- Reset interpolation state before starting video processing ---
     global PREVIOUS_FRAME_RESULT
-    PREVIOUS_FRAME_RESULT = None
+    with INTERPOLATION_LOCK:
+        PREVIOUS_FRAME_RESULT = None
     # ---
 
     mode_desc = "'map_faces'" if getattr(modules.globals, "map_faces", False) else "'simple'"

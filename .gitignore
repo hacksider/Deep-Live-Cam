@@ -27,3 +27,20 @@ faceswap/
 switch_states.json
 /models
 install.bat
+
+# Environment & secrets
+.env
+.env.*
+
+# Claude Code
+.claude/
+.agents/
+CLAUDE.md
+
+# Hooks
+.husky/
+
+# Project docs & plans (local only)
+docs/
+plans/
+scripts/
