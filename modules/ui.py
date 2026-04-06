@@ -914,6 +914,8 @@ def fit_image_to_size(image, width: int, height: int):
     if width is None and height is None:
         return image
     h, w, _ = image.shape
+    if not width or not height or width < 2 or height < 2:
+        return image
     ratio_h = 0.0
     ratio_w = 0.0
     if width > height:
@@ -922,6 +924,8 @@ def fit_image_to_size(image, width: int, height: int):
         ratio_w = width / w
     ratio = max(ratio_w, ratio_h)
     new_size = (int(ratio * w), int(ratio * h))
+    if new_size[0] < 1 or new_size[1] < 1:
+        return image
     return gpu_resize(image, dsize=new_size)
 
 
@@ -1266,22 +1270,25 @@ def create_webcam_preview(camera_index: int):
             ROOT.after(16, _display_next_frame)
             return
 
-        if modules.globals.live_resizable:
-            temp_frame = fit_image_to_size(
-                temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
+        try:
+            if modules.globals.live_resizable:
+                temp_frame = fit_image_to_size(
+                    temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
+                )
+            else:
+                temp_frame = fit_image_to_size(
+                    temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
+                )
+            temp_frame = temp_frame.copy()
+            image = gpu_cvt_color(temp_frame, cv2.COLOR_BGR2RGB)
+            image = Image.fromarray(image)
+            image = ImageOps.contain(
+                image, (temp_frame.shape[1], temp_frame.shape[0]), Image.LANCZOS
             )
-        else:
-            temp_frame = fit_image_to_size(
-                temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
-            )
-        temp_frame = temp_frame.copy()
-        image = gpu_cvt_color(temp_frame, cv2.COLOR_BGR2RGB)
-        image = Image.fromarray(image)
-        image = ImageOps.contain(
-            image, (temp_frame.shape[1], temp_frame.shape[0]), Image.LANCZOS
-        )
-        image = ctk.CTkImage(image, size=image.size)
-        preview_label.configure(image=image)
+            image = ctk.CTkImage(image, size=image.size)
+            preview_label.configure(image=image)
+        except Exception:
+            pass
 
         ROOT.after(16, _display_next_frame)
 
