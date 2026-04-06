@@ -1,22 +1,19 @@
 import tempfile
+import types
 import unittest
-import importlib.util
 from pathlib import Path
+import sys
 
 
-MODULE_PATH = (
-    Path(__file__).resolve().parents[1]
-    / "modules"
-    / "processors"
-    / "frame"
-    / "_face_swapper_model.py"
-)
-SPEC = importlib.util.spec_from_file_location("_face_swapper_model", MODULE_PATH)
-if SPEC is None or SPEC.loader is None:
-    raise RuntimeError(f"Unable to load module from {MODULE_PATH}")
-MODULE = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(MODULE)
-resolve_face_swapper_model_path = MODULE.resolve_face_swapper_model_path
+fake_cv2 = types.ModuleType("cv2")
+fake_cv2.__dict__["IMREAD_COLOR"] = 1
+_ = sys.modules.setdefault("cv2", fake_cv2)
+
+fake_numpy = types.ModuleType("numpy")
+fake_numpy.__dict__["uint8"] = object()
+_ = sys.modules.setdefault("numpy", fake_numpy)
+
+from modules.processors.frame._face_swapper_model import resolve_face_swapper_model_path
 
 
 class FaceSwapperModelPathTests(unittest.TestCase):
@@ -26,7 +23,7 @@ class FaceSwapperModelPathTests(unittest.TestCase):
             (model_dir / "inswapper_128.onnx").write_text("fp32")
             (model_dir / "inswapper_128_fp16.onnx").write_text("fp16")
 
-            result = resolve_face_swapper_model_path(str(model_dir))
+            result = resolve_face_swapper_model_path(model_dir)
 
             self.assertEqual(result, str(model_dir / "inswapper_128.onnx"))
 

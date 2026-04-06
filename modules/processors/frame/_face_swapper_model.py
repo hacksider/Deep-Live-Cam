@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 
 PREFERRED_FACE_SWAPPER_MODELS = (
@@ -7,10 +8,12 @@ PREFERRED_FACE_SWAPPER_MODELS = (
 )
 
 
-def resolve_face_swapper_model_path(models_dir: str) -> str:
-    for filename in PREFERRED_FACE_SWAPPER_MODELS:
-        model_path = os.path.join(models_dir, filename)
-        if os.path.exists(model_path):
-            return model_path
+def resolve_face_swapper_model_path(models_dir: str | os.PathLike[str]) -> str:
+    models_path = Path(models_dir)
 
-    return os.path.join(models_dir, PREFERRED_FACE_SWAPPER_MODELS[0])
+    for filename in PREFERRED_FACE_SWAPPER_MODELS:
+        model_path = models_path / filename
+        if model_path.exists():
+            return str(model_path)
+
+    return str(models_path / PREFERRED_FACE_SWAPPER_MODELS[0])
