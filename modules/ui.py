@@ -30,6 +30,7 @@ from modules.utilities import (
     is_video,
     resolve_relative_path,
     has_image_extension,
+    cv2_imread,
 )
 from modules.video_capture import VideoCapturer
 from modules.gettext import LanguageManager
@@ -697,7 +698,7 @@ def update_popup_source(
     if source_path == "":
         return map
     else:
-        cv2_img = cv2.imread(source_path)
+        cv2_img = cv2_imread(source_path)
         face = get_one_face(cv2_img)
 
         if face:
@@ -976,7 +977,7 @@ def update_preview(frame_number: int = 0) -> None:
                 modules.globals.frame_processors
         ):
             temp_frame = frame_processor.process_frame(
-                get_one_face(cv2.imread(modules.globals.source_path)), temp_frame
+                get_one_face(cv2_imread(modules.globals.source_path)), temp_frame
             )
         image = Image.fromarray(gpu_cvt_color(temp_frame, cv2.COLOR_BGR2RGB))
         image = ImageOps.contain(
@@ -1126,7 +1127,7 @@ def _processing_thread_func(capture_queue, processed_queue, stop_event):
         if not modules.globals.map_faces:
             if modules.globals.source_path and modules.globals.source_path != last_source_path:
                 last_source_path = modules.globals.source_path
-                source_image = get_one_face(cv2.imread(modules.globals.source_path))
+                source_image = get_one_face(cv2_imread(modules.globals.source_path))
 
             # Run detection every 3 frames, reuse cached result otherwise
             det_count += 1
@@ -1450,7 +1451,7 @@ def update_webcam_source(
     if source_path == "":
         return map
     else:
-        cv2_img = cv2.imread(source_path)
+        cv2_img = cv2_imread(source_path)
         face = get_one_face(cv2_img)
 
         if face:
@@ -1502,7 +1503,7 @@ def update_webcam_target(
     if target_path == "":
         return map
     else:
-        cv2_img = cv2.imread(target_path)
+        cv2_img = cv2_imread(target_path)
         face = get_one_face(cv2_img)
 
         if face:

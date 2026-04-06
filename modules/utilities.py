@@ -10,6 +10,9 @@ from pathlib import Path
 from typing import List, Any
 from tqdm import tqdm
 
+import cv2
+import numpy as np
+
 import modules.globals
 
 TEMP_FILE = "temp.mp4"
@@ -314,3 +317,12 @@ def conditional_download(download_directory_path: str, urls: List[str]) -> None:
 
 def resolve_relative_path(path: str) -> str:
     return os.path.abspath(os.path.join(os.path.dirname(__file__), path))
+
+
+def cv2_imread(path: str, flags: int = cv2.IMREAD_COLOR) -> np.ndarray:
+    """Read an image supporting non-ASCII file paths on Windows."""
+    try:
+        img = cv2.imdecode(np.fromfile(path, dtype=np.uint8), flags)
+    except Exception:
+        img = None
+    return img

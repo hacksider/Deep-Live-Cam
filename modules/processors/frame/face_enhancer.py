@@ -17,6 +17,7 @@ from modules.typing import Frame, Face
 from modules.utilities import (
     is_image,
     is_video,
+    cv2_imread,
 )
 
 FACE_ENHANCER = None
@@ -337,7 +338,7 @@ def process_frames(
                 progress.update(1)
             continue
 
-        temp_frame = cv2.imread(temp_frame_path)
+        temp_frame = cv2_imread(temp_frame_path)
         if temp_frame is None:
             print(
                 f"{NAME}: Warning: Failed to read frame {temp_frame_path}, skipping."
@@ -356,7 +357,7 @@ def process_image(
     source_path: str | None, target_path: str, output_path: str
 ) -> None:
     """Processes a single image file."""
-    target_frame = cv2.imread(target_path)
+    target_frame = cv2_imread(target_path)
     if target_frame is None:
         print(f"{NAME}: Error: Failed to read target image {target_path}")
         return
