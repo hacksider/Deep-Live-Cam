@@ -32,7 +32,7 @@ def get_face_analyser() -> Any:
                     providers=['CPUExecutionProvider'],
                     allowed_modules=['detection', 'recognition', 'landmark_2d_106']
                 )
-                FACE_ANALYSER.prepare(ctx_id=0, det_size=(640, 640))
+                FACE_ANALYSER.prepare(ctx_id=0, det_size=(320, 320))
     return FACE_ANALYSER
 
 
