@@ -1287,8 +1287,8 @@ def create_webcam_preview(camera_index: int):
             )
             image = ctk.CTkImage(image, size=image.size)
             preview_label.configure(image=image)
-        except Exception:
-            pass
+        except (cv2.error, ValueError, RuntimeError) as e:
+            print(f"[preview] Frame display error: {e}")
 
         ROOT.after(16, _display_next_frame)
 
