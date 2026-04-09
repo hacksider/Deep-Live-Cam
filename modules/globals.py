@@ -64,6 +64,8 @@ mask_feather_ratio: int = 12       # Denominator for feathering calculation (hig
 mask_down_size: float = 0.1        # Expansion factor for lower lip mask (relative)
 mask_size: float = 1.0             # Expansion factor for upper lip mask (relative)
 mouth_mask_size: float = 0.0       # Mouth mask size (0-100; 0=off, 100=mouth to chin)
+eyes_mask_size: float = 0.0        # Eyes mask size adjustment factor
+eyebrows_mask_size: float = 1.0    # Eyebrows mask padding factor
 
 # --- START: Added for Frame Interpolation ---
 enable_interpolation: bool = True # Toggle temporal smoothing
