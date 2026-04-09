@@ -314,3 +314,35 @@ def conditional_download(download_directory_path: str, urls: List[str]) -> None:
 
 def resolve_relative_path(path: str) -> str:
     return os.path.abspath(os.path.join(os.path.dirname(__file__), path))
+
+
+def get_video_dimensions(target_path: str) -> tuple:
+    """Get video width and height using ffprobe."""
+    command = [
+        "ffprobe", "-v", "error",
+        "-select_streams", "v:0",
+        "-show_entries", "stream=width,height",
+        "-of", "csv=p=0:s=x",
+        target_path,
+    ]
+    output = subprocess.check_output(command).decode().strip()
+    width, height = map(int, output.split("x"))
+    return width, height
+
+
+def estimate_frame_count(target_path: str, fps: float = None) -> int:
+    """Estimate total frame count from video duration and fps."""
+    if fps is None:
+        fps = detect_fps(target_path)
+    command = [
+        "ffprobe", "-v", "error",
+        "-show_entries", "format=duration",
+        "-of", "csv=p=0",
+        target_path,
+    ]
+    try:
+        output = subprocess.check_output(command).decode().strip()
+        duration = float(output)
+        return int(duration * fps)
+    except Exception:
+        return 0
