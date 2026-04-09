@@ -1,6 +1,7 @@
 from typing import Any, List, Optional
 import cv2
 import insightface
+from insightface.utils import face_align
 import threading
 import numpy as np
 import platform
@@ -241,7 +242,6 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
             return original_frame
 
         # Get the aligned input crop for the mask (same as insightface does internally)
-        from insightface.utils import face_align
         aimg, _ = face_align.norm_crop2(temp_frame, target_face.kps, face_swapper.input_size[0])
 
         swapped_frame = _fast_paste_back(temp_frame, bgr_fake, aimg, M)

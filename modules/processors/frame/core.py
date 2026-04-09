@@ -11,6 +11,7 @@ from tqdm import tqdm
 
 import modules
 import modules.globals
+from modules.face_analyser import get_one_face
 
 FRAME_PROCESSORS_MODULES: List[ModuleType] = []
 FRAME_PROCESSORS_INTERFACE = [
@@ -320,8 +321,6 @@ def _run_pipe_pipeline(
     processed_count = 0
     bar_fmt = ('{l_bar}{bar}| {n_fmt}/{total_fmt} '
                '[{elapsed}<{remaining}, {rate_fmt}{postfix}]')
-
-    from modules.face_analyser import get_one_face
 
     try:
         with tqdm(total=total_frames, desc='Processing', unit='frame',
