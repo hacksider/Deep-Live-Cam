@@ -321,6 +321,8 @@ def _run_pipe_pipeline(
     bar_fmt = ('{l_bar}{bar}| {n_fmt}/{total_fmt} '
                '[{elapsed}<{remaining}, {rate_fmt}{postfix}]')
 
+    from modules.face_analyser import get_one_face
+
     try:
         with tqdm(total=total_frames, desc='Processing', unit='frame',
                   dynamic_ncols=True, bar_format=bar_fmt) as progress:
@@ -339,9 +341,21 @@ def _run_pipe_pipeline(
                     (height, width, 3)
                 ).copy()
 
+                # Detect target face once and share across all processors.
+                # This eliminates the redundant detection that each
+                # processor would otherwise do internally.
+                if not modules.globals.many_faces:
+                    target_face = get_one_face(frame)
+                else:
+                    target_face = None  # many_faces mode detects all internally
+
                 # Run frame through every active processor
                 for fp in frame_processors:
-                    frame = fp.process_frame(source_face, frame)
+                    try:
+                        frame = fp.process_frame(source_face, frame, target_face=target_face)
+                    except TypeError:
+                        # Processor doesn't accept target_face kwarg
+                        frame = fp.process_frame(source_face, frame)
 
                 writer.stdin.write(frame.tobytes())
                 processed_count += 1
