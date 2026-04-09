@@ -113,7 +113,9 @@ def get_face_swapper() -> Any:
                             "CUDAExecutionProvider",
                             {
                                 "arena_extend_strategy": "kSameAsRequested",
-                                "cudnn_conv_algo_search": "DEFAULT",
+                                "cudnn_conv_algo_search": "EXHAUSTIVE",
+                                "cudnn_conv_use_max_workspace": "1",
+                                "do_copy_in_default_stream": "0",
                             }
                         ))
                     else:
