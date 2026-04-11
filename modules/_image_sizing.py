@@ -20,6 +20,10 @@ def fit_image_to_size(
     fallback_size: Tuple[int, int] = (640, 360),
 ) -> np.ndarray:
     if width is None and height is None:
+        if image is None or not hasattr(image, "shape"):
+            return _fallback_frame(fallback_size[0], fallback_size[1])
+        if image.size == 0 or len(image.shape) < 2:
+            return _fallback_frame(fallback_size[0], fallback_size[1])
         return image
 
     target_width = int(width) if width is not None else int(fallback_size[0])
