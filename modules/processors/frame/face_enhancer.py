@@ -81,7 +81,10 @@ def get_face_enhancer() -> onnxruntime.InferenceSession:
                 )
 
             try:
-                providers = modules.globals.execution_providers
+                from modules.processors.frame._onnx_enhancer import (
+                    build_provider_config,
+                )
+                providers = build_provider_config()
 
                 session_options = onnxruntime.SessionOptions()
                 session_options.graph_optimization_level = (
@@ -286,8 +289,11 @@ def enhance_face(temp_frame: Frame) -> Frame:
 
         try:
             with THREAD_SEMAPHORE:
+                from modules.processors.frame._onnx_enhancer import (
+                    run_inference,
+                )
                 input_tensor = _preprocess_face(aligned_face)
-                output_tensor = session.run(None, {input_name: input_tensor})[0]
+                output_tensor = run_inference(session, input_name, input_tensor)
                 enhanced_bgr = _postprocess_face(output_tensor)
 
             # The model may output at a different resolution than its input

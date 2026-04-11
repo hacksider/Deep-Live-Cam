@@ -38,16 +38,9 @@ try:
         CUDA_AVAILABLE = True
         print("[gpu_processing] OpenCV CUDA support detected – GPU-accelerated processing enabled.")
     else:
-        missing = []
-        if not _has_gauss:
-            missing.append("createGaussianFilter")
-        if not _has_resize:
-            missing.append("resize")
-        if not _has_cvt:
-            missing.append("cvtColor")
-        print(f"[gpu_processing] cv2.cuda.GpuMat exists but missing: {', '.join(missing)} – falling back to CPU.")
+        pass  # silently fall back to CPU
 except Exception:
-    print("[gpu_processing] OpenCV CUDA not available – using CPU fallback for all operations.")
+    pass  # silently fall back to CPU
 
 
 # ---------------------------------------------------------------------------
