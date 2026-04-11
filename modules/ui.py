@@ -67,6 +67,7 @@ from modules.face_analyser import (
 )
 from modules.gettext import LanguageManager
 from modules.gpu_processing import gpu_cvt_color, gpu_flip, gpu_resize
+from modules._image_sizing import fit_image_to_size as _fit_image_to_size
 from modules.processors.frame.core import get_frame_processors_modules
 from modules.utilities import (
     has_image_extension,
@@ -241,16 +242,8 @@ _RECENT_OUTPUT_DIR: Optional[str] = None
 
 
 def fit_image_to_size(image, width: int, height: int):
-    """BGR ndarray → BGR ndarray scaled to fit within (width, height)."""
-    if width is None and height is None or width <= 0 or height <= 0:
-        return image
-    h, w = image.shape[:2]
-    ratio_w = width / w
-    ratio_h = height / h
-    ratio = min(ratio_w, ratio_h)
-    new_size = (max(1, int(w * ratio)), max(1, int(h * ratio)))
-    return gpu_resize(image, dsize=new_size)
-
+    """BGR ndarray -> BGR ndarray scaled safely to fit within (width, height)."""
+    return _fit_image_to_size(image, width, height)
 
 def _bgr_to_qpixmap(bgr: np.ndarray) -> QPixmap:
     """Zero-copy BGR ndarray → QPixmap."""
