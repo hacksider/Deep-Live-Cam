@@ -1,6 +1,7 @@
 from typing import Any, List, Optional
 import cv2
 import insightface
+import logging
 import threading
 import numpy as np
 import platform
@@ -66,7 +67,7 @@ def pre_check() -> bool:
 
 def pre_start() -> bool:
     # Simplified pre_start, assuming checks happen before calling process functions
-    model_path = os.path.join(models_dir, "inswapper_128_fp16.onnx")
+    model_path = os.path.join(models_dir, "inswapper_128.onnx")
     if not os.path.exists(model_path):
         update_status(f"Model not found: {model_path}. Please download it.", NAME)
         return False
@@ -527,7 +528,7 @@ def process_frame_v2(temp_frame: Frame, temp_frame_path: str = "") -> Frame:
                                      source_target_pairs.append((source_faces[i], detected_faces_with_embedding[closest_idx]))
             else: # Fallback: if no map, use default source for the single detected face (if any)
                 source_face = default_source_face()
-                target_face = get_one_face(processed_frame, detected_faces) # Use faces already detected
+                target_face = min(detected_faces, key=lambda x: x.bbox[0]) if detected_faces else None
                 if source_face and target_face:
                     source_target_pairs.append((source_face, target_face))
 

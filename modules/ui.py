@@ -943,6 +943,7 @@ def render_video_preview(
         image = Image.fromarray(gpu_cvt_color(frame, cv2.COLOR_BGR2RGB))
         if size:
             image = ImageOps.fit(image, size, Image.LANCZOS)
+        capture.release()
         return ctk.CTkImage(image, size=image.size)
     capture.release()
     cv2.destroyAllWindows()
