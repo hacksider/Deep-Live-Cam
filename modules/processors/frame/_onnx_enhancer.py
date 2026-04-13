@@ -21,10 +21,97 @@ IS_APPLE_SILICON = platform.system() == "Darwin" and platform.machine() == "arm6
 THREAD_SEMAPHORE = threading.Semaphore(min(max(1, (os.cpu_count() or 1)), 8))
 
 
+def build_provider_config(providers=None):
+    """Wrap raw provider name strings with optimised CUDA / CoreML options.
+
+    Providers that are already ``(name, options_dict)`` tuples are passed
+    through unchanged.  Non-CUDA providers are left as bare strings.
+    """
+    if providers is None:
+        providers = modules.globals.execution_providers
+
+    config = []
+    for p in providers:
+        if isinstance(p, tuple):
+            # Already configured – pass through
+            config.append(p)
+        elif p == "CUDAExecutionProvider":
+            config.append((
+                "CUDAExecutionProvider",
+                {
+                    # Re-use freed blocks instead of growing the arena
+                    "arena_extend_strategy": "kSameAsRequested",
+                    # One-time exhaustive search for the fastest cuDNN
+                    # convolution algorithm (significant speed-up after
+                    # the first inference pass)
+                    "cudnn_conv_algo_search": "EXHAUSTIVE",
+                    # Allow cuDNN to use more workspace memory for faster
+                    # convolution kernels
+                    "cudnn_conv_use_max_workspace": "1",
+                    # Use a separate CUDA stream for host↔device copies so
+                    # they can overlap with compute kernels
+                    "do_copy_in_default_stream": "0",
+                },
+            ))
+        elif p == "CoreMLExecutionProvider" and IS_APPLE_SILICON:
+            config.append((
+                "CoreMLExecutionProvider",
+                {
+                    "ModelFormat": "MLProgram",
+                    "MLComputeUnits": "ALL",
+                    "AllowLowPrecisionAccumulationOnGPU": 1,
+                },
+            ))
+        else:
+            config.append(p)
+    return config
+
+
+def run_inference(session: onnxruntime.InferenceSession,
+                  input_name: str,
+                  input_tensor: "np.ndarray") -> "np.ndarray":
+    """Run ONNX inference, using IO binding when a CUDA session is active.
+
+    IO binding avoids redundant host↔device copies by transferring the
+    input tensor directly to GPU memory and letting ONNX Runtime allocate
+    the output on the device.  Falls back to the standard ``session.run``
+    path for non-CUDA providers or if binding fails.
+    """
+    if "CUDAExecutionProvider" in session.get_providers():
+        try:
+            io_binding = session.io_binding()
+
+            # Input: numpy → GPU
+            ort_input = onnxruntime.OrtValue.ortvalue_from_numpy(
+                input_tensor, "cuda", 0,
+            )
+            io_binding.bind_ortvalue_input(input_name, ort_input)
+
+            # Output: allocate on GPU (avoids a CPU-side allocation)
+            output_name = session.get_outputs()[0].name
+            io_binding.bind_output(output_name, "cuda", 0)
+
+            session.run_with_iobinding(io_binding)
+
+            return io_binding.get_outputs()[0].numpy()
+        except Exception:
+            # Fall back to standard path (e.g. ORT version mismatch,
+            # unsupported op, or VRAM pressure)
+            pass
+
+    return session.run(None, {input_name: input_tensor})[0]
+
+
 def create_onnx_session(model_path: str) -> onnxruntime.InferenceSession:
-    """Create an ONNX Runtime session using the configured execution providers."""
-    providers = modules.globals.execution_providers
-    session = onnxruntime.InferenceSession(model_path, providers=providers)
+    """Create an ONNX Runtime session with optimised provider config."""
+    providers = build_provider_config()
+    session_options = onnxruntime.SessionOptions()
+    session_options.graph_optimization_level = (
+        onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
+    )
+    session = onnxruntime.InferenceSession(
+        model_path, sess_options=session_options, providers=providers,
+    )
     return session
 
 
@@ -118,7 +205,8 @@ def enhance_face_onnx(
 
     blob = preprocess_face(face_crop, input_size)
     with THREAD_SEMAPHORE:
-        output = session.run(None, {session.get_inputs()[0].name: blob})[0]
+        input_name = session.get_inputs()[0].name
+        output = run_inference(session, input_name, blob)
     enhanced = postprocess_face(output)
 
     # Create mask for blending (feathered edges)

@@ -54,11 +54,11 @@ def pre_check() -> bool:
         logging.error(f"Failed to create directory {download_directory_path} due to permission error: {e}")
         return False
     
-    # Use the direct download URL from Hugging Face
+    # Use the direct download URL from Hugging Face (FP32 model for broad GPU compatibility)
     conditional_download(
         download_directory_path,
         [
-            "https://huggingface.co/hacksider/deep-live-cam/resolve/main/inswapper_128_fp16.onnx"
+            "https://huggingface.co/hacksider/deep-live-cam/resolve/main/inswapper_128.onnx"
         ],
     )
     return True
@@ -85,9 +85,9 @@ def get_face_swapper() -> Any:
 
     with THREAD_LOCK:
         if FACE_SWAPPER is None:
+            # Use FP32 model by default for broad GPU compatibility.
+            # FP16 can produce NaN on GPUs without Tensor Cores (e.g. GTX 16xx).
             model_name = "inswapper_128.onnx"
-            if "CUDAExecutionProvider" in modules.globals.execution_providers:
-                model_name = "inswapper_128_fp16.onnx"
             model_path = os.path.join(models_dir, model_name)
             update_status(f"Loading face swapper model from: {model_path}", NAME)
             try:
@@ -108,9 +108,18 @@ def get_face_swapper() -> Any:
                                 "MaximumCacheSize": 1024 * 1024 * 512,  # 512MB cache
                             }
                         ))
+                    elif p == "CUDAExecutionProvider":
+                        providers_config.append((
+                            "CUDAExecutionProvider",
+                            {
+                                "arena_extend_strategy": "kSameAsRequested",
+                                "cudnn_conv_algo_search": "EXHAUSTIVE",
+                                "cudnn_conv_use_max_workspace": "1",
+                                "do_copy_in_default_stream": "0",
+                            }
+                        ))
                     else:
                         providers_config.append(p)
-                
                 FACE_SWAPPER = insightface.model_zoo.get_model(
                     model_path,
                     providers=providers_config,
@@ -153,9 +162,15 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
         if not temp_frame.flags['C_CONTIGUOUS']:
             temp_frame = np.ascontiguousarray(temp_frame)
         
-        swapped_frame_raw = face_swapper.get(
-            temp_frame, target_face, source_face, paste_back=True
-        )
+        if any("DmlExecutionProvider" in p for p in modules.globals.execution_providers):
+            with modules.globals.dml_lock:
+                swapped_frame_raw = face_swapper.get(
+                    temp_frame, target_face, source_face, paste_back=True
+                )
+        else:
+            swapped_frame_raw = face_swapper.get(
+                temp_frame, target_face, source_face, paste_back=True
+            )
 
         # --- START: CRITICAL FIX FOR ORT 1.17 ---
         # Check the output type and range from the model
