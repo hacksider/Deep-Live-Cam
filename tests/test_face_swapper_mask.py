@@ -91,16 +91,30 @@ def _load_face_swapper_module():
 
 
 class CreateFaceMaskTests(unittest.TestCase):
-    def test_create_face_mask_returns_empty_mask_when_frame_is_none(self) -> None:
-        face_swapper = _load_face_swapper_module()
-
+    @staticmethod
+    def _dummy_face():
         class DummyFace:
             landmark_2d_106 = []
 
-        result = face_swapper.create_face_mask(DummyFace(), None)
+        return DummyFace()
 
+    def assert_empty_mask(self, face_swapper, frame) -> None:
+        result = face_swapper.create_face_mask(self._dummy_face(), frame)
         self.assertEqual(result.shape, (0, 0))
-        self.assertEqual(result.dtype, int)
+        self.assertEqual(result.dtype, face_swapper.np.uint8)
+
+    def test_create_face_mask_returns_empty_mask_when_frame_is_none(self) -> None:
+        face_swapper = _load_face_swapper_module()
+        self.assert_empty_mask(face_swapper, None)
+
+    def test_create_face_mask_returns_empty_mask_when_frame_has_no_shape(self) -> None:
+        face_swapper = _load_face_swapper_module()
+        self.assert_empty_mask(face_swapper, 123)
+
+    def test_create_face_mask_returns_empty_mask_when_frame_is_1d(self) -> None:
+        face_swapper = _load_face_swapper_module()
+        one_dimensional_frame = types.SimpleNamespace(shape=(10,))
+        self.assert_empty_mask(face_swapper, one_dimensional_frame)
 
 
 if __name__ == "__main__":
