@@ -1,6 +1,7 @@
 from typing import Any, List, Optional
 import cv2
 import insightface
+from insightface.utils import face_align
 import threading
 import numpy as np
 import platform
@@ -65,10 +66,11 @@ def pre_check() -> bool:
 
 
 def pre_start() -> bool:
-    # Simplified pre_start, assuming checks happen before calling process functions
-    model_path = os.path.join(models_dir, "inswapper_128_fp16.onnx")
-    if not os.path.exists(model_path):
-        update_status(f"Model not found: {model_path}. Please download it.", NAME)
+    # Check for either model variant
+    fp16_path = os.path.join(models_dir, "inswapper_128_fp16.onnx")
+    fp32_path = os.path.join(models_dir, "inswapper_128.onnx")
+    if not os.path.exists(fp16_path) and not os.path.exists(fp32_path):
+        update_status(f"Model not found in {models_dir}. Please download inswapper_128.onnx.", NAME)
         return False
 
     # Try to get the face swapper to ensure it loads correctly
@@ -76,7 +78,6 @@ def pre_start() -> bool:
         # Error message already printed within get_face_swapper
         return False
 
-    # Add other essential checks if needed, e.g., target/source path validity
     return True
 
 
@@ -85,10 +86,18 @@ def get_face_swapper() -> Any:
 
     with THREAD_LOCK:
         if FACE_SWAPPER is None:
-            # Use FP32 model by default for broad GPU compatibility.
-            # FP16 can produce NaN on GPUs without Tensor Cores (e.g. GTX 16xx).
-            model_name = "inswapper_128.onnx"
-            model_path = os.path.join(models_dir, model_name)
+            # Prefer FP32 for broad GPU compatibility (FP16 can produce NaN
+            # on GPUs without Tensor Cores, e.g. GTX 16xx).  Fall back to
+            # FP16 when FP32 is not available.
+            fp32_path = os.path.join(models_dir, "inswapper_128.onnx")
+            fp16_path = os.path.join(models_dir, "inswapper_128_fp16.onnx")
+            if os.path.exists(fp32_path):
+                model_path = fp32_path
+            elif os.path.exists(fp16_path):
+                model_path = fp16_path
+            else:
+                update_status(f"No inswapper model found in {models_dir}.", NAME)
+                return None
             update_status(f"Loading face swapper model from: {model_path}", NAME)
             try:
                 # Optimized provider configuration for Apple Silicon
@@ -104,8 +113,6 @@ def get_face_swapper() -> Any:
                                 "SpecializationStrategy": "FastPrediction",
                                 "AllowLowPrecisionAccumulationOnGPU": 1,
                                 "EnableOnSubgraphs": 1,
-                                "RequireStaticShapes": 0,
-                                "MaximumCacheSize": 1024 * 1024 * 512,  # 512MB cache
                             }
                         ))
                     elif p == "CUDAExecutionProvider":
@@ -132,6 +139,65 @@ def get_face_swapper() -> Any:
     return FACE_SWAPPER
 
 
+def _fast_paste_back(target_img: Frame, bgr_fake: np.ndarray, aimg: np.ndarray, M: np.ndarray) -> Frame:
+    """Optimized paste-back that restricts blending to the face bounding box.
+
+    Same visual output as insightface's built-in paste_back, but:
+    - Skips dead fake_diff code (computed but unused in insightface)
+    - Runs erosion, blur, and blend on the face bbox instead of the full frame
+    """
+    h, w = target_img.shape[:2]
+    IM = cv2.invertAffineTransform(M)
+
+    # Warp swapped face and mask to full frame (fast: ~0.4ms each)
+    bgr_fake_full = cv2.warpAffine(bgr_fake, IM, (w, h), borderValue=0.0)
+    img_white = np.full((aimg.shape[0], aimg.shape[1]), 255, dtype=np.float32)
+    img_white_full = cv2.warpAffine(img_white, IM, (w, h), borderValue=0.0)
+
+    # Find tight bounding box of the warped face mask
+    rows = np.any(img_white_full > 20, axis=1)
+    cols = np.any(img_white_full > 20, axis=0)
+    row_idx = np.where(rows)[0]
+    col_idx = np.where(cols)[0]
+    if len(row_idx) == 0 or len(col_idx) == 0:
+        return target_img
+    y1, y2 = row_idx[0], row_idx[-1]
+    x1, x2 = col_idx[0], col_idx[-1]
+
+    # Compute mask/blur kernel sizes from the full mask extent
+    mask_h = y2 - y1
+    mask_w = x2 - x1
+    mask_size = int(np.sqrt(mask_h * mask_w))
+    k_erode = max(mask_size // 10, 10)
+    k_blur = max(mask_size // 20, 5)
+
+    # Add padding for erosion + blur kernels, then crop
+    pad = k_erode + k_blur + 2
+    y1p, y2p = max(0, y1 - pad), min(h, y2 + pad + 1)
+    x1p, x2p = max(0, x1 - pad), min(w, x2 + pad + 1)
+
+    # Work on cropped region only
+    mask_crop = img_white_full[y1p:y2p, x1p:x2p]
+    mask_crop[mask_crop > 20] = 255
+
+    kernel = np.ones((k_erode, k_erode), np.uint8)
+    mask_crop = cv2.erode(mask_crop, kernel, iterations=1)
+
+    blur_size = tuple(2 * i + 1 for i in (k_blur, k_blur))
+    mask_crop = cv2.GaussianBlur(mask_crop, blur_size, 0)
+    mask_crop /= 255.0
+
+    # Blend only within the crop
+    mask_3d = mask_crop[:, :, np.newaxis]
+    fake_crop = bgr_fake_full[y1p:y2p, x1p:x2p].astype(np.float32)
+    target_crop = target_img[y1p:y2p, x1p:x2p].astype(np.float32)
+    blended = mask_3d * fake_crop + (1.0 - mask_3d) * target_crop
+
+    result = target_img.copy()
+    result[y1p:y2p, x1p:x2p] = np.clip(blended, 0, 255).astype(np.uint8)
+    return result
+
+
 def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
     """Optimized face swapping with better memory management and performance."""
     face_swapper = get_face_swapper()
@@ -149,60 +215,41 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
     opacity = getattr(modules.globals, "opacity", 1.0)
     opacity = max(0.0, min(1.0, opacity))
     mouth_mask_enabled = getattr(modules.globals, "mouth_mask", False)
-    # Always copy if mouth mask is enabled (we need the unmodified original for mouth cutout)
     original_frame = temp_frame.copy() if (opacity < 1.0 or mouth_mask_enabled) else temp_frame
 
-    # Pre-swap Input Check with optimization
     if temp_frame.dtype != np.uint8:
         temp_frame = np.clip(temp_frame, 0, 255).astype(np.uint8)
 
-    # Apply the face swap with optimized memory handling
     try:
-        # Ensure contiguous memory layout for better performance on all platforms
         if not temp_frame.flags['C_CONTIGUOUS']:
             temp_frame = np.ascontiguousarray(temp_frame)
-        
+
+        # Use paste_back=False and our optimized paste-back
         if any("DmlExecutionProvider" in p for p in modules.globals.execution_providers):
             with modules.globals.dml_lock:
-                swapped_frame_raw = face_swapper.get(
-                    temp_frame, target_face, source_face, paste_back=True
+                bgr_fake, M = face_swapper.get(
+                    temp_frame, target_face, source_face, paste_back=False
                 )
         else:
-            swapped_frame_raw = face_swapper.get(
-                temp_frame, target_face, source_face, paste_back=True
+            bgr_fake, M = face_swapper.get(
+                temp_frame, target_face, source_face, paste_back=False
             )
 
-        # --- START: CRITICAL FIX FOR ORT 1.17 ---
-        # Check the output type and range from the model
-        if swapped_frame_raw is None:
-             # print("Warning: face_swapper.get returned None.") # Debug
-             return original_frame # Return original if swap somehow failed internally
-
-        # Ensure the output is a numpy array
-        if not isinstance(swapped_frame_raw, np.ndarray):
-            # print(f"Warning: face_swapper.get returned type {type(swapped_frame_raw)}, expected numpy array.") # Debug
+        if bgr_fake is None:
             return original_frame
 
-        # Ensure the output has the correct shape (like the input frame)
-        if swapped_frame_raw.shape != temp_frame.shape:
-             # print(f"Warning: Swapped frame shape {swapped_frame_raw.shape} differs from input {temp_frame.shape}.") # Debug
-             # Attempt resize (might distort if aspect ratio changed, but better than crashing)
-             try:
-                 swapped_frame_raw = gpu_resize(swapped_frame_raw, (temp_frame.shape[1], temp_frame.shape[0]))
-             except Exception as resize_e:
-                 # print(f"Error resizing swapped frame: {resize_e}") # Debug
-                 return original_frame
+        if not isinstance(bgr_fake, np.ndarray):
+            return original_frame
 
-        # Explicitly clip values to 0-255 and convert to uint8
-        # This handles cases where the model might output floats or values outside the valid range
-        swapped_frame = np.clip(swapped_frame_raw, 0, 255).astype(np.uint8)
-        # --- END: CRITICAL FIX FOR ORT 1.17 ---
+        # Get the aligned input crop for the mask (same as insightface does internally)
+        aimg, _ = face_align.norm_crop2(temp_frame, target_face.kps, face_swapper.input_size[0])
+
+        swapped_frame = _fast_paste_back(temp_frame, bgr_fake, aimg, M)
+        swapped_frame = np.clip(swapped_frame, 0, 255).astype(np.uint8)
 
     except Exception as e:
-        print(f"Error during face swap using face_swapper.get: {e}") # More specific error
-        # import traceback
-        # traceback.print_exc() # Print full traceback for debugging
-        return original_frame # Return original if swap fails
+        print(f"Error during face swap: {e}")
+        return original_frame
 
     # --- Post-swap Processing (Masking, Opacity, etc.) ---
     # Now, work with the guaranteed uint8 'swapped_frame'
@@ -384,42 +431,40 @@ def apply_post_processing(current_frame: Frame, swapped_face_bboxes: List[np.nda
 # --- END: Helper function for interpolation and sharpening ---
 
 
-def process_frame(source_face: Face, temp_frame: Frame) -> Frame:
-    """
-    DEPRECATED / SIMPLER VERSION - Processes a single frame using one source face.
-    Consider using process_frame_v2 for more complex scenarios.
+def process_frame(source_face: Face, temp_frame: Frame, target_face: Face = None) -> Frame:
+    """Process a single frame, swapping source_face onto detected target(s).
+
+    Args:
+        target_face: Pre-detected target face. When provided, skips the
+            internal face detection call (saves ~30-40ms per frame).
+            Ignored when many_faces mode is active.
     """
     if getattr(modules.globals, "opacity", 1.0) == 0:
-        # If opacity is 0, no swap happens, so no post-processing needed.
-        # Also reset interpolation state if it was active.
         global PREVIOUS_FRAME_RESULT
         PREVIOUS_FRAME_RESULT = None
         return temp_frame
 
-    # Color correction removed from here (better applied before swap if needed)
-
-    processed_frame = temp_frame # Start with the input frame
-    swapped_face_bboxes = [] # Keep track of where swaps happened
+    processed_frame = temp_frame
+    swapped_face_bboxes = []
 
     if modules.globals.many_faces:
         many_faces = get_many_faces(processed_frame)
         if many_faces:
-            current_swap_target = processed_frame.copy() # Apply swaps sequentially on a copy
-            for target_face in many_faces:
-                current_swap_target = swap_face(source_face, target_face, current_swap_target)
-                if target_face is not None and hasattr(target_face, "bbox") and target_face.bbox is not None:
-                    swapped_face_bboxes.append(target_face.bbox.astype(int))
-            processed_frame = current_swap_target # Assign the final result after all swaps
+            current_swap_target = processed_frame.copy()
+            for face in many_faces:
+                current_swap_target = swap_face(source_face, face, current_swap_target)
+                if face is not None and hasattr(face, "bbox") and face.bbox is not None:
+                    swapped_face_bboxes.append(face.bbox.astype(int))
+            processed_frame = current_swap_target
     else:
-        target_face = get_one_face(processed_frame)
+        if target_face is None:
+            target_face = get_one_face(processed_frame)
         if target_face:
             processed_frame = swap_face(source_face, target_face, processed_frame)
-            if target_face is not None and hasattr(target_face, "bbox") and target_face.bbox is not None:
-                    swapped_face_bboxes.append(target_face.bbox.astype(int))
+            if hasattr(target_face, "bbox") and target_face.bbox is not None:
+                swapped_face_bboxes.append(target_face.bbox.astype(int))
 
-    # Apply sharpening and interpolation
     final_frame = apply_post_processing(processed_frame, swapped_face_bboxes)
-
     return final_frame
 
 
