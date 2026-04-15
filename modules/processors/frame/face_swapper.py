@@ -1073,10 +1073,13 @@ def apply_mouth_area(
 
 def create_face_mask(face: Face, frame: Frame) -> np.ndarray:
     """Creates a feathered mask covering the whole face area based on landmarks."""
+    if frame is None or not hasattr(frame, "shape") or len(frame.shape) < 2:
+        return np.zeros((0, 0), dtype=np.uint8)
+
     mask = np.zeros(frame.shape[:2], dtype=np.uint8) # Start with uint8
 
     # Validate inputs
-    if face is None or not hasattr(face, 'landmark_2d_106') or frame is None:
+    if face is None or not hasattr(face, 'landmark_2d_106'):
         # print("Warning: Invalid face or frame for create_face_mask.")
         return mask # Return empty mask
 
