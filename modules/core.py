@@ -17,7 +17,11 @@ try:
 except ImportError:
     HAS_TORCH = False
 import onnxruntime
-import tensorflow
+try:
+    import tensorflow
+    HAS_TENSORFLOW = True
+except ImportError:
+    HAS_TENSORFLOW = False
 
 import modules.globals
 import modules.metadata
@@ -151,9 +155,10 @@ def suggest_execution_threads() -> int:
 
 def limit_resources() -> None:
     # prevent tensorflow memory leak
-    gpus = tensorflow.config.experimental.list_physical_devices('GPU')
-    for gpu in gpus:
-        tensorflow.config.experimental.set_memory_growth(gpu, True)
+    if HAS_TENSORFLOW:
+        gpus = tensorflow.config.experimental.list_physical_devices('GPU')
+        for gpu in gpus:
+            tensorflow.config.experimental.set_memory_growth(gpu, True)
     # limit memory usage
     if modules.globals.max_memory:
         memory = modules.globals.max_memory * 1024 ** 3

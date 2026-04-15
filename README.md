@@ -1,4 +1,4 @@
-<h1 align="center">Deep-Live-Cam 2.1.2</h1>
+<h1 align="center">Deep-Live-Cam 2.1.3</h1>
 
 <p align="center">
   Real-time face swap and video deepfake with a single click and only a single image.
@@ -365,6 +365,7 @@ Looking for a CLI mode? Using the -s/--source argument will make the run program
 -   [kier007](https://github.com/kier007): for improving the user experience
 -   [qitianai](https://github.com/qitianai): for multi-lingual support
 -   [laurigates](https://github.com/laurigates): Decoupling stuffs to make everything faster!
+-   [maxwbuckley](https://github.com/maxwbuckley): For making the effort to optimize this for mac!
 -   and [all developers](https://github.com/hacksider/Deep-Live-Cam/graphs/contributors) behind libraries used in this project.
 -   Footnote: Please be informed that the base author of the code is [s0md3v](https://github.com/s0md3v/roop)
 -   All the wonderful users who helped make this project go viral by starring the repo ❤️
