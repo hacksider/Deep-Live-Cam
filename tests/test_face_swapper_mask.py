@@ -6,6 +6,7 @@ import types
 import unittest
 from unittest import mock
 
+
 def _load_face_swapper_module():
     fake_numpy = types.ModuleType("numpy")
 
@@ -35,6 +36,10 @@ def _load_face_swapper_module():
         lambda *args, **kwargs: (True, types.SimpleNamespace(tofile=lambda *_: None)),
     )
     fake_insightface = types.ModuleType("insightface")
+    fake_insightface_utils = types.ModuleType("insightface.utils")
+    fake_face_align = types.ModuleType("insightface.utils.face_align")
+    fake_insightface.utils = fake_insightface_utils
+    fake_insightface_utils.face_align = fake_face_align
 
     fake_globals = types.ModuleType("modules.globals")
     fake_globals.execution_providers = []
@@ -75,6 +80,8 @@ def _load_face_swapper_module():
         {
             "cv2": fake_cv2,
             "insightface": fake_insightface,
+            "insightface.utils": fake_insightface_utils,
+            "insightface.utils.face_align": fake_face_align,
             "numpy": fake_numpy,
             "modules.globals": fake_globals,
             "modules.processors.frame.core": fake_core,
