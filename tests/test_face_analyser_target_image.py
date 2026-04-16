@@ -4,6 +4,8 @@ import importlib
 import sys
 import types
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
 from unittest import mock
 
 
@@ -81,10 +83,14 @@ class TargetImageFaceAnalysisTests(unittest.TestCase):
             many_faces=[],
         )
 
-        face_analyser.get_unique_faces_from_target_image()
+        output = StringIO()
+        with redirect_stdout(output):
+            result = face_analyser.get_unique_faces_from_target_image()
 
+        self.assertEqual(result, [])
         self.assertEqual(fake_globals.source_target_map, [])
         self.assertEqual(calls["get_many_faces"], [])
+        self.assertIn("Could not read target image: target.png", output.getvalue())
 
     def test_target_image_none_faces_leaves_map_empty(self) -> None:
         face_analyser, fake_globals, calls = _load_face_analyser_module(
@@ -92,10 +98,14 @@ class TargetImageFaceAnalysisTests(unittest.TestCase):
             many_faces=None,
         )
 
-        face_analyser.get_unique_faces_from_target_image()
+        output = StringIO()
+        with redirect_stdout(output):
+            result = face_analyser.get_unique_faces_from_target_image()
 
+        self.assertEqual(result, [])
         self.assertEqual(fake_globals.source_target_map, [])
         self.assertEqual(len(calls["get_many_faces"]), 1)
+        self.assertIn("No faces detected in target image: target.png", output.getvalue())
 
 
 if __name__ == "__main__":
