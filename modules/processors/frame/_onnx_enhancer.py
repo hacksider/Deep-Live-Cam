@@ -168,7 +168,14 @@ def _get_face_affine(face: Any, input_size: int):
     if hasattr(face, "kps") and face.kps is not None:
         landmarks = face.kps.astype(np.float32)
     elif hasattr(face, "landmark_2d_106") and face.landmark_2d_106 is not None:
-        lm106 = face.landmark_2d_106
+        try:
+            lm106 = np.asarray(face.landmark_2d_106, dtype=np.float32)
+        except (TypeError, ValueError):
+            return None, None
+
+        if lm106.ndim != 2 or lm106.shape[0] <= 88 or lm106.shape[1] < 2:
+            return None, None
+
         landmarks = np.array([
             lm106[38],  # left eye
             lm106[88],  # right eye
