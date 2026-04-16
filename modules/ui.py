@@ -1024,22 +1024,6 @@ def get_available_cameras():
             camera_indices = list(range(len(devices)))
             camera_names = devices
 
-            # If no cameras found through DirectShow, try OpenCV fallback
-            if not camera_names:
-                # Try to open camera with index -1 and 0
-                test_indices = [-1, 0]
-                working_cameras = []
-
-                for idx in test_indices:
-                    cap = cv2.VideoCapture(idx)
-                    if cap.isOpened():
-                        working_cameras.append(f"Camera {idx}")
-                        cap.release()
-
-                if working_cameras:
-                    return test_indices[: len(working_cameras)], working_cameras
-
-            # If still no cameras found, return empty lists
             if not camera_names:
                 return [], ["No cameras found"]
 
@@ -1533,4 +1517,3 @@ def update_webcam_target(
         else:
             update_pop_live_status("Face could not be detected in last upload!")
         return map
-
