@@ -103,7 +103,11 @@ def get_unique_faces_from_target_image() -> Any:
     try:
         modules.globals.source_target_map = []
         target_frame = cv2.imread(modules.globals.target_path)
+        if target_frame is None:
+            return None
         many_faces = get_many_faces(target_frame)
+        if many_faces is None:
+            return None
         i = 0
 
         for face in many_faces:
