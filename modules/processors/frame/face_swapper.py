@@ -794,10 +794,15 @@ def process_video(source_path: str, temp_frame_paths: List[str]) -> None:
 def create_lower_mouth_mask(
     face: Face, frame: Frame
 ) -> (np.ndarray, np.ndarray, tuple, np.ndarray):
-    mask = np.zeros(frame.shape[:2], dtype=np.uint8)
     mouth_cutout = None
     lower_lip_polygon = None # Initialize
     mouth_box = (0,0,0,0) # Initialize
+
+    if frame is None or not hasattr(frame, "shape") or len(frame.shape) < 2:
+        mask = np.zeros((0, 0), dtype=np.uint8)
+        return mask, mouth_cutout, mouth_box, lower_lip_polygon
+
+    mask = np.zeros(frame.shape[:2], dtype=np.uint8)
 
     # Validate face and landmarks
     if face is None or not hasattr(face, 'landmark_2d_106'):
