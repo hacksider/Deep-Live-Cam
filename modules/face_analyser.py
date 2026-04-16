@@ -185,6 +185,9 @@ def default_target_face():
                     best_face = face
                     best_frame = frame
 
+        if best_face is None or best_frame is None:
+            continue
+
         x_min, y_min, x_max, y_max = best_face['bbox']
 
         target_frame = cv2.imread(best_frame['location'])
