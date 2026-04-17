@@ -35,6 +35,10 @@ def _load_face_swapper_module():
         lambda *args, **kwargs: (True, types.SimpleNamespace(tofile=lambda *_: None)),
     )
     fake_insightface = types.ModuleType("insightface")
+    fake_insightface_utils = types.ModuleType("insightface.utils")
+    fake_insightface_utils.face_align = types.SimpleNamespace(
+        norm_crop2=lambda *args, **kwargs: (None, None),
+    )
 
     fake_globals = types.ModuleType("modules.globals")
     fake_globals.execution_providers = []
@@ -75,6 +79,7 @@ def _load_face_swapper_module():
         {
             "cv2": fake_cv2,
             "insightface": fake_insightface,
+            "insightface.utils": fake_insightface_utils,
             "numpy": fake_numpy,
             "modules.globals": fake_globals,
             "modules.processors.frame.core": fake_core,
@@ -115,6 +120,37 @@ class CreateFaceMaskTests(unittest.TestCase):
         face_swapper = _load_face_swapper_module()
         one_dimensional_frame = types.SimpleNamespace(shape=(10,))
         self.assert_empty_mask(face_swapper, one_dimensional_frame)
+
+
+class CreateLowerMouthMaskTests(unittest.TestCase):
+    @staticmethod
+    def _dummy_face():
+        class DummyFace:
+            landmark_2d_106 = []
+
+        return DummyFace()
+
+    def assert_empty_mouth_mask(self, face_swapper, frame) -> None:
+        result = face_swapper.create_lower_mouth_mask(self._dummy_face(), frame)
+        mask, mouth_cutout, mouth_box, lower_lip_polygon = result
+        self.assertEqual(mask.shape, (0, 0))
+        self.assertEqual(mask.dtype, face_swapper.np.uint8)
+        self.assertIsNone(mouth_cutout)
+        self.assertEqual(mouth_box, (0, 0, 0, 0))
+        self.assertIsNone(lower_lip_polygon)
+
+    def test_create_lower_mouth_mask_returns_defaults_when_frame_is_none(self) -> None:
+        face_swapper = _load_face_swapper_module()
+        self.assert_empty_mouth_mask(face_swapper, None)
+
+    def test_create_lower_mouth_mask_returns_defaults_when_frame_has_no_shape(self) -> None:
+        face_swapper = _load_face_swapper_module()
+        self.assert_empty_mouth_mask(face_swapper, 123)
+
+    def test_create_lower_mouth_mask_returns_defaults_when_frame_is_1d(self) -> None:
+        face_swapper = _load_face_swapper_module()
+        one_dimensional_frame = types.SimpleNamespace(shape=(10,))
+        self.assert_empty_mouth_mask(face_swapper, one_dimensional_frame)
 
 
 if __name__ == "__main__":
