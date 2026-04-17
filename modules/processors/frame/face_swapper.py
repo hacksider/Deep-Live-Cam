@@ -1,4 +1,4 @@
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Tuple
 import cv2
 import insightface
 from insightface.utils import face_align
@@ -38,6 +38,8 @@ DETECTION_INTERVAL = 0.033  # ~30 FPS detection rate for live mode
 FRAME_SKIP_COUNTER = 0
 ADAPTIVE_QUALITY = True
 # --- END: Mac M1-M5 Optimizations ---
+
+EMPTY_MOUTH_BOX = (0, 0, 0, 0)
 
 abs_dir = os.path.dirname(os.path.abspath(__file__))
 models_dir = os.path.join(
@@ -791,18 +793,20 @@ def process_video(source_path: str, temp_frame_paths: List[str]) -> None:
 # MASKING FUNCTIONS (Mostly unchanged, added safety checks and minor improvements)
 # ==========================
 
+def _empty_lower_mouth_mask(mask_shape: Tuple[int, int]) -> Tuple[np.ndarray, Optional[np.ndarray], Tuple[int, int, int, int], Optional[np.ndarray]]:
+    return np.zeros(mask_shape, dtype=np.uint8), None, EMPTY_MOUTH_BOX, None
+
+
 def create_lower_mouth_mask(
     face: Face, frame: Frame
-) -> (np.ndarray, np.ndarray, tuple, np.ndarray):
-    mouth_cutout = None
-    lower_lip_polygon = None # Initialize
-    mouth_box = (0,0,0,0) # Initialize
+) -> Tuple[np.ndarray, Optional[np.ndarray], Tuple[int, int, int, int], Optional[np.ndarray]]:
+    mask_shape = (0, 0)
+    if frame is not None and hasattr(frame, "shape") and len(frame.shape) >= 2:
+        mask_shape = frame.shape[:2]
+    mask, mouth_cutout, mouth_box, lower_lip_polygon = _empty_lower_mouth_mask(mask_shape)
 
     if frame is None or not hasattr(frame, "shape") or len(frame.shape) < 2:
-        mask = np.zeros((0, 0), dtype=np.uint8)
         return mask, mouth_cutout, mouth_box, lower_lip_polygon
-
-    mask = np.zeros(frame.shape[:2], dtype=np.uint8)
 
     # Validate face and landmarks
     if face is None or not hasattr(face, 'landmark_2d_106'):
