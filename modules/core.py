@@ -43,7 +43,7 @@ def parse_args() -> None:
     program.add_argument('-s', '--source', help='select an source image', dest='source_path')
     program.add_argument('-t', '--target', help='select an target image or video', dest='target_path')
     program.add_argument('-o', '--output', help='select output file or directory', dest='output_path')
-    program.add_argument('--frame-processor', help='pipeline of frame processors', dest='frame_processor', default=['face_swapper'], choices=['face_swapper', 'face_enhancer', 'face_enhancer_gpen256', 'face_enhancer_gpen512'], nargs='+')
+    program.add_argument('--frame-processor', help='pipeline of frame processors', dest='frame_processor', default=['face_swapper'], choices=['face_swapper', 'face_enhancer', 'face_enhancer_gpen256', 'face_enhancer_gpen512', 'hair_style_modifier'], nargs='+')
     program.add_argument('--keep-fps', help='keep original fps', dest='keep_fps', action='store_true', default=False)
     program.add_argument('--keep-audio', help='keep original audio', dest='keep_audio', action='store_true', default=True)
     program.add_argument('--keep-frames', help='keep temporary frames', dest='keep_frames', action='store_true', default=False)
@@ -51,6 +51,11 @@ def parse_args() -> None:
     program.add_argument('--nsfw-filter', help='filter the NSFW image or video', dest='nsfw_filter', action='store_true', default=False)
     program.add_argument('--map-faces', help='map source target faces', dest='map_faces', action='store_true', default=False)
     program.add_argument('--mouth-mask', help='mask the mouth region', dest='mouth_mask', action='store_true', default=False)
+    program.add_argument('--hair-style', help='select hair style', dest='hair_style', default='none', choices=['none', 'bob', 'long', 'curly', 'straight', 'pixie', 'layered', 'wavy'])
+    program.add_argument('--hair-color', help='select hair color', dest='hair_color', default='none', choices=['none', 'blonde', 'light_blonde', 'brown', 'light_brown', 'dark_brown', 'black', 'red', 'light_red', 'burgundy', 'blue', 'light_blue', 'green', 'purple', 'pink', 'white', 'gray'])
+    program.add_argument('--hair-color-intensity', help='hair color intensity (0.0-1.0)', dest='hair_color_intensity', type=float, default=0.5)
+    program.add_argument('--hair-curl-intensity', help='hair curl intensity for curly/wavy styles (0.0-1.0)', dest='hair_curl_intensity', type=float, default=0.5)
+    program.add_argument('--hair-opacity', help='hair modification opacity (0.0-1.0)', dest='hair_opacity', type=float, default=1.0)
     program.add_argument('--video-encoder', help='adjust output video encoder', dest='video_encoder', default='libx264', choices=['libx264', 'libx265', 'libvpx-vp9'])
     program.add_argument('--video-quality', help='adjust output video quality', dest='video_quality', type=int, default=18, choices=range(52), metavar='[0-51]')
     program.add_argument('-l', '--lang', help='Ui language', default="en")
@@ -93,6 +98,15 @@ def parse_args() -> None:
     #for ENHANCER tumblers:
     for enhancer_key in ('face_enhancer', 'face_enhancer_gpen256', 'face_enhancer_gpen512'):
         modules.globals.fp_ui[enhancer_key] = enhancer_key in args.frame_processor
+    
+    # Hair style modifier settings
+    modules.globals.hair_style = args.hair_style
+    modules.globals.hair_color = args.hair_color
+    modules.globals.hair_color_intensity = max(0.0, min(1.0, args.hair_color_intensity))
+    modules.globals.hair_curl_intensity = max(0.0, min(1.0, args.hair_curl_intensity))
+    modules.globals.hair_opacity = max(0.0, min(1.0, args.hair_opacity))
+    modules.globals.hair_style_enabled = args.hair_style != 'none' or args.hair_color != 'none'
+    modules.globals.fp_ui['hair_style_modifier'] = 'hair_style_modifier' in args.frame_processor or modules.globals.hair_style_enabled
 
     # translate deprecated args
     if args.source_path_deprecated:

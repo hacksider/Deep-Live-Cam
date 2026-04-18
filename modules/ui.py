@@ -138,6 +138,12 @@ def save_switch_states():
         "mouth_mask": modules.globals.mouth_mask,
         "show_mouth_mask_box": modules.globals.show_mouth_mask_box,
         "mouth_mask_size": modules.globals.mouth_mask_size,
+        "hair_style": modules.globals.hair_style,
+        "hair_color": modules.globals.hair_color,
+        "hair_color_intensity": modules.globals.hair_color_intensity,
+        "hair_curl_intensity": modules.globals.hair_curl_intensity,
+        "hair_opacity": modules.globals.hair_opacity,
+        "hair_style_enabled": modules.globals.hair_style_enabled,
     }
     with open("switch_states.json", "w") as f:
         json.dump(switch_states, f)
@@ -160,11 +166,17 @@ def load_switch_states():
         modules.globals.fp_ui = switch_states.get("fp_ui", {"face_enhancer": False})
         modules.globals.show_fps = switch_states.get("show_fps", False)
         modules.globals.mouth_mask_size = switch_states.get("mouth_mask_size", 0.0)
-        # mouth_mask is driven by the slider: on if size > 0, off if 0
         modules.globals.mouth_mask = modules.globals.mouth_mask_size > 0
-        modules.globals.show_mouth_mask_box = False  # always start hidden
+        modules.globals.show_mouth_mask_box = False
+        modules.globals.hair_style = switch_states.get("hair_style", "none")
+        modules.globals.hair_color = switch_states.get("hair_color", "none")
+        modules.globals.hair_color_intensity = switch_states.get("hair_color_intensity", 0.5)
+        modules.globals.hair_curl_intensity = switch_states.get("hair_curl_intensity", 0.5)
+        modules.globals.hair_opacity = switch_states.get("hair_opacity", 1.0)
+        modules.globals.hair_style_enabled = switch_states.get("hair_style_enabled", False)
+        if "hair_style_modifier" not in modules.globals.fp_ui:
+            modules.globals.fp_ui["hair_style_modifier"] = modules.globals.hair_style_enabled
     except FileNotFoundError:
-        # If the file doesn't exist, use default values
         pass
 
 
@@ -557,10 +569,170 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     mouth_mask_size_slider.bind("<ButtonRelease-1>", on_mouth_mask_slider_release)
     ToolTip(mouth_mask_size_slider, _("0 = use swapped mouth, 100 = expose original mouth to chin area"))
 
+    # --- Hair Style Modifier Controls ---
+    hair_style_options = [
+        "None", "Bob", "Long", "Curly", "Straight", 
+        "Pixie", "Layered", "Wavy"
+    ]
+    hair_style_key_map = {
+        "None": "none",
+        "Bob": "bob",
+        "Long": "long",
+        "Curly": "curly",
+        "Straight": "straight",
+        "Pixie": "pixie",
+        "Layered": "layered",
+        "Wavy": "wavy",
+    }
+
+    hair_color_options = [
+        "None", "Blonde", "Light Blonde", "Brown", "Light Brown", 
+        "Dark Brown", "Black", "Red", "Light Red", "Burgundy",
+        "Blue", "Light Blue", "Green", "Purple", "Pink", "White", "Gray"
+    ]
+    hair_color_key_map = {
+        "None": "none",
+        "Blonde": "blonde",
+        "Light Blonde": "light_blonde",
+        "Brown": "brown",
+        "Light Brown": "light_brown",
+        "Dark Brown": "dark_brown",
+        "Black": "black",
+        "Red": "red",
+        "Light Red": "light_red",
+        "Burgundy": "burgundy",
+        "Blue": "blue",
+        "Light Blue": "light_blue",
+        "Green": "green",
+        "Purple": "purple",
+        "Pink": "pink",
+        "White": "white",
+        "Gray": "gray",
+    }
+
+    initial_hair_style = "None"
+    current_hair_style = getattr(modules.globals, "hair_style", "none")
+    for display_name, internal_name in hair_style_key_map.items():
+        if internal_name == current_hair_style:
+            initial_hair_style = display_name
+            break
+
+    initial_hair_color = "None"
+    current_hair_color = getattr(modules.globals, "hair_color", "none")
+    for display_name, internal_name in hair_color_key_map.items():
+        if internal_name == current_hair_color:
+            initial_hair_color = display_name
+            break
+
+    hair_style_var = ctk.StringVar(value=initial_hair_style)
+    hair_color_var = ctk.StringVar(value=initial_hair_color)
+
+    def on_hair_style_change(choice: str):
+        style_key = hair_style_key_map.get(choice, "none")
+        modules.globals.hair_style = style_key
+        modules.globals.hair_style_enabled = style_key != "none" or modules.globals.hair_color != "none"
+        modules.globals.fp_ui["hair_style_modifier"] = modules.globals.hair_style_enabled
+        save_switch_states()
+        if style_key != "none":
+            update_status(f"Hair style set to: {choice}")
+        else:
+            update_status("Hair style disabled")
+
+    def on_hair_color_change(choice: str):
+        color_key = hair_color_key_map.get(choice, "none")
+        modules.globals.hair_color = color_key
+        modules.globals.hair_style_enabled = color_key != "none" or modules.globals.hair_style != "none"
+        modules.globals.fp_ui["hair_style_modifier"] = modules.globals.hair_style_enabled
+        save_switch_states()
+        if color_key != "none":
+            update_status(f"Hair color set to: {choice}")
+        else:
+            update_status("Hair color disabled")
+
+    hair_style_label = ctk.CTkLabel(root, text="Hair Style:")
+    hair_style_label.place(relx=0.05, rely=0.75, relwidth=0.18, relheight=0.03)
+
+    hair_style_dropdown = ctk.CTkOptionMenu(
+        root,
+        variable=hair_style_var,
+        values=hair_style_options,
+        command=on_hair_style_change,
+    )
+    hair_style_dropdown.place(relx=0.23, rely=0.75, relwidth=0.23, relheight=0.03)
+    ToolTip(hair_style_dropdown, _("Select a hair style to apply (None = no style change)"))
+
+    hair_color_label = ctk.CTkLabel(root, text="Hair Color:")
+    hair_color_label.place(relx=0.48, rely=0.75, relwidth=0.18, relheight=0.03)
+
+    hair_color_dropdown = ctk.CTkOptionMenu(
+        root,
+        variable=hair_color_var,
+        values=hair_color_options,
+        command=on_hair_color_change,
+    )
+    hair_color_dropdown.place(relx=0.66, rely=0.75, relwidth=0.28, relheight=0.03)
+    ToolTip(hair_color_dropdown, _("Select a hair color to apply (None = no color change)"))
+
+    hair_color_intensity_var = ctk.DoubleVar(value=getattr(modules.globals, "hair_color_intensity", 0.5))
+    
+    def on_hair_color_intensity_change(value: float):
+        val = float(value)
+        modules.globals.hair_color_intensity = val
+        save_switch_states()
+        update_status(f"Hair color intensity: {int(val * 100)}%")
+
+    hair_color_intensity_label = ctk.CTkLabel(root, text="Color Intensity:")
+    hair_color_intensity_label.place(relx=0.05, rely=0.78, relwidth=0.2, relheight=0.03)
+
+    hair_color_intensity_slider = ctk.CTkSlider(
+        root,
+        from_=0.0,
+        to=1.0,
+        variable=hair_color_intensity_var,
+        command=on_hair_color_intensity_change,
+        fg_color="#E0E0E0",
+        progress_color="#007BFF",
+        button_color="#FFFFFF",
+        button_hover_color="#CCCCCC",
+        height=5,
+        border_width=1,
+        corner_radius=3,
+    )
+    hair_color_intensity_slider.place(relx=0.25, rely=0.79, relwidth=0.25, relheight=0.02)
+    ToolTip(hair_color_intensity_slider, _("Adjust hair color application intensity (0% = subtle, 100% = strong)"))
+
+    hair_curl_intensity_var = ctk.DoubleVar(value=getattr(modules.globals, "hair_curl_intensity", 0.5))
+    
+    def on_hair_curl_intensity_change(value: float):
+        val = float(value)
+        modules.globals.hair_curl_intensity = val
+        save_switch_states()
+        update_status(f"Hair curl intensity: {int(val * 100)}%")
+
+    hair_curl_intensity_label = ctk.CTkLabel(root, text="Curl Intensity:")
+    hair_curl_intensity_label.place(relx=0.52, rely=0.78, relwidth=0.2, relheight=0.03)
+
+    hair_curl_intensity_slider = ctk.CTkSlider(
+        root,
+        from_=0.0,
+        to=1.0,
+        variable=hair_curl_intensity_var,
+        command=on_hair_curl_intensity_change,
+        fg_color="#E0E0E0",
+        progress_color="#007BFF",
+        button_color="#FFFFFF",
+        button_hover_color="#CCCCCC",
+        height=5,
+        border_width=1,
+        corner_radius=3,
+    )
+    hair_curl_intensity_slider.place(relx=0.72, rely=0.79, relwidth=0.25, relheight=0.02)
+    ToolTip(hair_curl_intensity_slider, _("Adjust curl/wave intensity for curly/wavy styles"))
+
     # Status and link at the bottom
     global status_label
     status_label = ctk.CTkLabel(root, text=None, justify="center")
-    status_label.place(relx=0.1, rely=0.75, relwidth=0.8)
+    status_label.place(relx=0.1, rely=0.81, relwidth=0.8)
 
     donate_label = ctk.CTkLabel(
         root, text="Deep Live Cam", justify="center", cursor="hand2"
@@ -1148,6 +1320,9 @@ def _processing_thread_func(capture_queue, processed_queue, stop_event):
                 elif frame_processor.NAME == "DLC.FACE-ENHANCER-GPEN512":
                     if modules.globals.fp_ui.get("face_enhancer_gpen512", False):
                         temp_frame = frame_processor.process_frame(None, temp_frame)
+                elif frame_processor.NAME == "DLC.HAIR-STYLE-MODIFIER":
+                    if modules.globals.fp_ui.get("hair_style_modifier", False):
+                        temp_frame = frame_processor.process_frame(None, temp_frame)
                 elif frame_processor.NAME == "DLC.FACE-SWAPPER":
                     # Use cached face positions from detection thread
                     swapped_bboxes = []
@@ -1175,6 +1350,9 @@ def _processing_thread_func(capture_queue, processed_queue, stop_event):
                 elif frame_processor.NAME in ("DLC.FACE-ENHANCER-GPEN256", "DLC.FACE-ENHANCER-GPEN512"):
                     fp_key = frame_processor.NAME.split(".")[-1].lower().replace("-", "_")
                     if modules.globals.fp_ui.get(fp_key, False):
+                        temp_frame = frame_processor.process_frame_v2(temp_frame)
+                elif frame_processor.NAME == "DLC.HAIR-STYLE-MODIFIER":
+                    if modules.globals.fp_ui.get("hair_style_modifier", False):
                         temp_frame = frame_processor.process_frame_v2(temp_frame)
                 else:
                     temp_frame = frame_processor.process_frame_v2(temp_frame)

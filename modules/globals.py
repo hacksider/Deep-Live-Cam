@@ -50,7 +50,17 @@ headless: bool | None = None         # Run without UI?
 log_level: str = "error"             # Logging level (e.g., 'debug', 'info', 'warning', 'error')
 
 # Face Processor UI Toggles (Example)
-fp_ui: Dict[str, bool] = {"face_enhancer": False, "face_enhancer_gpen256": False, "face_enhancer_gpen512": False}
+fp_ui: Dict[str, bool] = {"face_enhancer": False, "face_enhancer_gpen256": False, "face_enhancer_gpen512": False, "hair_style_modifier": False}
+
+# Hair Style Modifier Options
+hair_style_enabled: bool = False
+hair_style: str = "none"  # none, bob, long, curly, straight, pixie, etc.
+hair_color: str = "none"  # none, blonde, brown, black, red, etc.
+hair_length: float = 1.0  # 0.5=short, 1.0=original, 1.5=long
+hair_opacity: float = 1.0  # Blend factor for hair modification (0.0-1.0)
+hair_color_intensity: float = 0.5  # Color intensity (0.0-1.0)
+hair_curl_intensity: float = 0.5  # Curl intensity for curly styles (0.0-1.0)
+hair_source_image: str | None = None  # Optional reference image for hair style
 
 # Face Swapper Specific Options
 face_swapper_enabled: bool = True # General toggle for the swapper processor
