@@ -26,7 +26,8 @@ ALLOWED_PROCESSORS = {
     'face_swapper',
     'face_enhancer',
     'face_enhancer_gpen256',
-    'face_enhancer_gpen512'
+    'face_enhancer_gpen512',
+    'hair_style_modifier'
 }
 
 def load_frame_processor_module(frame_processor: str) -> Any:
