@@ -1,4 +1,5 @@
 import os
+import shutil
 import subprocess
 import sys
 import importlib
@@ -28,6 +29,7 @@ ALLOWED_PROCESSORS = {
     'face_enhancer_gpen256',
     'face_enhancer_gpen512'
 }
+FFMPEG_BIN = shutil.which("ffmpeg") or "ffmpeg"
 
 def load_frame_processor_module(frame_processor: str) -> Any:
     if frame_processor not in ALLOWED_PROCESSORS:
@@ -269,44 +271,43 @@ def _run_pipe_pipeline(
 ) -> bool:
     """Run the FFmpeg-pipe read → process → encode pipeline once."""
 
-    # --- Reader: decode source video to raw BGR24 on stdout ---
-    reader_cmd = [
-        'ffmpeg', '-hide_banner',
-        '-hwaccel', 'auto',
-        '-i', target_path,
-        '-f', 'rawvideo',
-        '-pix_fmt', 'bgr24',
-        '-v', 'error',
-        '-',
-    ]
-
-    # --- Writer: encode raw BGR24 from stdin ---
-    writer_cmd = [
-        'ffmpeg', '-hide_banner',
-        '-f', 'rawvideo',
-        '-pix_fmt', 'bgr24',
-        '-s', f'{width}x{height}',
-        '-r', str(fps),
-        '-i', '-',
-        '-c:v', encoder,
-    ]
-    writer_cmd.extend(encoder_options)
-    writer_cmd.extend([
-        '-pix_fmt', 'yuv420p',
-        '-movflags', '+faststart',
-        '-vf', 'colorspace=bt709:iall=bt601-6-625:fast=1',
-        '-v', 'error',
-        '-y', temp_output_path,
-    ])
+    target_path = os.path.abspath(os.path.expanduser(target_path))
+    temp_output_path = os.path.abspath(os.path.expanduser(temp_output_path))
 
     reader = None
     writer = None
     try:
         reader = subprocess.Popen(
-            reader_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            [
+                FFMPEG_BIN, '-hide_banner',
+                '-hwaccel', 'auto',
+                '-i', target_path,
+                '-f', 'rawvideo',
+                '-pix_fmt', 'bgr24',
+                '-v', 'error',
+                '-',
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
         )
         writer = subprocess.Popen(
-            writer_cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE,
+            [
+                FFMPEG_BIN, '-hide_banner',
+                '-f', 'rawvideo',
+                '-pix_fmt', 'bgr24',
+                '-s', f'{width}x{height}',
+                '-r', str(fps),
+                '-i', '-',
+                '-c:v', encoder,
+                *encoder_options,
+                '-pix_fmt', 'yuv420p',
+                '-movflags', '+faststart',
+                '-vf', 'colorspace=bt709:iall=bt601-6-625:fast=1',
+                '-v', 'error',
+                '-y', temp_output_path,
+            ],
+            stdin=subprocess.PIPE,
+            stderr=subprocess.PIPE,
         )
     except Exception as e:
         print(f"[DLC.CORE] Failed to start FFmpeg pipes: {e}")

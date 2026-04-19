@@ -14,12 +14,18 @@ import modules.globals
 
 TEMP_FILE = "temp.mp4"
 TEMP_DIRECTORY = "temp"
+FFMPEG_BIN = shutil.which("ffmpeg") or "ffmpeg"
+FFPROBE_BIN = shutil.which("ffprobe") or "ffprobe"
+
+
+def _normalize_path(path: str) -> str:
+    return str(Path(path).expanduser().resolve(strict=False))
 
 
 def run_ffmpeg(args: List[str]) -> bool:
     """Run ffmpeg with hardware acceleration and optimized settings."""
     commands = [
-        "ffmpeg",
+        FFMPEG_BIN,
         "-hide_banner",
         "-hwaccel", "auto",  # Auto-detect hardware acceleration
         "-hwaccel_output_format", "auto",  # Use hardware format when possible
@@ -28,10 +34,16 @@ def run_ffmpeg(args: List[str]) -> bool:
     ]
     commands.extend(args)
     try:
-        subprocess.check_output(commands, stderr=subprocess.STDOUT)
+        subprocess.run(
+            commands,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
         return True
     except subprocess.CalledProcessError as error:
-        output = error.output.decode(errors="ignore").strip()
+        output = (error.output or "").strip()
         if output:
             print(output)
     except Exception as error:
@@ -40,19 +52,23 @@ def run_ffmpeg(args: List[str]) -> bool:
 
 
 def detect_fps(target_path: str) -> float:
-    command = [
-        "ffprobe",
-        "-v",
-        "error",
-        "-select_streams",
-        "v:0",
-        "-show_entries",
-        "stream=r_frame_rate",
-        "-of",
-        "default=noprint_wrappers=1:nokey=1",
-        target_path,
-    ]
-    output = subprocess.check_output(command).decode().strip().split("/")
+    output = subprocess.run(
+        [
+            FFPROBE_BIN,
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=r_frame_rate",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            _normalize_path(target_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip().split("/")
     try:
         numerator, denominator = map(int, output)
         return numerator / denominator
@@ -318,14 +334,23 @@ def resolve_relative_path(path: str) -> str:
 
 def get_video_dimensions(target_path: str) -> tuple:
     """Get video width and height using ffprobe."""
-    command = [
-        "ffprobe", "-v", "error",
-        "-select_streams", "v:0",
-        "-show_entries", "stream=width,height",
-        "-of", "csv=p=0:s=x",
-        target_path,
-    ]
-    output = subprocess.check_output(command).decode().strip()
+    output = subprocess.run(
+        [
+            FFPROBE_BIN,
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=width,height",
+            "-of",
+            "csv=p=0:s=x",
+            _normalize_path(target_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
     width, height = map(int, output.split("x"))
     return width, height
 
@@ -334,14 +359,22 @@ def estimate_frame_count(target_path: str, fps: float = None) -> int:
     """Estimate total frame count from video duration and fps."""
     if fps is None:
         fps = detect_fps(target_path)
-    command = [
-        "ffprobe", "-v", "error",
-        "-show_entries", "format=duration",
-        "-of", "csv=p=0",
-        target_path,
-    ]
     try:
-        output = subprocess.check_output(command).decode().strip()
+        output = subprocess.run(
+            [
+                FFPROBE_BIN,
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "csv=p=0",
+                _normalize_path(target_path),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
         duration = float(output)
         return int(duration * fps)
     except Exception:
