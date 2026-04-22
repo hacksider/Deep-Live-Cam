@@ -168,6 +168,10 @@ _cuda_graph_session = {
     'ort_latent': None,
     'recorded': False,
 }
+# Serializes CUDA-graph replay. The io_binding + ort_input/ort_latent are
+# shared across threads and run_with_iobinding mutates GPU-side buffers;
+# concurrent calls would produce wrong output.
+_cuda_graph_lock = threading.Lock()
 
 
 def _init_cuda_graph_session(model_path: str, swapper):
@@ -232,10 +236,11 @@ def _init_cuda_graph_session(model_path: str, swapper):
 def _cuda_graph_swap_inference(blob: np.ndarray, latent: np.ndarray) -> np.ndarray:
     """Run swap model via CUDA graph replay — minimal CPU overhead."""
     cg = _cuda_graph_session
-    cg['ort_input'].update_inplace(blob)
-    cg['ort_latent'].update_inplace(latent)
-    cg['session'].run_with_iobinding(cg['io_binding'])
-    return cg['io_binding'].get_outputs()[0].numpy()
+    with _cuda_graph_lock:
+        cg['ort_input'].update_inplace(blob)
+        cg['ort_latent'].update_inplace(latent)
+        cg['session'].run_with_iobinding(cg['io_binding'])
+        return cg['io_binding'].get_outputs()[0].numpy()
 
 
 def _fast_paste_back(target_img: Frame, bgr_fake: np.ndarray, aimg: np.ndarray, M: np.ndarray) -> Frame:
