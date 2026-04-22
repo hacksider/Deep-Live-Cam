@@ -297,6 +297,10 @@ def _fast_paste_back(target_img: Frame, bgr_fake: np.ndarray, aimg: np.ndarray, 
     """
     h, w = target_img.shape[:2]
     face_h, face_w = aimg.shape[:2]
+    # inswapper's aligned-face space is square (128x128). _get_soft_alpha
+    # caches a single NxN template keyed by N, so fail loudly if that ever
+    # stops being true rather than silently mis-warping the alpha mask.
+    assert face_h == face_w, f"Expected square aligned face, got {face_h}x{face_w}"
     IM = cv2.invertAffineTransform(M)
 
     # Bbox in output coords from the affine corners of the aligned-face square.
