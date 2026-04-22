@@ -18,6 +18,7 @@ Usage
 
 from __future__ import annotations
 
+import os
 import cv2
 import numpy as np
 from typing import Tuple, Optional
@@ -27,20 +28,25 @@ from typing import Tuple, Optional
 # ---------------------------------------------------------------------------
 CUDA_AVAILABLE: bool = False
 
-try:
-    # cv2.cuda.GpuMat is only present when OpenCV is compiled with CUDA
-    _test_mat = cv2.cuda.GpuMat()
-    # Verify we have the required filter / image-processing functions
-    _has_gauss = hasattr(cv2.cuda, "createGaussianFilter")
-    _has_resize = hasattr(cv2.cuda, "resize")
-    _has_cvt = hasattr(cv2.cuda, "cvtColor")
-    if _has_gauss and _has_resize and _has_cvt:
-        CUDA_AVAILABLE = True
-        print("[gpu_processing] OpenCV CUDA support detected – GPU-accelerated processing enabled.")
-    else:
-        pass  # silently fall back to CPU
-except Exception:
-    pass  # silently fall back to CPU
+# OpenCV CUDA per-operation acceleration is DISABLED by default.
+# Each gpu_* call uploads to GPU, processes, then downloads back to CPU.
+# At webcam resolution (~960x540) this upload/download overhead far exceeds
+# the time saved on the actual operation, making it slower than pure CPU.
+# The heavy lifting (face detection, swap, enhancement) runs on GPU via
+# ONNX Runtime's CUDAExecutionProvider, which is where GPU matters.
+#
+# To force-enable, set OPENCV_CUDA_PROCESSING=1 in your environment.
+if os.environ.get("OPENCV_CUDA_PROCESSING") == "1":
+    try:
+        _test_mat = cv2.cuda.GpuMat()
+        _has_gauss = hasattr(cv2.cuda, "createGaussianFilter")
+        _has_resize = hasattr(cv2.cuda, "resize")
+        _has_cvt = hasattr(cv2.cuda, "cvtColor")
+        if _has_gauss and _has_resize and _has_cvt:
+            CUDA_AVAILABLE = True
+            print("[gpu_processing] OpenCV CUDA processing enabled via OPENCV_CUDA_PROCESSING=1.")
+    except Exception:
+        pass
 
 
 # ---------------------------------------------------------------------------
