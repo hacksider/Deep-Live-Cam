@@ -1,21 +1,32 @@
 """ONNX model optimizations for CoreML execution on Apple Silicon.
 
-Two transformations that eliminate CPU↔ANE round-trips:
+Each pass eliminates a different CPU↔ANE round-trip that ORT's CoreML EP
+would otherwise introduce:
 
-1. **Pad(reflect) decomposition** — CoreML doesn't support ``Pad(mode=reflect)``.
-   Models using reflect padding (e.g. inswapper_128) get split into many CoreML
-   subgraphs with CPU fallbacks between each.  We rewrite each ``Pad(reflect)``
-   as equivalent ``Slice`` + ``Concat`` ops that CoreML handles natively.
-   Bit-for-bit identical output.
-
-2. **Shape/Gather constant folding** — Dynamic ``Shape`` → ``Gather`` chains
+1. **Shape/Gather constant folding** — Dynamic ``Shape`` → ``Gather`` chains
    (e.g. for FPN upsample target sizes in RetinaFace) force ops onto CPU even
    when the input dimensions are known at load time.  We run ONNX shape
    inference with the known input size and replace these chains with constants.
    Float32-noise-level differences only (max ~6e-6).
 
-Both transformations are cached on disk with a ``_coreml`` suffix so the
-rewrite cost is paid only once per model.
+2. **Pad(reflect) decomposition** — CoreML doesn't support ``Pad(mode=reflect)``.
+   Models using reflect padding (e.g. inswapper_128) get split into many CoreML
+   subgraphs with CPU fallbacks between each.  We rewrite each ``Pad(reflect)``
+   as equivalent ``Slice`` + ``Concat`` ops that CoreML handles natively.
+   Bit-for-bit identical output. (Fixed upstream in microsoft/onnxruntime#28073.)
+
+3. **Split → Slice decomposition** — CoreML's EP doesn't support the ONNX
+   ``Split`` op, causing partition boundaries in models with channel-wise
+   splits (e.g. GFPGAN's SFT modulation). Each 2-way Split becomes two Slices.
+
+4. **Scalar Gather widening** — ORT's CoreML EP rejects ``Gather`` nodes with
+   rank-0 (scalar) indices. StyleGAN-derived models (GFPGAN) slice per-layer
+   style codes using exactly this pattern. We widen each scalar index to
+   ``[1]`` and squeeze the added axis on the Gather output.
+   (Filed upstream as microsoft/onnxruntime#28180.)
+
+All passes are cached on disk with a ``_coreml`` suffix so the rewrite cost
+is paid only once per model.
 """
 
 import os
@@ -63,6 +74,12 @@ def optimize_for_coreml(model_path: str, input_shape: tuple = None) -> str:
         changed = True
 
     if _decompose_split(model):
+        changed = True
+
+    # TODO: drop this pass once microsoft/onnxruntime#28180 ships. The CoreML
+    # Gather op builder rejects rank-0 (scalar) indices; we widen them to [1]
+    # + Squeeze so StyleGAN-family models (GFPGAN) stay on ANE.
+    if _rewrite_scalar_gather(model):
         changed = True
 
     if not changed:
@@ -400,6 +417,111 @@ def _decompose_split(model) -> bool:
             new_nodes.extend(replacements[id(node)])
         else:
             new_nodes.append(node)
+
+    del graph.node[:]
+    graph.node.extend(new_nodes)
+    return True
+
+
+# ---------------------------------------------------------------------------
+# Pass 4: Widen scalar Gather indices to [1] + Squeeze
+#
+# TEMPORARY: filed upstream as microsoft/onnxruntime#28180. ORT's CoreML EP
+# GatherOpBuilder::IsOpSupportedImpl rejects rank-0 (scalar) indices with
+# `Gather does not support scalar 'indices'`. The builder's own comment
+# describes the workaround (promote to [1], squeeze the added axis) but
+# doesn't apply it. We do the same thing at the ONNX level so StyleGAN-
+# family models (GFPGAN is the hot example — 16 per-layer style-code
+# slices) don't split the CoreML subgraph. Once the upstream fix ships
+# and the ORT floor is raised, delete this pass.
+# ---------------------------------------------------------------------------
+
+def _rewrite_scalar_gather(model) -> bool:
+    """Rewrite Gather(data, scalar_idx) as Gather(data, [scalar_idx]) + Squeeze.
+
+    Only touches Gather nodes whose index is a rank-0 int64 constant or
+    initializer; everything else passes through unchanged. The rewrite
+    is semantically identical — indices get an added leading axis, the
+    Squeeze removes it after the gather.
+    """
+    from onnx import numpy_helper, helper, TensorProto
+
+    graph = model.graph
+
+    # Opset 13 moved Squeeze's axes from attribute to input.
+    opset = next(
+        (o.version for o in model.opset_import if o.domain in ("", "ai.onnx")),
+        11,
+    )
+
+    const_values = {}
+    for n in graph.node:
+        if n.op_type == "Constant":
+            for a in n.attribute:
+                if a.name == "value":
+                    const_values[n.output[0]] = a.t
+    init_values = {i.name: i for i in graph.initializer}
+
+    def scalar_int64(name):
+        """Return int value if `name` resolves to a rank-0 int64 constant, else None."""
+        tensor = const_values.get(name) or init_values.get(name)
+        if tensor is None or tensor.data_type != TensorProto.INT64:
+            return None
+        arr = numpy_helper.to_array(tensor)
+        return int(arr) if arr.ndim == 0 else None
+
+    rewrote = 0
+    new_nodes = []
+    for n in graph.node:
+        if n.op_type == "Gather":
+            val = scalar_int64(n.input[1])
+            if val is not None:
+                axis = next((a.i for a in n.attribute if a.name == "axis"), 0)
+                idx_1d_name = f"{n.input[1]}_1d_{rewrote}"
+                idx_const = helper.make_node(
+                    "Constant",
+                    inputs=[],
+                    outputs=[idx_1d_name],
+                    value=helper.make_tensor(idx_1d_name, TensorProto.INT64, [1], [val]),
+                )
+                gather_out = f"{n.output[0]}_pre_squeeze_{rewrote}"
+                new_gather = helper.make_node(
+                    "Gather",
+                    inputs=[n.input[0], idx_1d_name],
+                    outputs=[gather_out],
+                    name=n.name,
+                    axis=axis,
+                )
+                if opset < 13:
+                    squeeze = helper.make_node(
+                        "Squeeze",
+                        inputs=[gather_out],
+                        outputs=[n.output[0]],
+                        name=(n.name or "gather") + "_squeeze",
+                        axes=[axis],
+                    )
+                    new_nodes.extend([idx_const, new_gather, squeeze])
+                else:
+                    axes_name = f"{idx_1d_name}_sq_axes"
+                    axes_const = helper.make_node(
+                        "Constant",
+                        inputs=[],
+                        outputs=[axes_name],
+                        value=helper.make_tensor(axes_name, TensorProto.INT64, [1], [axis]),
+                    )
+                    squeeze = helper.make_node(
+                        "Squeeze",
+                        inputs=[gather_out, axes_name],
+                        outputs=[n.output[0]],
+                        name=(n.name or "gather") + "_squeeze",
+                    )
+                    new_nodes.extend([idx_const, axes_const, new_gather, squeeze])
+                rewrote += 1
+                continue
+        new_nodes.append(n)
+
+    if rewrote == 0:
+        return False
 
     del graph.node[:]
     graph.node.extend(new_nodes)
