@@ -36,23 +36,11 @@ def build_provider_config(providers=None):
             # Already configured – pass through
             config.append(p)
         elif p == "CUDAExecutionProvider":
-            config.append((
-                "CUDAExecutionProvider",
-                {
-                    # Re-use freed blocks instead of growing the arena
-                    "arena_extend_strategy": "kSameAsRequested",
-                    # One-time exhaustive search for the fastest cuDNN
-                    # convolution algorithm (significant speed-up after
-                    # the first inference pass)
-                    "cudnn_conv_algo_search": "EXHAUSTIVE",
-                    # Allow cuDNN to use more workspace memory for faster
-                    # convolution kernels
-                    "cudnn_conv_use_max_workspace": "1",
-                    # Use a separate CUDA stream for host↔device copies so
-                    # they can overlap with compute kernels
-                    "do_copy_in_default_stream": "0",
-                },
-            ))
+            # Use bare provider — ONNX Runtime's defaults are fastest on
+            # modern GPUs (Blackwell/sm_120).  Custom options like
+            # EXHAUSTIVE cudnn_conv_algo_search hurt performance on these
+            # architectures.
+            config.append(p)
         elif p == "CoreMLExecutionProvider" and IS_APPLE_SILICON:
             config.append((
                 "CoreMLExecutionProvider",
@@ -103,7 +91,26 @@ def run_inference(session: onnxruntime.InferenceSession,
 
 
 def create_onnx_session(model_path: str) -> onnxruntime.InferenceSession:
-    """Create an ONNX Runtime session with optimised provider config."""
+    """Create an ONNX Runtime session with optimised provider config.
+
+    On Apple Silicon, applies CoreML graph optimizations (Pad decomposition,
+    Shape/Gather folding, Split decomposition) to reduce CPU↔ANE partition
+    boundaries.
+    """
+    if IS_APPLE_SILICON:
+        from modules.onnx_optimize import optimize_for_coreml
+        # Infer input shape from the model for Shape/Gather folding
+        try:
+            import onnx
+            m = onnx.load(model_path)
+            inp = m.graph.input[0]
+            dims = inp.type.tensor_type.shape.dim
+            shape = tuple(d.dim_value for d in dims if d.dim_value > 0)
+            input_shape = shape if len(shape) == 4 else None
+        except Exception:
+            input_shape = None
+        model_path = optimize_for_coreml(model_path, input_shape=input_shape)
+
     providers = build_provider_config()
     session_options = onnxruntime.SessionOptions()
     session_options.graph_optimization_level = (
