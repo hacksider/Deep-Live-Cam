@@ -174,6 +174,36 @@ _cuda_graph_session = {
 _cuda_graph_lock = threading.Lock()
 
 
+class _CudaGraphSessionAdapter:
+    """Drop-in wrapper around an ONNX Runtime session.
+
+    Routes ``.run()`` through CUDA graph replay when a recorded graph is
+    available, and transparently proxies every other attribute to the
+    underlying session so insightface's INSwapper sees an unchanged API.
+    """
+
+    def __init__(self, underlying):
+        # Use object.__setattr__ to bypass our own __setattr__.
+        object.__setattr__(self, "_underlying", underlying)
+
+    def run(self, output_names, input_dict, **kwargs):
+        if _cuda_graph_session['recorded']:
+            try:
+                keys = list(input_dict.keys())
+                blob = input_dict[keys[0]]
+                latent = input_dict[keys[1]]
+                return [_cuda_graph_swap_inference(blob, latent)]
+            except Exception:
+                pass
+        return self._underlying.run(output_names, input_dict, **kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self._underlying, name)
+
+    def __setattr__(self, name, value):
+        setattr(self._underlying, name, value)
+
+
 def _init_cuda_graph_session(model_path: str, swapper):
     """Create a CUDA-graph-enabled ONNX session for the swap model.
 
@@ -209,22 +239,14 @@ def _init_cuda_graph_session(model_path: str, swapper):
         _cuda_graph_session['ort_latent'] = ort_latent
         _cuda_graph_session['recorded'] = True
 
-        # Monkey-patch the swapper's session.run to use CUDA graph replay
-        _original_run = swapper.session.run
+        # Wrap swapper.session in an adapter instead of rebinding
+        # session.run. insightface's INSwapper.get() reads .run via the
+        # session attribute, so either works; the adapter survives any
+        # later attribute reads on the session and keeps the original
+        # session object untouched.
+        if not isinstance(swapper.session, _CudaGraphSessionAdapter):
+            swapper.session = _CudaGraphSessionAdapter(swapper.session)
 
-        def _graph_run(output_names, input_dict, **kwargs):
-            if _cuda_graph_session['recorded']:
-                try:
-                    # input_dict has 'target' (blob) and 'source' (latent)
-                    keys = list(input_dict.keys())
-                    blob = input_dict[keys[0]]
-                    latent = input_dict[keys[1]]
-                    return [_cuda_graph_swap_inference(blob, latent)]
-                except Exception:
-                    pass
-            return _original_run(output_names, input_dict, **kwargs)
-
-        swapper.session.run = _graph_run
         import sys
         print(f"[{NAME}] CUDA graph session initialized (swap model)")
         sys.stdout.flush()

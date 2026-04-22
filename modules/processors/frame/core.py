@@ -357,8 +357,11 @@ def _run_pipe_pipeline(
                     # Start detecting on THIS frame eagerly — the result
                     # will be used for the next iteration.  At video
                     # frame rates the face barely moves between frames.
+                    # Hand the detector its own copy: the frame processors
+                    # below mutate `frame` in place (paste-back), which
+                    # would otherwise race with detection.
                     pending_detect = detect_executor.submit(
-                        get_one_face, frame)
+                        get_one_face, frame.copy())
                 else:
                     target_face = None
 
