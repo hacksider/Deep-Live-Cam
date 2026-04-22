@@ -1220,11 +1220,9 @@ def _processing_thread_func(capture_queue, processed_queue, stop_event,
                 2,
             )
 
-        # BGR→RGB in the processing thread so the display thread gets
-        # a contiguous RGB array (faster PIL.fromarray).
-        temp_frame = cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB)
-
-        # Put processed frame into output queue, dropping old frames if full
+        # Queue the processed frame as BGR; the display thread resizes to the
+        # preview window first and then runs cvtColor on the (much smaller)
+        # buffer — cheaper than converting the full 1080p frame here.
         try:
             processed_queue.put_nowait(temp_frame)
         except queue.Full:
@@ -1294,15 +1292,17 @@ def create_webcam_preview(camera_index: int):
             return
 
         try:
-            rgb_frame = processed_queue.get_nowait()
+            bgr_frame = processed_queue.get_nowait()
         except queue.Empty:
             ROOT.after(poll_ms, _display_next_frame)
             return
 
-        # Frame is already RGB from processing thread; resize to preview window
-        rgb_frame = fit_image_to_size(
-            rgb_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
+        # Resize the full-resolution BGR frame to the preview window first,
+        # then convert colour on the smaller buffer.
+        bgr_frame = fit_image_to_size(
+            bgr_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
         )
+        rgb_frame = cv2.cvtColor(bgr_frame, cv2.COLOR_BGR2RGB)
         image = Image.fromarray(rgb_frame)
         image = ctk.CTkImage(image, size=image.size)
         preview_label.configure(image=image)
