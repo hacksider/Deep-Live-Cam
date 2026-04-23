@@ -301,6 +301,9 @@ def default_target_face():
                 best_frame = frame
                 break
 
+        if best_face is None:
+            continue  # No faces detected in this cluster — skip
+
         for frame in map['target_faces_in_frame']:
             for face in frame['faces']:
                 if face['det_score'] > best_face['det_score']:
