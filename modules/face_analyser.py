@@ -225,7 +225,13 @@ def get_unique_faces_from_target_image() -> Any:
     try:
         modules.globals.source_target_map = []
         target_frame = cv2.imread(modules.globals.target_path)
+        if target_frame is None:
+            print(f"Could not read target image: {modules.globals.target_path}")
+            return []
         many_faces = get_many_faces(target_frame)
+        if many_faces is None:
+            print(f"No faces detected in target image: {modules.globals.target_path}")
+            return []
         i = 0
 
         for face in many_faces:
@@ -238,8 +244,9 @@ def get_unique_faces_from_target_image() -> Any:
                             }
                 })
             i = i + 1
+        return modules.globals.source_target_map
     except ValueError:
-        return None
+        return []
     
     
 def get_unique_faces_from_target_video() -> Any:
