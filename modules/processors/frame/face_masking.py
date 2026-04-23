@@ -33,6 +33,9 @@ def apply_color_transfer(source, target):
     return np.clip(result_bgr * 255.0, 0, 255).astype(np.uint8)
 
 def create_face_mask(face: Face, frame: Frame) -> np.ndarray:
+    if frame is None or not hasattr(frame, "shape") or len(frame.shape) < 2:
+        return np.zeros((0, 0), dtype=np.uint8)
+
     mask = np.zeros(frame.shape[:2], dtype=np.uint8)
     landmarks = face.landmark_2d_106
     if landmarks is not None:
