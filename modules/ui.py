@@ -417,7 +417,7 @@ def get_available_cameras() -> Tuple[List[int], List[str]]:
     indices: List[int] = []
     names: List[str] = []
     for i in range(10):
-        cap = cv2.VideoCapture(i)
+        cap = cv2.VideoCapture(f"/dev/video{i}")
         if cap.isOpened():
             indices.append(i)
             names.append(f"Camera {i}")
