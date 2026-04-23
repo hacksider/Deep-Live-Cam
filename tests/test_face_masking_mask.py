@@ -37,6 +37,14 @@ class FaceMaskingBadInputTest(unittest.TestCase):
         self.assertEqual(mask.shape, (4, 5))
         self.assertFalse(mask.any())
 
+    def test_create_face_mask_returns_frame_sized_empty_mask_for_scalar_landmarks(self):
+        frame = np.zeros((4, 5, 3), dtype=np.uint8)
+
+        mask = face_masking.create_face_mask(types.SimpleNamespace(landmark_2d_106=np.array(1)), frame)
+
+        self.assertEqual(mask.shape, (4, 5))
+        self.assertFalse(mask.any())
+
     def test_lower_mouth_mask_returns_empty_defaults_for_bad_inputs(self):
         mask, cutout, box, polygon = face_masking.create_lower_mouth_mask(None, None)
 

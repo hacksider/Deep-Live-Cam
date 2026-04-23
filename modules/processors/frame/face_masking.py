@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+from typing import Optional, Tuple
 from modules.typing import Face, Frame
 import modules.globals
 from modules.gpu_processing import gpu_gaussian_blur, gpu_resize, gpu_cvt_color
@@ -9,15 +10,23 @@ def is_valid_frame(frame: Frame) -> bool:
     return frame is not None and hasattr(frame, "shape") and len(frame.shape) >= 2
 
 
-def create_empty_mask(frame: Frame) -> np.ndarray:
+MaskRegionResult = Tuple[np.ndarray, Optional[np.ndarray], tuple[int, int, int, int], Optional[np.ndarray]]
+
+
+def create_empty_mask_with_validity(frame: Frame) -> Tuple[np.ndarray, bool]:
     if not is_valid_frame(frame):
-        return np.zeros((0, 0), dtype=np.uint8)
-    return np.zeros(frame.shape[:2], dtype=np.uint8)
+        return np.zeros((0, 0), dtype=np.uint8), False
+    return np.zeros(frame.shape[:2], dtype=np.uint8), True
+
+
+def create_empty_mask(frame: Frame) -> np.ndarray:
+    mask, _ = create_empty_mask_with_validity(frame)
+    return mask
 
 
 def has_landmarks(face: Face, min_count: int = 106) -> bool:
     landmarks = getattr(face, "landmark_2d_106", None)
-    return isinstance(landmarks, np.ndarray) and landmarks.shape[0] >= min_count
+    return isinstance(landmarks, np.ndarray) and landmarks.ndim >= 1 and landmarks.shape[0] >= min_count
 
 
 def apply_color_transfer(source, target):
@@ -49,8 +58,8 @@ def apply_color_transfer(source, target):
     return np.clip(result_bgr * 255.0, 0, 255).astype(np.uint8)
 
 def create_face_mask(face: Face, frame: Frame) -> np.ndarray:
-    mask = create_empty_mask(frame)
-    if not is_valid_frame(frame) or not has_landmarks(face):
+    mask, frame_is_valid = create_empty_mask_with_validity(frame)
+    if not frame_is_valid or not has_landmarks(face):
         return mask
 
     landmarks = face.landmark_2d_106
@@ -93,13 +102,13 @@ def create_face_mask(face: Face, frame: Frame) -> np.ndarray:
 
 def create_lower_mouth_mask(
     face: Face, frame: Frame
-) -> (np.ndarray, np.ndarray, tuple, np.ndarray):
-    mask = create_empty_mask(frame)
+) -> MaskRegionResult:
+    mask, frame_is_valid = create_empty_mask_with_validity(frame)
     mouth_cutout = None
     lower_lip_polygon = None
     mouth_box = (0,0,0,0)
 
-    if not is_valid_frame(frame) or not has_landmarks(face):
+    if not frame_is_valid or not has_landmarks(face):
         return mask, mouth_cutout, mouth_box, lower_lip_polygon
 
     landmarks = face.landmark_2d_106
@@ -169,13 +178,13 @@ def create_lower_mouth_mask(
 
     return mask, mouth_cutout, mouth_box, lower_lip_polygon
 
-def create_eyes_mask(face: Face, frame: Frame) -> (np.ndarray, np.ndarray, tuple, np.ndarray):
-    mask = create_empty_mask(frame)
+def create_eyes_mask(face: Face, frame: Frame) -> MaskRegionResult:
+    mask, frame_is_valid = create_empty_mask_with_validity(frame)
     eyes_cutout = None
     eyes_polygon = None
     eyes_box = (0, 0, 0, 0)
 
-    if not is_valid_frame(frame) or not has_landmarks(face):
+    if not frame_is_valid or not has_landmarks(face):
         return mask, eyes_cutout, eyes_box, eyes_polygon
 
     landmarks = face.landmark_2d_106
@@ -314,7 +323,7 @@ def create_curved_eyebrow(points):
         return padded_points
     return points
 
-def create_eyebrows_mask(face: Face, frame: Frame) -> (np.ndarray, np.ndarray, tuple, np.ndarray):
+def create_eyebrows_mask(face: Face, frame: Frame) -> MaskRegionResult:
     mask = np.zeros(frame.shape[:2], dtype=np.uint8)
     eyebrows_cutout = None
     landmarks = face.landmark_2d_106
