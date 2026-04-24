@@ -53,7 +53,16 @@ def detect_fps(target_path: str) -> float:
         target_path,
     ]
     try:
-        output = subprocess.check_output(command, encoding="utf-8").strip().split("/")
+        # Keep shell=False by passing a sequence; target_path is an ffprobe argument,
+        # not command text, so paths containing shell metacharacters are not executed.
+        completed = subprocess.run(
+            command,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+        output = completed.stdout.strip().split("/")
         numerator, denominator = map(int, output)
         return numerator / denominator
     except (

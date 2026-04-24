@@ -43,7 +43,7 @@ class DetectFpsTests(unittest.TestCase):
         utilities = _load_utilities_module()
 
         with mock.patch.object(
-            utilities.subprocess, "check_output", return_value="30000/1001\n"
+            utilities.subprocess, "run", return_value=types.SimpleNamespace(stdout="30000/1001\n")
         ):
             self.assertAlmostEqual(utilities.detect_fps("demo.mp4"), 30000 / 1001)
 
@@ -52,7 +52,7 @@ class DetectFpsTests(unittest.TestCase):
 
         with mock.patch.object(
             utilities.subprocess,
-            "check_output",
+            "run",
             side_effect=utilities.subprocess.CalledProcessError(1, ["ffprobe"]),
         ):
             self.assertEqual(utilities.detect_fps("demo.mp4"), 30.0)
@@ -61,14 +61,14 @@ class DetectFpsTests(unittest.TestCase):
         utilities = _load_utilities_module()
 
         with mock.patch.object(
-            utilities.subprocess, "check_output", return_value="not-a-fraction"
+            utilities.subprocess, "run", return_value=types.SimpleNamespace(stdout="not-a-fraction")
         ):
             self.assertEqual(utilities.detect_fps("demo.mp4"), 30.0)
 
     def test_detect_fps_falls_back_on_zero_denominator(self) -> None:
         utilities = _load_utilities_module()
 
-        with mock.patch.object(utilities.subprocess, "check_output", return_value="30/0"):
+        with mock.patch.object(utilities.subprocess, "run", return_value=types.SimpleNamespace(stdout="30/0")):
             self.assertEqual(utilities.detect_fps("demo.mp4"), 30.0)
 
 
