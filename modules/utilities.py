@@ -40,23 +40,37 @@ def run_ffmpeg(args: List[str]) -> bool:
 
 
 def detect_fps(target_path: str) -> float:
-    command = [
-        "ffprobe",
-        "-v",
-        "error",
-        "-select_streams",
-        "v:0",
-        "-show_entries",
-        "stream=r_frame_rate",
-        "-of",
-        "default=noprint_wrappers=1:nokey=1",
-        target_path,
-    ]
-    output = subprocess.check_output(command).decode().strip().split("/")
     try:
+        # Keep shell=False by passing a literal argument vector; target_path is an
+        # ffprobe argument, not command text, so shell metacharacters are inert.
+        completed = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=r_frame_rate",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                target_path,
+            ],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+        output = completed.stdout.strip().split("/")
         numerator, denominator = map(int, output)
         return numerator / denominator
-    except Exception:
+    except (
+        subprocess.CalledProcessError,
+        OSError,
+        UnicodeDecodeError,
+        ValueError,
+        ZeroDivisionError,
+    ):
         pass
     return 30.0
 
