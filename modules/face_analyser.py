@@ -105,6 +105,12 @@ def _is_dml() -> bool:
     return any("DmlExecutionProvider" in p for p in modules.globals.execution_providers)
 
 
+def _is_valid_frame(frame: Frame) -> bool:
+    """Return whether ``frame`` is safe to pass to InsightFace."""
+    shape = getattr(frame, "shape", None)
+    return shape is not None and len(shape) >= 2 and shape[0] > 0 and shape[1] > 0
+
+
 def _analyse_faces(frame: Frame) -> list:
     """Run face detection, then recognition (and optionally landmark).
 
@@ -112,6 +118,9 @@ def _analyse_faces(frame: Frame) -> list:
     landmark_2d_106 model when only face_swapper is active (saves ~1ms
     per face and avoids an unnecessary ONNX session call).
     """
+    if not _is_valid_frame(frame):
+        return []
+
     fa = get_face_analyser()
 
     bboxes, kpss = fa.det_model.detect(frame, max_num=0, metric="default")
