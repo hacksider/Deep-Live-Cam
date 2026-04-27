@@ -5,6 +5,18 @@ from typing import Any
 
 
 def find_cluster_centroids(embeddings, max_k=10) -> Any:
+    n_samples = len(embeddings)
+    if n_samples == 0:
+        raise ValueError("embeddings must not be empty")
+    if max_k < 1:
+        raise ValueError("max_k must be at least 1")
+
+    max_k = min(max_k, n_samples)
+    if max_k == 1:
+        kmeans = KMeans(n_clusters=1, random_state=0)
+        kmeans.fit(embeddings)
+        return kmeans.cluster_centers_
+
     inertia = []
     cluster_centroids = []
     K = range(1, max_k+1)
