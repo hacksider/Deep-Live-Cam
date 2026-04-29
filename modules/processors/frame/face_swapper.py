@@ -326,7 +326,7 @@ def _fast_paste_back(target_img: Frame, bgr_fake: np.ndarray, aimg: np.ndarray, 
     crop_w, crop_h = x2p - x1p, y2p - y1p
 
     soft_alpha = _get_soft_alpha(face_h)
-    bgr_fake_crop = cv2.warpAffine(bgr_fake, IM_crop, (crop_w, crop_h), borderValue=0.0)
+    bgr_fake_crop = cv2.warpAffine(bgr_fake, IM_crop, (crop_w, crop_h), borderMode=cv2.BORDER_REPLICATE)
     alpha_crop = cv2.warpAffine(soft_alpha, IM_crop, (crop_w, crop_h), borderValue=0)
 
     target_crop = target_img[y1p:y2p, x1p:x2p]
