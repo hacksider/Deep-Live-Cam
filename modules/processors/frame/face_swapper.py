@@ -17,6 +17,7 @@ from modules.utilities import (
 )
 from modules.cluster_analysis import find_closest_centroid
 from modules.gpu_processing import gpu_gaussian_blur, gpu_sharpen, gpu_add_weighted, gpu_resize, gpu_cvt_color
+import hashlib
 import os
 from collections import deque
 import time
@@ -43,6 +44,26 @@ abs_dir = os.path.dirname(os.path.abspath(__file__))
 models_dir = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(abs_dir))), "models"
 )
+
+# SHA-256 hashes of known-good model files.  A model whose filename is
+# present in this map will be rejected at load time if its on-disk hash
+# does not match, guarding against tampered or maliciously crafted ONNX files.
+_MODEL_SHA256: dict = {
+    "inswapper_128.onnx": "e4a3f08c753cb72d04e10aa0f7dbe3deebbf39567d4ead6dce08e98aa49e16af",
+}
+
+
+def _verify_model_integrity(model_path: str) -> bool:
+    """Return True if the file passes SHA-256 verification (or has no registered hash)."""
+    filename = os.path.basename(model_path)
+    expected = _MODEL_SHA256.get(filename)
+    if expected is None:
+        return True
+    sha256 = hashlib.sha256()
+    with open(model_path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(65536), b""):
+            sha256.update(chunk)
+    return sha256.hexdigest() == expected
 
 def pre_check() -> bool:
     # Use models_dir instead of abs_dir to save to the correct location
@@ -99,6 +120,12 @@ def get_face_swapper() -> Any:
             else:
                 update_status(f"No inswapper model found in {models_dir}.", NAME)
                 return None
+            # Verify model integrity before loading to prevent execution of
+            # arbitrary native code via malicious custom ONNX operators.
+            if not _verify_model_integrity(model_path):
+                update_status(f"Model integrity check failed for: {model_path}", NAME)
+                return None
+
             # On Apple Silicon, rewrite Pad(reflect) → Slice+Concat so
             # CoreML can run the entire model in a single partition on
             # the Neural Engine instead of bouncing between CPU and ANE.
@@ -300,7 +327,8 @@ def _fast_paste_back(target_img: Frame, bgr_fake: np.ndarray, aimg: np.ndarray, 
     # inswapper's aligned-face space is square (128x128). _get_soft_alpha
     # caches a single NxN template keyed by N, so fail loudly if that ever
     # stops being true rather than silently mis-warping the alpha mask.
-    assert face_h == face_w, f"Expected square aligned face, got {face_h}x{face_w}"
+    if face_h != face_w:
+        raise ValueError(f"Expected square aligned face, got {face_h}x{face_w}")
     IM = cv2.invertAffineTransform(M)
 
     # Bbox in output coords from the affine corners of the aligned-face square.
