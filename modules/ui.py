@@ -1065,7 +1065,7 @@ def get_available_cameras():
         else:
             # Linux camera detection - test first 10 indices
             for i in range(10):
-                cap = cv2.VideoCapture(i)
+                cap = cv2.VideoCapture(f"/dev/video{i}")
                 if cap.isOpened():
                     camera_indices.append(i)
                     camera_names.append(f"Camera {i}")

@@ -57,8 +57,11 @@ class VideoCapturer:
                     except Exception:
                         continue
             else:
-                # Unix-like systems (Linux/Mac) capture method
-                self.cap = cv2.VideoCapture(self.device_index)
+                if platform.system() == "Linux":
+                    self.cap = cv2.VideoCapture(f"/dev/video{self.device_index}")
+                else:
+                    # Fallback to OpenCV auto-detection (macOS)
+                    self.cap = cv2.VideoCapture(self.device_index)
 
             if not self.cap or not self.cap.isOpened():
                 raise RuntimeError("Failed to open camera")
