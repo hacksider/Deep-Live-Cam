@@ -4,6 +4,7 @@ import customtkinter as ctk
 from typing import Callable, Tuple
 import cv2
 from modules.gpu_processing import gpu_cvt_color, gpu_resize, gpu_flip
+from modules._image_sizing import fit_image_to_size
 from PIL import Image, ImageOps
 import time
 import json
@@ -912,21 +913,6 @@ def check_and_ignore_nsfw(target, destroy: Callable = None) -> bool:
         return False
 
 
-def fit_image_to_size(image, width: int, height: int):
-    if width is None and height is None:
-        return image
-    h, w, _ = image.shape
-    ratio_h = 0.0
-    ratio_w = 0.0
-    if width > height:
-        ratio_h = height / h
-    else:
-        ratio_w = width / w
-    ratio = max(ratio_w, ratio_h)
-    new_size = (int(ratio * w), int(ratio * h))
-    return gpu_resize(image, dsize=new_size)
-
-
 def render_image_preview(image_path: str, size: Tuple[int, int]) -> ctk.CTkImage:
     image = Image.open(image_path)
     if size:
@@ -1557,4 +1543,3 @@ def update_webcam_target(
         else:
             update_pop_live_status("Face could not be detected in last upload!")
         return map
-
