@@ -331,6 +331,14 @@ def _run_pipe_pipeline(
                 'mode': 'in-memory',
             })
 
+            # Pipelined detection: while processing frame N (swap on
+            # ANE), start detecting the face in the next frame
+            # (detection on GPU).  They use different hardware units
+            # so the work overlaps.
+            detect_executor = ThreadPoolExecutor(max_workers=1)
+            pending_detect = None
+            use_pipeline = not modules.globals.many_faces
+
             while True:
                 raw = reader.stdout.read(frame_size)
                 if len(raw) != frame_size:
@@ -340,25 +348,35 @@ def _run_pipe_pipeline(
                     (height, width, 3)
                 ).copy()
 
-                # Detect target face once and share across all processors.
-                # This eliminates the redundant detection that each
-                # processor would otherwise do internally.
-                if not modules.globals.many_faces:
-                    target_face = get_one_face(frame)
+                # Get the detection result for THIS frame
+                if use_pipeline:
+                    if pending_detect is not None:
+                        target_face = pending_detect.result()
+                    else:
+                        target_face = get_one_face(frame)
+                    # Start detecting on THIS frame eagerly — the result
+                    # will be used for the next iteration.  At video
+                    # frame rates the face barely moves between frames.
+                    # Hand the detector its own copy: the frame processors
+                    # below mutate `frame` in place (paste-back), which
+                    # would otherwise race with detection.
+                    pending_detect = detect_executor.submit(
+                        get_one_face, frame.copy())
                 else:
-                    target_face = None  # many_faces mode detects all internally
+                    target_face = None
 
                 # Run frame through every active processor
                 for fp in frame_processors:
                     try:
                         frame = fp.process_frame(source_face, frame, target_face=target_face)
                     except TypeError:
-                        # Processor doesn't accept target_face kwarg
                         frame = fp.process_frame(source_face, frame)
 
                 writer.stdin.write(frame.tobytes())
                 processed_count += 1
                 progress.update(1)
+
+            detect_executor.shutdown(wait=True)
 
         # Graceful shutdown
         writer.stdin.close()
