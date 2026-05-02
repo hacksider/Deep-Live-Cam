@@ -70,6 +70,10 @@ enable_interpolation: bool = True # Toggle temporal smoothing
 interpolation_weight: float = 0  # Blend weight for current frame (0.0-1.0). Lower=smoother.
 # --- END: Added for Frame Interpolation ---
 
+# Temporal face-keypoint smoothing (live mode only)
+# 0.0 = no smoothing (raw detection), 0.9 = very smooth but laggy. Default 0.5.
+face_smooth_alpha: float = 0.5
+
 # --- END OF FILE globals.py ---
 
 import threading
