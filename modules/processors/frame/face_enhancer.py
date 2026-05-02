@@ -1,6 +1,6 @@
 # Uses ONNX Runtime for GFPGAN face enhancement (no torch/gfpgan dependency)
 
-from typing import Any, List
+from typing import Any, List, Optional
 import cv2
 import threading
 import numpy as np
@@ -48,19 +48,26 @@ FFHQ_TEMPLATE_512 = np.array(
 
 
 def pre_check() -> bool:
+    model_path = ensure_model_available(report_status=True)
+    return model_path is not None
+
+
+def ensure_model_available(report_status: bool = False) -> Optional[str]:
     model_path = os.path.join(models_dir, MODEL_FILE)
     if not os.path.exists(model_path):
-        update_status(f"Downloading {MODEL_FILE}...", NAME)
+        if report_status:
+            update_status(f"Downloading {MODEL_FILE}...", NAME)
         conditional_download(models_dir, [MODEL_URL])
 
     if not os.path.exists(model_path):
-        update_status(
-            f"GFPGAN ONNX model not found at {model_path}. "
-            f"Download {MODEL_FILE} or place it in the models folder.",
-            NAME,
-        )
-        return False
-    return True
+        if report_status:
+            update_status(
+                f"Automatic download failed for {MODEL_FILE} from {MODEL_URL}. "
+                f"Place the model at {model_path} and try again.",
+                NAME,
+            )
+        return None
+    return model_path
 
 
 def pre_start() -> bool:
@@ -81,13 +88,13 @@ def get_face_enhancer() -> onnxruntime.InferenceSession:
 
     with THREAD_LOCK:
         if FACE_ENHANCER is None:
-            model_path = os.path.join(models_dir, MODEL_FILE)
-
-            if not os.path.exists(model_path):
-                conditional_download(models_dir, [MODEL_URL])
-            if not os.path.exists(model_path):
+            model_path = ensure_model_available()
+            if model_path is None:
+                expected_model_path = os.path.join(models_dir, MODEL_FILE)
                 raise FileNotFoundError(
-                    f"{NAME}: Model not found at {model_path}"
+                    f"{NAME}: Automatic download failed for {MODEL_FILE} "
+                    f"from {MODEL_URL}. Place the model at "
+                    f"{expected_model_path} and try again."
                 )
 
             try:
