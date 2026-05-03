@@ -121,6 +121,17 @@ class GetFaceAffineLandmarkTests(unittest.TestCase):
         self.assertIsNone(transform)
         self.assertIsNone(inverse)
 
+    def test_rejects_non_106_point_landmark_layout(self) -> None:
+        onnx_enhancer = _load_onnx_enhancer_module()
+
+        transform, inverse = onnx_enhancer._get_face_affine(
+            self._face_with_landmarks([[0, 0]] * 107),
+            512,
+        )
+
+        self.assertIsNone(transform)
+        self.assertIsNone(inverse)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -20,6 +20,13 @@ IS_APPLE_SILICON = platform.system() == "Darwin" and platform.machine() == "arm6
 # Limit concurrent ONNX calls to avoid VRAM exhaustion on multi-face frames
 THREAD_SEMAPHORE = threading.Semaphore(min(max(1, (os.cpu_count() or 1)), 8))
 
+# InsightFace's 106-point landmark layout indexes used by the GPEN alignment
+# fallback. Keep this path as an allow-list for that exact layout instead of
+# accepting arbitrary model-specific landmark arrays and trying to reject known
+# bad shapes after the fact.
+LANDMARK_2D_106_POINT_COUNT = 106
+LANDMARK_2D_106_AFFINE_INDICES = (38, 88, 86, 52, 61)
+
 
 def build_provider_config(providers=None):
     """Wrap raw provider name strings with optimised CUDA / CoreML options.
@@ -173,15 +180,11 @@ def _get_face_affine(face: Any, input_size: int):
         except (TypeError, ValueError):
             return None, None
 
-        if lm106.ndim != 2 or lm106.shape[0] <= 88 or lm106.shape[1] < 2:
+        if lm106.ndim != 2 or lm106.shape[0] != LANDMARK_2D_106_POINT_COUNT or lm106.shape[1] < 2:
             return None, None
 
         landmarks = np.array([
-            lm106[38],  # left eye
-            lm106[88],  # right eye
-            lm106[86],  # nose tip
-            lm106[52],  # left mouth
-            lm106[61],  # right mouth
+            lm106[index] for index in LANDMARK_2D_106_AFFINE_INDICES
         ], dtype=np.float32)
 
     if landmarks is None or len(landmarks) < 5:
