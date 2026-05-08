@@ -350,8 +350,23 @@ def _fast_paste_back(target_img: Frame, bgr_fake: np.ndarray, aimg: np.ndarray, 
     return target_img
 
 
+def _is_valid_frame(frame: Frame) -> bool:
+    """Return whether a frame has the array shape needed for swapping."""
+    if frame is None:
+        return False
+    if not all(hasattr(frame, attr) for attr in ("copy", "dtype", "shape")):
+        return False
+    try:
+        return len(frame.shape) >= 2
+    except TypeError:
+        return False
+
+
 def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
     """Optimized face swapping with better memory management and performance."""
+    if not _is_valid_frame(temp_frame):
+        return temp_frame
+
     face_swapper = get_face_swapper()
     if face_swapper is None:
         update_status("Face swapper model not loaded or failed to load. Skipping swap.", NAME)
