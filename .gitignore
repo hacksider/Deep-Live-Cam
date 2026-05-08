@@ -11,6 +11,7 @@ tf_env/
 *.mp4
 *.mkv
 
+.python-version
 .tmp/
 temp/
 .venv/
