@@ -4,6 +4,22 @@ import modules.globals  # Import the globals to check the color correction toggl
 from modules.gpu_processing import gpu_cvt_color
 
 
+def get_video_frame_last_index(frame_total: Any) -> int:
+    try:
+        frame_total_int = int(frame_total)
+    except (TypeError, ValueError, OverflowError):
+        return 0
+    return max(frame_total_int - 1, 0)
+
+
+def clamp_video_frame_number(frame_number: Any, frame_total: Any) -> int:
+    try:
+        frame_number_int = int(frame_number)
+    except (TypeError, ValueError, OverflowError):
+        frame_number_int = 0
+    return min(max(frame_number_int, 0), get_video_frame_last_index(frame_total))
+
+
 def get_video_frame(video_path: str, frame_number: int = 0) -> Any:
     capture = cv2.VideoCapture(video_path)
 
@@ -15,7 +31,7 @@ def get_video_frame(video_path: str, frame_number: int = 0) -> Any:
         capture.set(cv2.CAP_PROP_CONVERT_RGB, 1)
     
     frame_total = capture.get(cv2.CAP_PROP_FRAME_COUNT)
-    capture.set(cv2.CAP_PROP_POS_FRAMES, min(frame_total, frame_number - 1))
+    capture.set(cv2.CAP_PROP_POS_FRAMES, clamp_video_frame_number(frame_number, frame_total))
     has_frame, frame = capture.read()
 
     if has_frame and modules.globals.color_correction:

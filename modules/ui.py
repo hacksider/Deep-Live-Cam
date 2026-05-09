@@ -25,7 +25,7 @@ from modules.face_analyser import (
     has_valid_map,
     simplify_maps,
 )
-from modules.capturer import get_video_frame, get_video_frame_total
+from modules.capturer import get_video_frame, get_video_frame_last_index, get_video_frame_total
 from modules.processors.frame.core import get_frame_processors_modules
 from modules.utilities import (
     is_image,
@@ -963,7 +963,7 @@ def init_preview() -> None:
         preview_slider.pack_forget()
     if is_video(modules.globals.target_path):
         video_frame_total = get_video_frame_total(modules.globals.target_path)
-        preview_slider.configure(to=video_frame_total)
+        preview_slider.configure(to=get_video_frame_last_index(video_frame_total))
         preview_slider.pack(fill="x")
         preview_slider.set(0)
 
