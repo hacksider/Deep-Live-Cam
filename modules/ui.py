@@ -927,6 +927,21 @@ def fit_image_to_size(image, width: int, height: int):
     return gpu_resize(image, dsize=new_size)
 
 
+def get_source_face():
+    if not modules.globals.source_path:
+        update_status("Please select a source image first.")
+        return None
+
+    source_frame = cv2.imread(modules.globals.source_path)
+    if source_frame is None:
+        update_status("Source image could not be read.")
+        return None
+
+    source_face = get_one_face(source_frame)
+    if source_face is None:
+        update_status("No face detected in source image.")
+    return source_face
+
 def render_image_preview(image_path: str, size: Tuple[int, int]) -> ctk.CTkImage:
     image = Image.open(image_path)
     if size:
@@ -971,15 +986,16 @@ def init_preview() -> None:
 def update_preview(frame_number: int = 0) -> None:
     if modules.globals.source_path and modules.globals.target_path:
         update_status("Processing...")
+        source_face = get_source_face()
+        if source_face is None:
+            return
         temp_frame = get_video_frame(modules.globals.target_path, frame_number)
         if modules.globals.nsfw_filter and check_and_ignore_nsfw(temp_frame):
             return
         for frame_processor in get_frame_processors_modules(
                 modules.globals.frame_processors
         ):
-            temp_frame = frame_processor.process_frame(
-                get_one_face(cv2.imread(modules.globals.source_path)), temp_frame
-            )
+            temp_frame = frame_processor.process_frame(source_face, temp_frame)
         image = Image.fromarray(gpu_cvt_color(temp_frame, cv2.COLOR_BGR2RGB))
         image = ImageOps.contain(
             image, (PREVIEW_MAX_WIDTH, PREVIEW_MAX_HEIGHT), Image.LANCZOS
@@ -1137,7 +1153,21 @@ def _processing_thread_func(capture_queue, processed_queue, stop_event,
         if not modules.globals.map_faces:
             if modules.globals.source_path and modules.globals.source_path != last_source_path:
                 last_source_path = modules.globals.source_path
-                source_image = get_one_face(cv2.imread(modules.globals.source_path))
+                source_image = get_source_face()
+
+            if modules.globals.source_path and source_image is None:
+                try:
+                    processed_queue.put_nowait(temp_frame)
+                except queue.Full:
+                    try:
+                        processed_queue.get_nowait()
+                    except queue.Empty:
+                        pass
+                    try:
+                        processed_queue.put_nowait(temp_frame)
+                    except queue.Full:
+                        pass
+                continue
 
             # Run detection every det_interval frames (~80ms).
             # Use fast detection (det-only, no landmark/recognition) for live mode.
