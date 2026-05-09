@@ -27,10 +27,7 @@ def get_face_analyser() -> Any:
         with FACE_ANALYSER_LOCK:
             # Double-check after acquiring lock
             if FACE_ANALYSER is None:
-                from modules.processors.frame._onnx_enhancer import (
-                    build_provider_config,
-                )
-                providers = build_provider_config()
+                providers = build_face_analyser_provider_config()
                 FACE_ANALYSER = insightface.app.FaceAnalysis(
                     name='buffalo_l',
                     providers=providers,
@@ -39,6 +36,24 @@ def get_face_analyser() -> Any:
                 FACE_ANALYSER.prepare(ctx_id=0, det_size=DET_SIZE)
                 _optimize_det_model(FACE_ANALYSER, providers)
     return FACE_ANALYSER
+
+
+def build_face_analyser_provider_config():
+    """Build provider config for InsightFace analysis models.
+
+    DirectML can still be used by the swapper/enhancer pipeline, but running
+    InsightFace detection/recognition on DirectML at the same time has been
+    reported to crash on AMD systems. Keep analysis on CPU for DirectML runs
+    while preserving the existing provider configuration for all other modes.
+    """
+    if _is_dml():
+        return ["CPUExecutionProvider"]
+
+    from modules.processors.frame._onnx_enhancer import (
+        build_provider_config,
+    )
+
+    return build_provider_config()
 
 
 def _optimize_det_model(fa: Any, providers) -> None:
