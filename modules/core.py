@@ -116,13 +116,27 @@ def parse_args() -> None:
         modules.globals.execution_threads = args.gpu_threads_deprecated
 
 
+EXECUTION_PROVIDER_ALIASES = {
+    'directml': 'dml',
+}
+
+
 def encode_execution_providers(execution_providers: List[str]) -> List[str]:
     return [execution_provider.replace('ExecutionProvider', '').lower() for execution_provider in execution_providers]
 
 
+def normalize_execution_provider(execution_provider: str) -> str:
+    return EXECUTION_PROVIDER_ALIASES.get(execution_provider, execution_provider)
+
+
+def normalize_execution_providers(execution_providers: List[str]) -> List[str]:
+    return [normalize_execution_provider(execution_provider) for execution_provider in execution_providers]
+
+
 def decode_execution_providers(execution_providers: List[str]) -> List[str]:
+    normalized_execution_providers = normalize_execution_providers(execution_providers)
     return [provider for provider, encoded_execution_provider in zip(onnxruntime.get_available_providers(), encode_execution_providers(onnxruntime.get_available_providers()))
-            if any(execution_provider in encoded_execution_provider for execution_provider in execution_providers)]
+            if any(execution_provider in encoded_execution_provider for execution_provider in normalized_execution_providers)]
 
 
 def suggest_max_memory() -> int:
@@ -141,7 +155,10 @@ def suggest_default_execution_provider() -> str:
 
 
 def suggest_execution_providers() -> List[str]:
-    return encode_execution_providers(onnxruntime.get_available_providers())
+    execution_providers = encode_execution_providers(onnxruntime.get_available_providers())
+    if 'dml' in execution_providers:
+        execution_providers.append('directml')
+    return execution_providers
 
 
 def suggest_execution_threads() -> int:
