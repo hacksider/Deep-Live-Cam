@@ -3,7 +3,8 @@ from pathlib import Path
 
 
 def _core_ast():
-    return ast.parse(Path('modules/core.py').read_text())
+    core_path = Path(__file__).resolve().parents[1] / 'modules' / 'core.py'
+    return ast.parse(core_path.read_text())
 
 
 def _add_argument_calls():
@@ -35,9 +36,16 @@ def test_no_keep_audio_cli_flag_disables_audio_restore():
     assert _keyword_value(no_keep_audio[0], 'action') == 'store_false'
 
 
+def _set_defaults_calls():
+    for node in ast.walk(_core_ast()):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == 'set_defaults':
+            yield node
+
+
 def test_keep_audio_default_stays_enabled():
     keep_audio = [call for call in _add_argument_calls() if '--keep-audio' in _literal_args(call)]
+    defaults = list(_set_defaults_calls())
 
     assert keep_audio, 'existing --keep-audio flag should remain available'
     assert _keyword_value(keep_audio[0], 'dest') == 'keep_audio'
-    assert _keyword_value(keep_audio[0], 'default') is True
+    assert any(_keyword_value(call, 'keep_audio') is True for call in defaults)
