@@ -6,14 +6,23 @@ from unittest.mock import Mock, patch
 
 
 class StubModule(types.ModuleType):
+    def __init__(self, name, allowed_attrs=()):
+        super().__init__(name)
+        self._allowed_attrs = set(allowed_attrs)
+
     def __getattr__(self, name):
-        value = object
-        setattr(self, name, value)
-        return value
+        if name not in self._allowed_attrs:
+            raise AttributeError(
+                f"{name!r} is not a declared attribute of stub module "
+                f"{self.__name__!r}"
+            )
+        raise AttributeError(
+            f"{name!r} has not been set on stub module {self.__name__!r}"
+        )
 
 
 def _module(**attrs):
-    mod = StubModule("stub")
+    mod = StubModule("stub", allowed_attrs=attrs)
     for key, value in attrs.items():
         setattr(mod, key, value)
     return mod
@@ -22,16 +31,34 @@ def _module(**attrs):
 def _install_import_stubs():
     ctk = _module(
         CTk=object,
+        CTkButton=object,
         CTkImage=object,
+        CTkLabel=object,
+        CTkOptionMenu=object,
+        CTkScrollableFrame=object,
+        CTkSlider=object,
+        CTkSwitch=object,
+        CTkToplevel=object,
+        BooleanVar=object,
+        DoubleVar=object,
+        StringVar=object,
+        ThemeManager=object,
+        deactivate_automatic_dpi_awareness=lambda: None,
         filedialog=_module(askopenfilename=lambda **_kwargs: ""),
+        set_appearance_mode=lambda *_args, **_kwargs: None,
+        set_default_color_theme=lambda *_args, **_kwargs: None,
     )
     ctk.__path__ = []
     sys.modules.setdefault("customtkinter", ctk)
     dropdown_cls = type(
         "DropdownMenu", (), {"_add_menu_commands": lambda self, *args, **kwargs: None}
     )
-    sys.modules.setdefault("customtkinter.windows", _module())
-    sys.modules.setdefault("customtkinter.windows.widgets", _module())
+    windows_mod = _module()
+    windows_mod.__path__ = []
+    widgets_mod = _module()
+    widgets_mod.__path__ = []
+    sys.modules.setdefault("customtkinter.windows", windows_mod)
+    sys.modules.setdefault("customtkinter.windows.widgets", widgets_mod)
     sys.modules.setdefault(
         "customtkinter.windows.widgets.core_widget_classes",
         _module(DropdownMenu=dropdown_cls),
