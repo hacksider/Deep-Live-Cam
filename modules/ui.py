@@ -26,6 +26,7 @@ from modules.face_analyser import (
     simplify_maps,
 )
 from modules.capturer import get_video_frame, get_video_frame_total
+from modules.camera_detection import NO_CAMERAS_FOUND, get_windows_cameras
 from modules.processors.frame.core import get_frame_processors_modules
 from modules.utilities import (
     is_image,
@@ -366,12 +367,12 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     available_cameras = get_available_cameras()
     camera_indices, camera_names = available_cameras
 
-    if not camera_names or camera_names[0] == "No cameras found":
-        camera_variable = ctk.StringVar(value="No cameras found")
+    if not camera_names or camera_names[0] == NO_CAMERAS_FOUND:
+        camera_variable = ctk.StringVar(value=NO_CAMERAS_FOUND)
         camera_optionmenu = ctk.CTkOptionMenu(
             root,
             variable=camera_variable,
-            values=["No cameras found"],
+            values=[NO_CAMERAS_FOUND],
             state="disabled",
         )
     else:
@@ -391,13 +392,13 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             root,
             (
                 camera_indices[camera_names.index(camera_variable.get())]
-                if camera_names and camera_names[0] != "No cameras found"
+                if camera_names and camera_names[0] != NO_CAMERAS_FOUND
                 else None
             ),
         ),
         state=(
             "normal"
-            if camera_names and camera_names[0] != "No cameras found"
+            if camera_names and camera_names[0] != NO_CAMERAS_FOUND
             else "disabled"
         ),
     )
@@ -1019,37 +1020,11 @@ def get_available_cameras():
     """Returns a list of available camera names and indices."""
     if platform.system() == "Windows":
         try:
-            graph = FilterGraph()
-            devices = graph.get_input_devices()
-
-            # Create list of indices and names
-            camera_indices = list(range(len(devices)))
-            camera_names = devices
-
-            # If no cameras found through DirectShow, try OpenCV fallback
-            if not camera_names:
-                # Try to open camera with index -1 and 0
-                test_indices = [-1, 0]
-                working_cameras = []
-
-                for idx in test_indices:
-                    cap = cv2.VideoCapture(idx)
-                    if cap.isOpened():
-                        working_cameras.append(f"Camera {idx}")
-                        cap.release()
-
-                if working_cameras:
-                    return test_indices[: len(working_cameras)], working_cameras
-
-            # If still no cameras found, return empty lists
-            if not camera_names:
-                return [], ["No cameras found"]
-
-            return camera_indices, camera_names
+            return get_windows_cameras(FilterGraph)
 
         except Exception as e:
             print(f"Error detecting cameras: {str(e)}")
-            return [], ["No cameras found"]
+            return [], [NO_CAMERAS_FOUND]
     else:
         # Unix-like systems (Linux/Mac) camera detection
         camera_indices = []
@@ -1072,7 +1047,7 @@ def get_available_cameras():
                     cap.release()
 
         if not camera_names:
-            return [], ["No cameras found"]
+            return [], [NO_CAMERAS_FOUND]
 
         return camera_indices, camera_names
 
@@ -1557,4 +1532,3 @@ def update_webcam_target(
         else:
             update_pop_live_status("Face could not be detected in last upload!")
         return map
-
