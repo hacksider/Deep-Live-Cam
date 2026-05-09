@@ -323,6 +323,7 @@ options:
   --frame-processor FRAME_PROCESSOR [FRAME_PROCESSOR ...]  frame processors (choices: face_swapper, face_enhancer, ...)
   --keep-fps                                               keep original fps
   --keep-audio                                             keep original audio
+  --no-keep-audio                                          disable restoring original audio
   --keep-frames                                            keep temporary frames
   --many-faces                                             process every face
   --map-faces                                              map source target faces
