@@ -45,25 +45,40 @@ models_dir = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(abs_dir))), "models"
 )
 
-# SHA-256 hashes of known-good model files.  A model whose filename is
-# present in this map will be rejected at load time if its on-disk hash
-# does not match, guarding against tampered or maliciously crafted ONNX files.
+# SHA-256 hashes of known-good model files.  Only filenames listed here are
+# permitted to load; any unlisted filename is rejected outright to enforce an
+# explicit allowlist and prevent bypass via a renamed malicious model.
+# A None value means the file is explicitly allowed but its hash has not yet
+# been registered (hash verification is skipped for that entry).
 _MODEL_SHA256: dict = {
     "inswapper_128.onnx": "e4a3f08c753cb72d04e10aa0f7dbe3deebbf39567d4ead6dce08e98aa49e16af",
+    # FP16 variant: entry prevents unknown-filename bypass; populate hash once available.
+    "inswapper_128_fp16.onnx": None,
 }
 
 
 def _verify_model_integrity(model_path: str) -> bool:
-    """Return True if the file passes SHA-256 verification (or has no registered hash)."""
+    """Return True if the file passes SHA-256 verification.
+
+    Files whose filename is absent from _MODEL_SHA256 are rejected to enforce
+    an explicit allowlist and prevent bypass via a renamed malicious model.
+    Files with a None hash entry are permitted without hash verification.
+    Returns False on any I/O error so callers receive a clean failure signal.
+    """
     filename = os.path.basename(model_path)
-    expected = _MODEL_SHA256.get(filename)
+    if filename not in _MODEL_SHA256:
+        return False  # Unknown model: reject to enforce strict allowlist
+    expected = _MODEL_SHA256[filename]
     if expected is None:
-        return True
-    sha256 = hashlib.sha256()
-    with open(model_path, "rb") as fh:
-        for chunk in iter(lambda: fh.read(65536), b""):
-            sha256.update(chunk)
-    return sha256.hexdigest() == expected
+        return True  # Registered but hash not yet populated; allow through
+    try:
+        sha256 = hashlib.sha256()
+        with open(model_path, "rb") as fh:
+            for chunk in iter(lambda: fh.read(65536), b""):
+                sha256.update(chunk)
+        return sha256.hexdigest() == expected
+    except OSError:
+        return False
 
 def pre_check() -> bool:
     # Use models_dir instead of abs_dir to save to the correct location
