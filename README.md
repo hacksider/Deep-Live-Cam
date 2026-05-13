@@ -35,8 +35,8 @@ Users are expected to use this software responsibly and legally. If using a real
   <a href="https://deeplivecam.net/index.php/quickstart"> <img src="media/Download.png" width="285" height="77" />
 
 ##### This is the fastest build you can get if you have a discrete NVIDIA or AMD GPU, CPU or Mac Silicon, And you'll receive special priority support. 2.7 beta is the best you can have with 30+ extra features than the open source version.
- 
-###### These Pre-builts are perfect for non-technical users or those who don't have time to, or can't manually install all the requirements. Just a heads-up: this is an open-source project, so you can also install it manually. 
+
+###### These Pre-builts are perfect for non-technical users or those who don't have time to, or can't manually install all the requirements. Just a heads-up: this is an open-source project, so you can also install it manually.
 
 ## TLDR; Live Deepfake in just 3 Clicks
 ![easysteps](https://github.com/user-attachments/assets/af825228-852c-411b-b787-ffd9aac72fc6)
@@ -83,7 +83,7 @@ Users are expected to use this software responsibly and legally. If using a real
 **Create Your Most Viral Meme Yet**
 
 <p align="center">
-  <img src="media/meme.gif" alt="show" width="450"> 
+  <img src="media/meme.gif" alt="show" width="450">
   <br>
   <sub>Created using Many Faces feature in Deep-Live-Cam</sub>
 </p>
