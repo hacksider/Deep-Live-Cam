@@ -383,13 +383,29 @@ def _run_pipe_pipeline(
         writer.wait()
         reader.wait()
 
+        if reader.returncode != 0:
+            stderr_out = reader.stderr.read().decode(errors='ignore').strip()
+            if stderr_out:
+                print(f"[DLC.CORE] FFmpeg decoder error: {stderr_out}")
+            return False
+
         if writer.returncode != 0:
             stderr_out = writer.stderr.read().decode(errors='ignore').strip()
             if stderr_out:
                 print(f"[DLC.CORE] FFmpeg encoder error: {stderr_out}")
             return False
 
-        return processed_count > 0 and os.path.isfile(temp_output_path)
+        if processed_count <= 0:
+            return False
+
+        if total_frames > 0 and processed_count < total_frames:
+            print(
+                f"[DLC.CORE] In-memory pipeline processed "
+                f"{processed_count}/{total_frames} frames; falling back."
+            )
+            return False
+
+        return os.path.isfile(temp_output_path)
 
     except BrokenPipeError:
         print("[DLC.CORE] FFmpeg pipe broken (encoder may not be available).")
