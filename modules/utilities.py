@@ -1,19 +1,127 @@
 import glob
+import hashlib
 import mimetypes
 import os
 import platform
+import re
 import shutil
 import ssl
 import subprocess
+import tempfile
 import urllib
 from pathlib import Path
 from typing import List, Any
 from tqdm import tqdm
+import cv2
+import numpy as np
 
 import modules.globals
 
 TEMP_FILE = "temp.mp4"
 TEMP_DIRECTORY = "temp"
+SAFE_TEMP_ROOT = "DeepLiveCamTemp"
+
+
+def _contains_non_ascii(value: str) -> bool:
+    try:
+        value.encode("ascii")
+        return False
+    except UnicodeEncodeError:
+        return True
+
+
+def _sanitize_ascii_name(name: str) -> str:
+    safe_name = name.encode("ascii", "ignore").decode("ascii")
+    safe_name = re.sub(r"[^A-Za-z0-9._-]+", "_", safe_name)
+    safe_name = safe_name.strip("._-")
+    return safe_name or "video"
+
+
+def _get_ascii_safe_temp_directory(target_path: str) -> str:
+    absolute_target = os.path.abspath(target_path)
+    drive, _ = os.path.splitdrive(absolute_target)
+    if drive:
+        base_root = os.path.join(drive + os.sep, SAFE_TEMP_ROOT)
+    else:
+        base_root = os.path.join(tempfile.gettempdir(), SAFE_TEMP_ROOT)
+
+    target_name, _ = os.path.splitext(os.path.basename(target_path))
+    safe_name = _sanitize_ascii_name(target_name)
+    path_hash = hashlib.sha1(absolute_target.encode("utf-8", errors="ignore")).hexdigest()[:12]
+    return os.path.join(base_root, TEMP_DIRECTORY, f"{safe_name}_{path_hash}")
+
+
+def read_image(image_path: str, flags: int = cv2.IMREAD_COLOR):
+    """Read an image with Unicode-path fallback for Windows/OpenCV builds."""
+    if not image_path:
+        return None
+
+    # On some Windows OpenCV builds, non-ASCII paths fail in imread().
+    # Decode from raw bytes first to avoid noisy warnings and false None.
+    has_non_ascii = False
+    try:
+        image_path.encode("ascii")
+    except UnicodeEncodeError:
+        has_non_ascii = True
+
+    if platform.system() == "Windows" and has_non_ascii:
+        try:
+            buffer = np.fromfile(image_path, dtype=np.uint8)
+            if buffer.size > 0:
+                image = cv2.imdecode(buffer, flags)
+                if image is not None:
+                    return image
+        except Exception:
+            pass
+
+    image = cv2.imread(image_path, flags)
+    if image is not None:
+        return image
+
+    try:
+        buffer = np.fromfile(image_path, dtype=np.uint8)
+        if buffer.size == 0:
+            return None
+        return cv2.imdecode(buffer, flags)
+    except Exception:
+        return None
+
+
+def write_image(image_path: str, image, params: List[int] = None) -> bool:
+    """Write image with Unicode-path fallback for Windows/OpenCV builds."""
+    if not image_path or image is None:
+        return False
+
+    if params is None:
+        params = []
+
+    parent_directory = os.path.dirname(image_path)
+    if parent_directory:
+        try:
+            os.makedirs(parent_directory, exist_ok=True)
+        except Exception:
+            return False
+
+    has_non_ascii = _contains_non_ascii(image_path)
+
+    if platform.system() == "Windows" and has_non_ascii:
+        try:
+            extension = os.path.splitext(image_path)[1]
+            if not extension:
+                extension = ".png"
+            ok, encoded = cv2.imencode(extension, image, params)
+            if not ok:
+                return False
+            with open(image_path, "wb") as image_file:
+                image_file.write(encoded.tobytes())
+            return True
+        except Exception:
+            return False
+
+    try:
+        return cv2.imwrite(image_path, image, params)
+    except Exception:
+        return False
 
 
 def run_ffmpeg(args: List[str]) -> bool:
@@ -220,7 +328,13 @@ def get_temp_frame_paths(target_path: str) -> List[str]:
 def get_temp_directory_path(target_path: str) -> str:
     target_name, _ = os.path.splitext(os.path.basename(target_path))
     target_directory_path = os.path.dirname(target_path)
-    return os.path.join(target_directory_path, TEMP_DIRECTORY, target_name)
+    default_temp_directory = os.path.join(target_directory_path, TEMP_DIRECTORY, target_name)
+
+    if platform.system() == "Windows":
+        if _contains_non_ascii(default_temp_directory) or len(default_temp_directory) > 220:
+            return _get_ascii_safe_temp_directory(target_path)
+
+    return default_temp_directory
 
 
 def get_temp_output_path(target_path: str) -> str:

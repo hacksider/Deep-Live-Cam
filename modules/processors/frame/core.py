@@ -131,6 +131,7 @@ def process_video_in_memory(source_path: str, target_path: str, fps: float) -> b
         get_video_dimensions,
         estimate_frame_count,
         get_temp_output_path,
+        read_image,
     )
 
     temp_output_path = get_temp_output_path(target_path)
@@ -138,7 +139,7 @@ def process_video_in_memory(source_path: str, target_path: str, fps: float) -> b
     # --- Pre-load source face (needed by face_swapper in simple mode) ---
     source_face = None
     if source_path and os.path.exists(source_path):
-        source_img = cv2.imread(source_path)
+        source_img = read_image(source_path)
         if source_img is not None:
             source_face = get_one_face(source_img)
             del source_img
