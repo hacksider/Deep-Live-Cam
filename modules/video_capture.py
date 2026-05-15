@@ -167,12 +167,14 @@ class VideoCapturer:
                 return
 
             elapsed = now - self._fps_sample_started_at
-            if elapsed > 0:
-                # N frames contain N-1 frame intervals from the first timestamp
-                # to the current one.
-                self.actual_fps = (self._fps_sample_count - 1) / elapsed
+            if elapsed <= 0:
+                return
+
+            # N frames contain N-1 frame intervals from the first timestamp
+            # to the current one.
+            self.actual_fps = (self._fps_sample_count - 1) / elapsed
             self._fps_sample_done = True
-        except Exception:
+        except (OSError, RuntimeError, ValueError):
             self._fps_sample_done = True
 
     def set_frame_callback(self, callback: Callable[[np.ndarray], None]) -> None:

@@ -7,7 +7,8 @@ from unittest.mock import patch
 
 
 class FakeCapture:
-    def __init__(self):
+    def __init__(self, cv2_module=None):
+        self.cv2 = cv2_module
         self.read_count = 0
         self.set_calls = []
         self.opened = True
@@ -20,11 +21,11 @@ class FakeCapture:
         return True
 
     def get(self, prop):
-        if prop == 3:
+        if prop == self.cv2.CAP_PROP_FRAME_WIDTH:
             return 960
-        if prop == 4:
+        if prop == self.cv2.CAP_PROP_FRAME_HEIGHT:
             return 540
-        if prop == 5:
+        if prop == self.cv2.CAP_PROP_FPS:
             return 30
         return 0
 
@@ -48,6 +49,7 @@ def import_video_capture(fake_capture):
         VideoWriter_fourcc=lambda *_args: 1196444237,
         VideoCapture=lambda *_args, **_kwargs: fake_capture,
     )
+    fake_capture.cv2 = fake_cv2
     module_path = Path(__file__).resolve().parents[1] / "modules" / "video_capture.py"
     module_name = "video_capture_under_test"
     fake_numpy = types.SimpleNamespace(ndarray=object)
@@ -71,6 +73,26 @@ class VideoCaptureFpsProbeTests(unittest.TestCase):
         self.assertEqual(0, fake_capture.read_count)
         self.assertEqual(30, capturer.actual_fps)
         self.assertTrue(capturer.is_running)
+
+    def test_actual_fps_keeps_sampling_when_elapsed_is_zero(self):
+        fake_capture = FakeCapture()
+        video_capture = import_video_capture(fake_capture)
+        ticks = iter([0.0] * 30 + [0.1])
+
+        with patch.object(video_capture.platform, "system", return_value="Linux"):
+            with patch.object(video_capture.time, "perf_counter", side_effect=lambda: next(ticks)):
+                capturer = video_capture.VideoCapturer(0)
+                self.assertTrue(capturer.start())
+                for _ in range(30):
+                    capturer.read()
+
+                self.assertFalse(capturer._fps_sample_done)
+                self.assertEqual(30, capturer.actual_fps)
+
+                capturer.read()
+
+        self.assertTrue(capturer._fps_sample_done)
+        self.assertAlmostEqual(300.0, capturer.actual_fps)
 
     def test_actual_fps_updates_from_delivered_frames(self):
         fake_capture = FakeCapture()
