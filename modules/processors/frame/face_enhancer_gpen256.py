@@ -15,6 +15,8 @@ from modules.typing import Frame, Face
 from modules.utilities import (
     is_image,
     is_video,
+    read_image,
+    write_image,
 )
 from modules.processors.frame._onnx_enhancer import (
     create_onnx_session,
@@ -100,24 +102,24 @@ def process_frames(
     source_path: str | None, temp_frame_paths: List[str], progress: Any = None
 ) -> None:
     for temp_frame_path in temp_frame_paths:
-        temp_frame = cv2.imread(temp_frame_path)
+        temp_frame = read_image(temp_frame_path)
         if temp_frame is None:
             if progress:
                 progress.update(1)
             continue
         result = process_frame(None, temp_frame)
-        cv2.imwrite(temp_frame_path, result)
+        write_image(temp_frame_path, result)
         if progress:
             progress.update(1)
 
 
 def process_image(source_path: str | None, target_path: str, output_path: str) -> None:
-    target_frame = cv2.imread(target_path)
+    target_frame = read_image(target_path)
     if target_frame is None:
         print(f"{NAME}: Error: Failed to read target image {target_path}")
         return
     result_frame = process_frame(None, target_frame)
-    cv2.imwrite(output_path, result_frame)
+    write_image(output_path, result_frame)
     print(f"{NAME}: Enhanced image saved to {output_path}")
 
 

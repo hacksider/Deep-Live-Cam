@@ -14,6 +14,8 @@ from modules.utilities import (
     conditional_download,
     is_image,
     is_video,
+    read_image,
+    write_image,
 )
 from modules.cluster_analysis import find_closest_centroid
 from modules.gpu_processing import gpu_gaussian_blur, gpu_sharpen, gpu_add_weighted, gpu_resize, gpu_cvt_color
@@ -86,7 +88,7 @@ def get_face_swapper() -> Any:
 
     with THREAD_LOCK:
         if FACE_SWAPPER is None:
-            # Prefer FP16 on GPUs with Tensor Cores (Turing+) — half the
+            # Prefer FP16 on GPUs with Tensor Cores (Turing+) - half the
             # memory bandwidth, faster inference.  Fall back to FP32 for
             # older GPUs (e.g. GTX 16xx) where FP16 can produce NaN.
             fp32_path = os.path.join(models_dir, "inswapper_128.onnx")
@@ -99,7 +101,7 @@ def get_face_swapper() -> Any:
             else:
                 update_status(f"No inswapper model found in {models_dir}.", NAME)
                 return None
-            # On Apple Silicon, rewrite Pad(reflect) → Slice+Concat so
+            # On Apple Silicon, rewrite Pad(reflect) -> Slice+Concat so
             # CoreML can run the entire model in a single partition on
             # the Neural Engine instead of bouncing between CPU and ANE.
             if IS_APPLE_SILICON:
@@ -123,7 +125,7 @@ def get_face_swapper() -> Any:
                             }
                         ))
                     elif p == "CUDAExecutionProvider":
-                        # Use bare provider — ONNX Runtime defaults are
+                        # Use bare provider - ONNX Runtime defaults are
                         # fastest on modern GPUs (Blackwell/sm_120).
                         providers_config.append(p)
                     else:
@@ -159,6 +161,7 @@ except ImportError:
 _paste_cache = {
     'soft_alpha': None,  # feathered alpha mask in aligned-face space
     'alpha_size': 0,
+    'auto_seam_fix': None,
 }
 
 
@@ -169,18 +172,90 @@ def _get_soft_alpha(size: int) -> np.ndarray:
     output coordinates with kernels scaled to the output face size, which
     made the per-frame cost quartic in face linear size. Doing the same
     erode+blur once in aligned space and then warping the *soft* mask
-    per-frame gives a visually equivalent feather at O(crop_area) cost —
+    per-frame gives a visually equivalent feather at O(crop_area) cost -
     the feather radius scales naturally with the affine transform.
     """
-    if _paste_cache['alpha_size'] != size:
-        k_erode = max(size // 10, 3)
-        k_blur = max(size // 20, 3)
-        mask = np.full((size, size), 255, dtype=np.uint8)
-        mask = cv2.erode(mask, np.ones((k_erode, k_erode), np.uint8), iterations=1)
-        mask = cv2.GaussianBlur(mask, (2 * k_blur + 1, 2 * k_blur + 1), 0)
-        _paste_cache['soft_alpha'] = mask  # uint8 [0, 255] — blended via cv2 SIMD ops
+    auto_seam_fix = getattr(modules.globals, "auto_seam_fix", True)
+    if (
+        _paste_cache['alpha_size'] != size
+        or _paste_cache.get('auto_seam_fix') != auto_seam_fix
+    ):
+        if auto_seam_fix:
+            mask = np.zeros((size, size), dtype=np.uint8)
+            cx, cy = size // 2, size // 2
+            rx = int(size * 0.44)
+            ry = int(size * 0.48)
+            cv2.ellipse(mask, (cx, cy), (rx, ry), 0, 0, 360, 255, -1)
+            k_blur = max(size // 8, 5)
+            if k_blur % 2 == 0:
+                k_blur += 1
+            mask = cv2.GaussianBlur(mask, (k_blur, k_blur), 0)
+        else:
+            k_erode = max(size // 10, 3)
+            k_blur = max(size // 20, 3)
+            mask = np.full((size, size), 255, dtype=np.uint8)
+            mask = cv2.erode(mask, np.ones((k_erode, k_erode), np.uint8), iterations=1)
+            mask = cv2.GaussianBlur(mask, (2 * k_blur + 1, 2 * k_blur + 1), 0)
+        _paste_cache['soft_alpha'] = mask
         _paste_cache['alpha_size'] = size
+        _paste_cache['auto_seam_fix'] = auto_seam_fix
     return _paste_cache['soft_alpha']
+
+
+_kps_smooth_state = {'kps': None}
+_kps_smooth_lock = threading.Lock()
+
+
+def _reset_kps_tracking() -> None:
+    with _kps_smooth_lock:
+        _kps_smooth_state['kps'] = None
+
+
+def _smooth_face_kps(face: Face) -> Face:
+    """Apply EMA smoothing to 5-point keypoints to reduce frame jitter."""
+    alpha = getattr(modules.globals, "face_smooth_alpha", 0.55)
+    if alpha <= 0.0 or face is None:
+        return face
+
+    # NOTE: insightface Face inherits from dict, so check Face first.
+    if isinstance(face, Face):
+        kps = getattr(face, "kps", None)
+    elif isinstance(face, dict):
+        kps = face.get("kps")
+    else:
+        kps = getattr(face, "kps", None)
+
+    if kps is None:
+        _reset_kps_tracking()
+        return face
+
+    alpha = max(0.0, min(float(alpha), 0.95))
+    kps_f = kps.astype(np.float32)
+
+    with _kps_smooth_lock:
+        prev = _kps_smooth_state['kps']
+        if prev is not None and prev.shape == kps_f.shape:
+            # New face / hard camera pan: avoid dragging old keypoints.
+            if np.linalg.norm(kps_f - prev) > 40.0:
+                smoothed = kps_f
+            else:
+                smoothed = (1.0 - alpha) * kps_f + alpha * prev
+        else:
+            smoothed = kps_f
+        _kps_smooth_state['kps'] = smoothed
+
+    if isinstance(face, Face):
+        # Preserve Face semantics required by insightface swapper.
+        smoothed_face = Face(face)
+        smoothed_face.kps = smoothed
+        return smoothed_face
+    if isinstance(face, dict):
+        smoothed_face = face.copy()
+        smoothed_face["kps"] = smoothed
+        return smoothed_face
+    setattr(face, "kps", smoothed)
+    return face
+
 
 # CUDA graph swap session cache
 _cuda_graph_session = {
@@ -278,7 +353,7 @@ def _init_cuda_graph_session(model_path: str, swapper):
 
 
 def _cuda_graph_swap_inference(blob: np.ndarray, latent: np.ndarray) -> np.ndarray:
-    """Run swap model via CUDA graph replay — minimal CPU overhead."""
+    """Run swap model via CUDA graph replay - minimal CPU overhead."""
     cg = _cuda_graph_session
     with _cuda_graph_lock:
         cg['ort_input'].update_inplace(blob)
@@ -315,7 +390,7 @@ def _fast_paste_back(target_img: Frame, bgr_fake: np.ndarray, aimg: np.ndarray, 
     if x1 >= x2 or y1 >= y2:
         return target_img
 
-    # Small interpolation margin only — the feather is baked into the template.
+    # Small interpolation margin only - the feather is baked into the template.
     pad = 2
     y1p, y2p = max(0, y1 - pad), min(h, y2 + pad + 1)
     x1p, x2p = max(0, x1 - pad), min(w, x2 + pad + 1)
@@ -332,15 +407,15 @@ def _fast_paste_back(target_img: Frame, bgr_fake: np.ndarray, aimg: np.ndarray, 
     target_crop = target_img[y1p:y2p, x1p:x2p]
 
     if _HAS_TORCH_CUDA:
-        # Scale alpha to [0, 1] on device — cheaper to upload uint8 than float.
+        # Scale alpha to [0, 1] on device - cheaper to upload uint8 than float.
         mask_t = torch.from_numpy(alpha_crop).cuda().float().mul_(1.0 / 255.0).unsqueeze(2)
         fake_t = torch.from_numpy(bgr_fake_crop).float().cuda()
         tgt_t = torch.from_numpy(target_crop).float().cuda()
         blended = (mask_t * fake_t + (1.0 - mask_t) * tgt_t).to(torch.uint8).cpu().numpy()
         target_img[y1p:y2p, x1p:x2p] = blended
     else:
-        # Fused uint8 blend via cv2 SIMD — no float32 round-trip.
-        # Measured ~7-8× faster than the old numpy float32 path on a 1000×1000 crop.
+        # Fused uint8 blend via cv2 SIMD - no float32 round-trip.
+        # Measured ~7-8x faster than the old numpy float32 path on a 1000x1000 crop.
         alpha_3c = cv2.merge([alpha_crop, alpha_crop, alpha_crop])
         inv_alpha = 255 - alpha_3c
         a_fake = cv2.multiply(bgr_fake_crop, alpha_3c, scale=1.0 / 255.0)
@@ -398,7 +473,7 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
         if not isinstance(bgr_fake, np.ndarray):
             return original_frame
 
-        # Pass a dummy aimg with correct shape — _fast_paste_back only uses aimg.shape
+        # Pass a dummy aimg with correct shape - _fast_paste_back only uses aimg.shape
         # to create the white mask. Avoids redundant norm_crop2 (~0.6ms).
         _face_size = face_swapper.input_size[0]
         _aimg_dummy = np.empty((_face_size, _face_size, 3), dtype=np.uint8)
@@ -589,7 +664,7 @@ def apply_post_processing(current_frame: Frame, swapped_face_bboxes: List[np.nda
                 pass
             PREVIOUS_FRAME_RESULT = processed_frame.copy()
     else:
-         # Interpolation is off or weight is invalid — no need to cache
+         # Interpolation is off or weight is invalid - no need to cache
          PREVIOUS_FRAME_RESULT = None
 
 
@@ -608,12 +683,14 @@ def process_frame(source_face: Face, temp_frame: Frame, target_face: Face = None
     if getattr(modules.globals, "opacity", 1.0) == 0:
         global PREVIOUS_FRAME_RESULT
         PREVIOUS_FRAME_RESULT = None
+        _reset_kps_tracking()
         return temp_frame
 
     processed_frame = temp_frame
     swapped_face_bboxes = []
 
     if modules.globals.many_faces:
+        _reset_kps_tracking()
         many_faces = get_many_faces(processed_frame)
         if many_faces:
             current_swap_target = processed_frame.copy()
@@ -626,9 +703,13 @@ def process_frame(source_face: Face, temp_frame: Frame, target_face: Face = None
         if target_face is None:
             target_face = get_one_face(processed_frame)
         if target_face:
+            if getattr(modules.globals, "auto_seam_fix", True):
+                target_face = _smooth_face_kps(target_face)
             processed_frame = swap_face(source_face, target_face, processed_frame)
             if hasattr(target_face, "bbox") and target_face.bbox is not None:
                 swapped_face_bboxes.append(target_face.bbox.astype(int))
+        else:
+            _reset_kps_tracking()
 
     final_frame = apply_post_processing(processed_frame, swapped_face_bboxes)
     return final_frame
@@ -641,6 +722,7 @@ def process_frame_v2(temp_frame: Frame, temp_frame_path: str = "") -> Frame:
         # Also reset interpolation state if it was active.
         global PREVIOUS_FRAME_RESULT
         PREVIOUS_FRAME_RESULT = None
+        _reset_kps_tracking()
         return temp_frame
 
     processed_frame = temp_frame # Start with the input frame
@@ -745,11 +827,20 @@ def process_frame_v2(temp_frame: Frame, temp_frame_path: str = "") -> Frame:
 
     # Perform swaps based on the collected pairs
     current_swap_target = processed_frame.copy() # Apply swaps sequentially
+    smooth_single_target = (
+        getattr(modules.globals, "auto_seam_fix", True)
+        and not modules.globals.many_faces
+        and len(source_target_pairs) == 1
+    )
+    if not smooth_single_target:
+        _reset_kps_tracking()
+
     for source_face, target_face in source_target_pairs:
         if source_face and target_face:
-            current_swap_target = swap_face(source_face, target_face, current_swap_target)
-            if target_face is not None and hasattr(target_face, "bbox") and target_face.bbox is not None:
-                swapped_face_bboxes.append(target_face.bbox.astype(int))
+            tracked_target_face = _smooth_face_kps(target_face) if smooth_single_target else target_face
+            current_swap_target = swap_face(source_face, tracked_target_face, current_swap_target)
+            if tracked_target_face is not None and hasattr(tracked_target_face, "bbox") and tracked_target_face.bbox is not None:
+                swapped_face_bboxes.append(tracked_target_face.bbox.astype(int))
     processed_frame = current_swap_target # Assign final result
 
 
@@ -779,7 +870,7 @@ def process_frames(
             # Log the error but allow proceeding; subsequent check will stop processing.
         else:
             try:
-                source_img = cv2.imread(source_path)
+                source_img = read_image(source_path)
                 if source_img is None:
                     # Specific error for file reading failure
                     update_status(f"Error reading source image file {source_path}. Please check the path and file integrity.", NAME)
@@ -819,7 +910,7 @@ def process_frames(
         # Read the target frame
         temp_frame = None
         try:
-            temp_frame = cv2.imread(temp_frame_path)
+            temp_frame = read_image(temp_frame_path)
             if temp_frame is None:
                 print(f"{NAME}: Error: Could not read frame: {temp_frame_path}, skipping.")
                 if progress: progress.update(1)
@@ -855,7 +946,7 @@ def process_frames(
         # Write the result back to the same frame path with optimized compression
         try:
             # Use PNG compression level 3 (faster) instead of default 9
-            write_success = cv2.imwrite(temp_frame_path, result_frame, [cv2.IMWRITE_PNG_COMPRESSION, 3])
+            write_success = write_image(temp_frame_path, result_frame, [cv2.IMWRITE_PNG_COMPRESSION, 3])
             if not write_success:
                 print(f"{NAME}: Error: Failed to write processed frame to {temp_frame_path}")
         except Exception as write_e:
@@ -879,13 +970,14 @@ def process_image(source_path: str, target_path: str, output_path: str) -> None:
     # --- Reset interpolation state for single image processing ---
     global PREVIOUS_FRAME_RESULT
     PREVIOUS_FRAME_RESULT = None
+    _reset_kps_tracking()
     # ---
 
     use_v2 = getattr(modules.globals, "map_faces", False)
 
     # Read target first
     try:
-        target_frame = cv2.imread(target_path)
+        target_frame = read_image(target_path)
         if target_frame is None:
             update_status(f"Error: Could not read target image: {target_path}", NAME)
             return
@@ -904,7 +996,7 @@ def process_image(source_path: str, target_path: str, output_path: str) -> None:
 
         else: # Simple mode
             try:
-                source_img = cv2.imread(source_path)
+                source_img = read_image(source_path)
                 if source_img is None:
                     update_status(f"Error: Could not read source image: {source_path}", NAME)
                     return
@@ -920,7 +1012,7 @@ def process_image(source_path: str, target_path: str, output_path: str) -> None:
 
         # Write the result if processing was successful
         if result is not None:
-            write_success = cv2.imwrite(output_path, result)
+            write_success = write_image(output_path, result)
             if write_success:
                 update_status(f"Output image saved to: {output_path}", NAME)
             else:
@@ -940,6 +1032,7 @@ def process_video(source_path: str, temp_frame_paths: List[str]) -> None:
     # --- Reset interpolation state before starting video processing ---
     global PREVIOUS_FRAME_RESULT
     PREVIOUS_FRAME_RESULT = None
+    _reset_kps_tracking()
     # ---
 
     mode_desc = "'map_faces'" if getattr(modules.globals, "map_faces", False) else "'simple'"
