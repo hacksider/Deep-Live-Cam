@@ -316,11 +316,16 @@ def _get_soft_alpha(size: int) -> np.ndarray:
     the feather radius scales naturally with the affine transform.
     """
     if _paste_cache['alpha_size'] != size:
-        k_erode = max(size // 10, 3)
-        k_blur = max(size // 20, 3)
-        mask = np.full((size, size), 255, dtype=np.uint8)
-        mask = cv2.erode(mask, np.ones((k_erode, k_erode), np.uint8), iterations=1)
-        mask = cv2.GaussianBlur(mask, (2 * k_blur + 1, 2 * k_blur + 1), 0)
+        # Elliptical (not square) template — matches the gumroad edition's
+        # _create_elliptical_mask. A full/eroded square leaves the aligned
+        # crop's corners near-opaque, so the swapped square's straight edges
+        # show as a visible box on the face. An ellipse (axes 0.44*size) zeroes
+        # the corners and the heavy blur feathers smoothly into the original.
+        center = (size // 2, size // 2)
+        axes = (int(size * 0.44), int(size * 0.44))
+        mask = np.zeros((size, size), dtype=np.uint8)
+        cv2.ellipse(mask, center, axes, 0, 0, 360, 255, -1)
+        mask = cv2.GaussianBlur(mask, (31, 31), 12)
         _paste_cache['soft_alpha'] = mask  # uint8 [0, 255] — blended via cv2 SIMD ops
         _paste_cache['alpha_size'] = size
     return _paste_cache['soft_alpha']
