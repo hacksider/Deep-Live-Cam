@@ -163,24 +163,77 @@ _paste_cache = {
 
 
 def _get_soft_alpha(size: int) -> np.ndarray:
-    """Feathered alpha template in aligned-face space, cached.
+    """Face-shaped feathered alpha template in aligned-face space, cached.
 
-    The legacy paste-back eroded and Gaussian-blurred the warped mask in
-    output coordinates with kernels scaled to the output face size, which
-    made the per-frame cost quartic in face linear size. Doing the same
-    erode+blur once in aligned space and then warping the *soft* mask
-    per-frame gives a visually equivalent feather at O(crop_area) cost —
-    the feather radius scales naturally with the affine transform.
+    Uses an oval (ellipse) instead of an eroded square so the blend boundary
+    follows the natural face silhouette.  Corners of the aligned crop — which
+    contain hair, neck, or background — get zero weight and are never written
+    to the output, eliminating the characteristic rectangular halo artifact.
+    Feather radius scales with face size via the blur kernel.
     """
     if _paste_cache['alpha_size'] != size:
-        k_erode = max(size // 10, 3)
-        k_blur = max(size // 20, 3)
-        mask = np.full((size, size), 255, dtype=np.uint8)
-        mask = cv2.erode(mask, np.ones((k_erode, k_erode), np.uint8), iterations=1)
-        mask = cv2.GaussianBlur(mask, (2 * k_blur + 1, 2 * k_blur + 1), 0)
+        mask = np.zeros((size, size), dtype=np.uint8)
+        cx, cy = size // 2, size // 2
+        # rx slightly smaller than half-width so ear/hair edges fade out cleanly
+        rx = int(size * 0.44)
+        # ry slightly larger because inswapper aligns the face taller than wide
+        ry = int(size * 0.48)
+        cv2.ellipse(mask, (cx, cy), (rx, ry), 0, 0, 360, 255, -1)
+        k_blur = max(size // 8, 5) | 1  # odd kernel, ~12.5% of size
+        mask = cv2.GaussianBlur(mask, (k_blur, k_blur), 0)
         _paste_cache['soft_alpha'] = mask  # uint8 [0, 255] — blended via cv2 SIMD ops
         _paste_cache['alpha_size'] = size
     return _paste_cache['soft_alpha']
+
+
+# ---------------------------------------------------------------------------
+# Temporal face-keypoint smoothing (live / single-face mode)
+# ---------------------------------------------------------------------------
+_kps_smooth_state: dict = {'kps': None}
+_kps_smooth_lock = threading.Lock()
+
+
+def _smooth_face_kps(face: 'Face') -> 'Face':
+    """Return a copy of *face* with EMA-smoothed keypoints.
+
+    Smoothing the 5-point keypoints (used by inswapper to compute the crop
+    affine) eliminates frame-to-frame jitter in the paste-back position.
+    A jump-detection threshold resets tracking on sudden large movements so
+    identity changes or rapid head motion are handled cleanly.
+    """
+    alpha = getattr(modules.globals, 'face_smooth_alpha', 0.5)
+    if alpha <= 0.0 or face is None:
+        return face
+
+    kps = face.get('kps') if isinstance(face, dict) else getattr(face, 'kps', None)
+    if kps is None:
+        with _kps_smooth_lock:
+            _kps_smooth_state['kps'] = None
+        return face
+
+    alpha = min(float(alpha), 0.95)
+    kps_f = kps.astype(np.float32)
+
+    with _kps_smooth_lock:
+        prev = _kps_smooth_state['kps']
+        if prev is not None and prev.shape == kps_f.shape:
+            # Reset tracking when face jumps by more than ~40 px (new face / fast pan)
+            if np.linalg.norm(kps_f - prev) > 40.0:
+                smoothed = kps_f
+            else:
+                smoothed = (1.0 - alpha) * kps_f + alpha * prev
+        else:
+            smoothed = kps_f
+        _kps_smooth_state['kps'] = smoothed
+
+    smoothed_face = face.copy()  # Face is a dict subclass — shallow copy is safe
+    smoothed_face['kps'] = smoothed
+    return smoothed_face
+
+
+def _reset_kps_tracking() -> None:
+    with _kps_smooth_lock:
+        _kps_smooth_state['kps'] = None
 
 # CUDA graph swap session cache
 _cuda_graph_session = {
@@ -626,9 +679,12 @@ def process_frame(source_face: Face, temp_frame: Frame, target_face: Face = None
         if target_face is None:
             target_face = get_one_face(processed_frame)
         if target_face:
+            target_face = _smooth_face_kps(target_face)
             processed_frame = swap_face(source_face, target_face, processed_frame)
             if hasattr(target_face, "bbox") and target_face.bbox is not None:
                 swapped_face_bboxes.append(target_face.bbox.astype(int))
+        else:
+            _reset_kps_tracking()
 
     final_frame = apply_post_processing(processed_frame, swapped_face_bboxes)
     return final_frame
@@ -876,10 +932,9 @@ def process_frames(
 
 def process_image(source_path: str, target_path: str, output_path: str) -> None:
     """Processes a single target image."""
-    # --- Reset interpolation state for single image processing ---
     global PREVIOUS_FRAME_RESULT
     PREVIOUS_FRAME_RESULT = None
-    # ---
+    _reset_kps_tracking()
 
     use_v2 = getattr(modules.globals, "map_faces", False)
 
@@ -937,10 +992,9 @@ def process_image(source_path: str, target_path: str, output_path: str) -> None:
 
 def process_video(source_path: str, temp_frame_paths: List[str]) -> None:
     """Sets up and calls the frame processing for video."""
-    # --- Reset interpolation state before starting video processing ---
     global PREVIOUS_FRAME_RESULT
     PREVIOUS_FRAME_RESULT = None
-    # ---
+    _reset_kps_tracking()
 
     mode_desc = "'map_faces'" if getattr(modules.globals, "map_faces", False) else "'simple'"
     if getattr(modules.globals, "map_faces", False) and getattr(modules.globals, "many_faces", False):
