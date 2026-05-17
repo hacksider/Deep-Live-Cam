@@ -58,6 +58,7 @@ from modules.face_analyser import (
     add_blank_map,
     detect_many_faces_fast,
     detect_one_face_fast,
+    ensure_landmarks,
     get_one_face,
     get_unique_faces_from_target_image,
     get_unique_faces_from_target_video,
@@ -336,8 +337,10 @@ def load_switch_states():
         modules.globals.live_resizable = state.get("live_resizable", False)
         modules.globals.fp_ui = state.get("fp_ui", {"face_enhancer": False})
         modules.globals.show_fps = state.get("show_fps", False)
-        modules.globals.mouth_mask_size = state.get("mouth_mask_size", 0.0)
-        modules.globals.mouth_mask = modules.globals.mouth_mask_size > 0
+        # Mouth mask always starts disabled (slider at 0) on launch,
+        # regardless of the persisted value — enable it explicitly each session.
+        modules.globals.mouth_mask_size = 0.0
+        modules.globals.mouth_mask = False
         modules.globals.show_mouth_mask_box = False
     except FileNotFoundError:
         pass
@@ -655,9 +658,9 @@ class MainWindow(QMainWindow):
         self.s_sharpness.setToolTip(_("Sharpen the enhanced face output"))
         grid.addWidget(self.s_sharpness, 1, 1)
 
-        # Mouth mask
+        # Mouth mask — always starts at 0 (disabled) on launch
         grid.addWidget(QLabel(_("Mouth Mask")), 2, 0)
-        self.s_mouth = slider(0.0, 100.0, modules.globals.mouth_mask_size, 1,
+        self.s_mouth = slider(0.0, 100.0, 0.0, 1,
                               self._on_mouth_mask_change)
         self.s_mouth.sliderPressed.connect(self._on_mouth_mask_pressed)
         self.s_mouth.sliderReleased.connect(self._on_mouth_mask_released)
@@ -1084,6 +1087,12 @@ class _ProcessingWorker(QThread):
                     cached_faces = cached_many_faces
                 elif cached_target_face is not None:
                     cached_faces = [cached_target_face]
+
+                # Fast detection skips the 2d106 landmark model, but the mouth
+                # mask needs it. Attach landmarks on demand (computed once per
+                # detection cycle — the helper no-ops if already present).
+                if modules.globals.mouth_mask and cached_faces:
+                    ensure_landmarks(temp_frame, cached_faces)
 
                 for fp in frame_processors:
                     if fp.NAME == "DLC.FACE-ENHANCER":

@@ -1111,13 +1111,20 @@ def create_lower_mouth_mask(
         return mask, mouth_cutout, mouth_box, lower_lip_polygon
 
     try: # Wrap main logic in try-except
-        # Use outer mouth landmarks (52-71) to capture the full mouth area
-        # This covers both upper and lower lips for proper mouth preservation
-        lower_lip_order = list(range(52, 72))
+        # Outer mouth/lip landmarks (52-63) — the lip outline only. In this
+        # repo's insightface 2d106 convention these 12 points, taken in index
+        # order, form a SIMPLE (non-self-intersecting) closed polygon that
+        # cv2.fillPoly fills as one solid region directly over the mouth.
+        # This is the last shipped, known-good landmark set; range(52,72)
+        # (the regression) added the inner-lip points and made the path
+        # self-intersect, and the ancient [65,66,62,...,0,8,7...] indices
+        # belong to a different/older landmark convention (they land on the
+        # inner lip + random jaw points, so the mask never covers the mouth).
+        lower_lip_order = list(range(52, 64))
 
-        # Check if all indices are valid for the loaded landmarks (already partially done by < 106 check)
+        # All indices must be valid for the loaded landmark set
         if max(lower_lip_order) >= landmarks.shape[0]:
-            # print(f"Warning: Landmark index {max(lower_lip_order)} out of bounds for shape {landmarks.shape[0]}.")
+            # print(f"Warning: Landmark index out of bounds for shape {landmarks.shape[0]}.")
             return mask, mouth_cutout, mouth_box, lower_lip_polygon
 
         lower_lip_landmarks = landmarks[lower_lip_order].astype(np.float32)
@@ -1132,16 +1139,22 @@ def create_lower_mouth_mask(
             # print("Warning: Could not calculate valid center for mouth mask.")
             return mask, mouth_cutout, mouth_box, lower_lip_polygon
 
-
+        # Drive expansion from the Mouth Mask slider so it actually responds.
+        # The known-good version expanded by the now-unused mask_down_size
+        # constant, which is why the slider had no effect.
+        # s: 0.0 (slider ~0, tight lip outline) -> 1.0 (slider 100, mouth->chin).
         mouth_mask_size = getattr(modules.globals, "mouth_mask_size", 0.0) # 0-100 slider
-        # 0=tight lip outline, 50=covers mouth area, 100=mouth to chin
-        expansion_factor = 1 + (mouth_mask_size / 100.0) * 2.5
+        s = max(0.0, min(1.0, mouth_mask_size / 100.0))
 
-        # Expand landmarks from center, with extra downward bias toward chin
+        # Uniformly scaling a simple polygon about its centroid keeps it simple
+        # (no self-intersection). x grows with expansion_factor; points below
+        # centre (toward the chin) also get an extra downward stretch so high
+        # slider values reach from the mouth down to the chin.
+        expansion_factor = 1.0 + s * 2.0          # 1.0x -> 3.0x
+        chin_bias = 1.0 + s * 2.0                  # extra downward stretch
         offsets = lower_lip_landmarks - center
-        # Add extra downward expansion for points below center (toward chin)
-        chin_bias = 1 + (mouth_mask_size / 100.0) * 1.5  # extra vertical stretch downward
-        scale_y = np.where(offsets[:, 1] > 0, expansion_factor * chin_bias, expansion_factor)
+        scale_y = np.where(offsets[:, 1] > 0,
+                           expansion_factor * chin_bias, expansion_factor)
         expanded_landmarks = lower_lip_landmarks.copy()
         expanded_landmarks[:, 0] = center[0] + offsets[:, 0] * expansion_factor
         expanded_landmarks[:, 1] = center[1] + offsets[:, 1] * scale_y

@@ -187,6 +187,36 @@ def detect_many_faces_fast(frame: Frame) -> Any:
             for i in range(bboxes.shape[0])]
 
 
+def ensure_landmarks(frame: Frame, faces: Any) -> None:
+    """Run the 2d106 landmark model in-place on faces that lack it.
+
+    The fast webcam path (detect_one_face_fast / detect_many_faces_fast)
+    produces detection-only Face objects with no ``landmark_2d_106``.
+    Mouth masking needs those landmarks, so add them on demand only when
+    the feature is active — keeping the fast path fast otherwise.
+    """
+    if faces is None:
+        return
+    if not isinstance(faces, (list, tuple)):
+        faces = [faces]
+
+    fa = get_face_analyser()
+    lmk_model = fa.models.get("landmark_2d_106")
+    if lmk_model is None:
+        return
+
+    for face in faces:
+        if face is None:
+            continue
+        # insightface Face is a dict; missing keys raise AttributeError,
+        # so getattr(..., None) is the safe presence check.
+        if getattr(face, "landmark_2d_106", None) is None:
+            try:
+                lmk_model.get(frame, face)
+            except Exception as e:  # pragma: no cover - never break the swap
+                print(f"Error computing 2d106 landmarks: {e}")
+
+
 def has_valid_map() -> bool:
     for map in modules.globals.source_target_map:
         if "source" in map and "target" in map:
