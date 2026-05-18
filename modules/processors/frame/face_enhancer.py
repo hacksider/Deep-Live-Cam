@@ -44,12 +44,31 @@ FFHQ_TEMPLATE_512 = np.array(
 )
 
 
+def _gfpgan_model_path() -> str:
+    filename = getattr(modules.globals, "gfpgan_model_filename", "gfpgan-1024.onnx")
+    return os.path.join(models_dir, filename)
+
+
+def reset_face_enhancer() -> None:
+    """Drop the cached GFPGAN session so next call reloads with current
+    globals.gfpgan_model_filename. Called by the UI on enhancer dropdown
+    change so the user can hot-swap GFPGAN-1024 ⇄ GFPGAN-512 mid-session.
+    """
+    global FACE_ENHANCER
+    with THREAD_LOCK:
+        FACE_ENHANCER = None
+    # Also invalidate the feathered-mask cache — output size will likely change
+    _enhancer_cache['mask'] = None
+    _enhancer_cache['mask_size'] = 0
+
+
 def pre_check() -> bool:
     from modules.model_downloader import ensure_model
 
-    if ensure_model(MODEL_FILE) is None:
+    model_file = os.path.basename(_gfpgan_model_path())
+    if ensure_model(model_file) is None:
         update_status(
-            f"Could not obtain {MODEL_FILE}. Place it in the models folder "
+            f"Could not obtain {model_file}. Place it in the models folder "
             "manually or check your internet connection.",
             NAME,
         )
@@ -77,12 +96,14 @@ def get_face_enhancer() -> onnxruntime.InferenceSession:
         if FACE_ENHANCER is None:
             from modules.model_downloader import ensure_model
 
-            model_path = ensure_model(MODEL_FILE)
+            model_file = os.path.basename(_gfpgan_model_path())
+
+            model_path = ensure_model(model_file)
 
             if model_path is None:
                 raise FileNotFoundError(
                     f"{NAME}: Model not found at "
-                    f"{os.path.join(models_dir, MODEL_FILE)} and could not be "
+                    f"{os.path.join(models_dir, model_file)} and could not be "
                     "downloaded"
                 )
 
@@ -91,6 +112,7 @@ def get_face_enhancer() -> onnxruntime.InferenceSession:
                     create_onnx_session,
                 )
 
+                print(f"{NAME}: Loading GFPGAN ONNX model from {model_path}")
                 FACE_ENHANCER = create_onnx_session(model_path)
 
                 input_info = FACE_ENHANCER.get_inputs()[0]

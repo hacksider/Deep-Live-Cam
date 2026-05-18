@@ -89,6 +89,13 @@ det_size: int = DEFAULT_DET_SIZE
 # on USB 2.0. Higher 16:9 tiers (540/720/1080) selectable in UI.
 capture_resolution: tuple = (640, 480)
 
+# GFPGAN model filename. Currently shipped variants:
+#   gfpgan-1024.onnx  — 512 in, 1024 out (super-res head). Highest quality.
+#   GFPGANv1.4.onnx   — 512 in, 512 out. Lighter, faster.
+# Both files are hosted on the hacksider/deep-live-cam HF model repo.
+# Hot-swap supported via reset_face_enhancer() (called from UI on change).
+gfpgan_model_filename: str = "gfpgan-1024.onnx"
+
 # --- END OF FILE globals.py ---
 
 import threading
