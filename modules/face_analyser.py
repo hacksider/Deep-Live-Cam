@@ -15,7 +15,22 @@ from pathlib import Path
 FACE_ANALYSER = None
 FACE_ANALYSER_LOCK = threading.Lock()
 
-DET_SIZE = (640, 640)
+
+def _current_det_size() -> tuple:
+    s = int(getattr(modules.globals, 'det_size', 640))
+    return (s, s)
+
+
+def reset_face_analyser() -> None:
+    """Force re-init on next get_face_analyser() call.
+
+    Called when det_size changes — insightface FaceAnalysis fixes its
+    detection input shape at prepare() time, so a new size requires a
+    fresh prepare() call.
+    """
+    global FACE_ANALYSER
+    with FACE_ANALYSER_LOCK:
+        FACE_ANALYSER = None
 
 
 def get_face_analyser() -> Any:
@@ -35,7 +50,7 @@ def get_face_analyser() -> Any:
                     providers=providers,
                     allowed_modules=['detection', 'recognition', 'landmark_2d_106']
                 )
-                FACE_ANALYSER.prepare(ctx_id=0, det_size=DET_SIZE)
+                FACE_ANALYSER.prepare(ctx_id=0, det_size=_current_det_size())
                 _optimize_det_model(FACE_ANALYSER, providers)
     return FACE_ANALYSER
 
@@ -56,7 +71,8 @@ def _optimize_det_model(fa: Any, providers) -> None:
     if model_path is None or not os.path.exists(model_path):
         return
 
-    input_shape = (1, 3, DET_SIZE[1], DET_SIZE[0])
+    ds = _current_det_size()
+    input_shape = (1, 3, ds[1], ds[0])
     optimized_path = optimize_for_coreml(model_path, input_shape=input_shape)
     if optimized_path == model_path:
         return

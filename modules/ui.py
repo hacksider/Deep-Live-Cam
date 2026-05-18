@@ -698,9 +698,12 @@ class MainWindow(QMainWindow):
 
     def _build_camera_card(self) -> QGroupBox:
         card = QGroupBox(_("Camera"))
-        layout = QHBoxLayout(card)
+        grid = QGridLayout(card)
+        grid.setHorizontalSpacing(12)
+        grid.setVerticalSpacing(6)
 
-        layout.addWidget(QLabel(_("Select Camera:")))
+        # Row 0: camera selector + Live button
+        grid.addWidget(QLabel(_("Select Camera:")), 0, 0)
         self._camera_indices, self._camera_names = get_available_cameras()
 
         self.cb_camera = QComboBox()
@@ -712,15 +715,74 @@ class MainWindow(QMainWindow):
             self.cb_camera.addItems(self._camera_names)
             cam_ok = True
         self.cb_camera.setToolTip(_("Select which camera to use for live mode"))
-        layout.addWidget(self.cb_camera, 1)
+        grid.addWidget(self.cb_camera, 0, 1)
 
         self.btn_live = QPushButton(_("Live"))
         self.btn_live.setEnabled(cam_ok)
         self.btn_live.setToolTip(_("Start real-time face swap using webcam"))
         self.btn_live.clicked.connect(self._on_live)
-        layout.addWidget(self.btn_live)
+        grid.addWidget(self.btn_live, 0, 2)
 
+        # Row 1: capture resolution
+        grid.addWidget(QLabel(_("Resolution:")), 1, 0)
+        self.cb_resolution = QComboBox()
+        # 640x480 is native on virtually every webcam and the safest 30fps
+        # mode on USB 2.0. Higher tiers are 16:9 and useful when the camera
+        # supports them natively (DSLR + capture card, USB 3.0 webcams).
+        self._resolution_options = [
+            ("640 x 480", (640, 480)),
+            ("960 x 540 (qHD)", (960, 540)),
+            ("1280 x 720 (HD)", (1280, 720)),
+            ("1920 x 1080 (FHD)", (1920, 1080)),
+        ]
+        for label, _wh in self._resolution_options:
+            self.cb_resolution.addItem(label)
+        cur = tuple(modules.globals.capture_resolution)
+        idx = next((i for i, (_, wh) in enumerate(self._resolution_options) if wh == cur), 0)
+        self.cb_resolution.setCurrentIndex(idx)
+        self.cb_resolution.currentIndexChanged.connect(self._on_resolution_change)
+        self.cb_resolution.setToolTip(_(
+            "Requested webcam resolution. Camera may negotiate to its "
+            "nearest supported size — actual size printed in console as "
+            "'[VideoCapturer] WxH @ FPS'. Applies on next Live start.\n\n"
+            "640x480 is native on virtually every webcam and the safest "
+            "30fps choice. qHD often works too. HD/FHD typically drop to "
+            "~10fps on USB 2.0 webcams due to isochronous bandwidth limits."
+        ))
+        grid.addWidget(self.cb_resolution, 1, 1, 1, 2)
+
+        # Row 2: face detection size
+        grid.addWidget(QLabel(_("Det size:")), 2, 0)
+        self.cb_det_size = QComboBox()
+        self._det_size_options = [160, 320, 640]
+        for v in self._det_size_options:
+            self.cb_det_size.addItem(f"{v} x {v}")
+        cur_det = int(getattr(modules.globals, 'det_size', 640))
+        idx = self._det_size_options.index(cur_det) if cur_det in self._det_size_options else 2
+        self.cb_det_size.setCurrentIndex(idx)
+        self.cb_det_size.currentIndexChanged.connect(self._on_det_size_change)
+        self.cb_det_size.setToolTip(_(
+            "Face detection input resolution. Lower = faster, less accurate at "
+            "distance. Changes take effect on next face analyser init."
+        ))
+        grid.addWidget(self.cb_det_size, 2, 1, 1, 2)
+
+        grid.setColumnStretch(1, 1)
         return card
+
+    def _on_resolution_change(self, idx: int) -> None:
+        if 0 <= idx < len(self._resolution_options):
+            _label, wh = self._resolution_options[idx]
+            modules.globals.capture_resolution = wh
+            update_status(f"Capture resolution set to {wh[0]}x{wh[1]} (applies on next Live start)")
+
+    def _on_det_size_change(self, idx: int) -> None:
+        if 0 <= idx < len(self._det_size_options):
+            v = self._det_size_options[idx]
+            modules.globals.det_size = v
+            from modules.face_analyser import reset_face_analyser
+            reset_face_analyser()
+            update_status(f"Face detection size set to {v}x{v} (analyser will re-init on next call)")
 
     # ── slot handlers ────────────────────────────────────────────────────
 
@@ -1184,7 +1246,8 @@ class WebcamPreviewWindow(QWidget):
         layout.addWidget(self._image_label, 1)
 
         self._cap = VideoCapturer(camera_index)
-        if not self._cap.start(PREVIEW_DEFAULT_WIDTH, PREVIEW_DEFAULT_HEIGHT, 60):
+        req_w, req_h = modules.globals.capture_resolution
+        if not self._cap.start(req_w, req_h, 60):
             update_status("Failed to start camera")
             QTimer.singleShot(0, self.close)
             return
