@@ -614,10 +614,12 @@ class MainWindow(QMainWindow):
         grid.addWidget(enhancer_label, len(items) // 2, 0)
 
         self.cb_enhancer = QComboBox()
-        self.cb_enhancer.addItems(["None", "GFPGAN", "GPEN-512", "GPEN-256"])
+        self.cb_enhancer.addItems(["None", "GFPGAN-1024", "GFPGAN-512", "GPEN-512", "GPEN-256"])
         initial = "None"
         if modules.globals.fp_ui.get("face_enhancer", False):
-            initial = "GFPGAN"
+            # Pick the GFPGAN variant currently selected via globals
+            fn = getattr(modules.globals, "gfpgan_model_filename", "gfpgan-1024.onnx")
+            initial = "GFPGAN-512" if fn == "GFPGANv1.4.onnx" else "GFPGAN-1024"
         elif modules.globals.fp_ui.get("face_enhancer_gpen512", False):
             initial = "GPEN-512"
         elif modules.globals.fp_ui.get("face_enhancer_gpen256", False):
@@ -817,17 +819,36 @@ class MainWindow(QMainWindow):
             close_mapper_window()
 
     def _on_enhancer_change(self, choice: str) -> None:
+        # Both GFPGAN variants use the same processor (face_enhancer) but
+        # differ in which ONNX model file is loaded.
         key_map = {
             "None": None,
-            "GFPGAN": "face_enhancer",
+            "GFPGAN-1024": "face_enhancer",
+            "GFPGAN-512": "face_enhancer",
             "GPEN-512": "face_enhancer_gpen512",
             "GPEN-256": "face_enhancer_gpen256",
         }
+        gfpgan_filename = {
+            "GFPGAN-1024": "gfpgan-1024.onnx",
+            "GFPGAN-512": "GFPGANv1.4.onnx",
+        }
+
         for key in ("face_enhancer", "face_enhancer_gpen256", "face_enhancer_gpen512"):
             _update_tumbler(key, False)
         selected = key_map.get(choice)
         if selected:
             _update_tumbler(selected, True)
+
+        # If user picked a GFPGAN variant, update the model filename and
+        # drop the cached session so the next inference reloads from disk.
+        if choice in gfpgan_filename:
+            prev = getattr(modules.globals, "gfpgan_model_filename", None)
+            modules.globals.gfpgan_model_filename = gfpgan_filename[choice]
+            if prev != gfpgan_filename[choice]:
+                from modules.processors.frame.face_enhancer import reset_face_enhancer
+                reset_face_enhancer()
+                update_status(f"GFPGAN model set to {gfpgan_filename[choice]}")
+
         save_switch_states()
 
     def _on_transparency_change(self, value: float) -> None:

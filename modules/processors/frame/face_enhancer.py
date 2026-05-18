@@ -42,12 +42,30 @@ FFHQ_TEMPLATE_512 = np.array(
 )
 
 
+def _gfpgan_model_path() -> str:
+    filename = getattr(modules.globals, "gfpgan_model_filename", "gfpgan-1024.onnx")
+    return os.path.join(models_dir, filename)
+
+
+def reset_face_enhancer() -> None:
+    """Drop the cached GFPGAN session so next call reloads with current
+    globals.gfpgan_model_filename. Called by the UI on enhancer dropdown
+    change so the user can hot-swap GFPGAN-1024 ⇄ GFPGAN-512 mid-session.
+    """
+    global FACE_ENHANCER
+    with THREAD_LOCK:
+        FACE_ENHANCER = None
+    # Also invalidate the feathered-mask cache — output size will likely change
+    _enhancer_cache['mask'] = None
+    _enhancer_cache['mask_size'] = 0
+
+
 def pre_check() -> bool:
-    model_path = os.path.join(models_dir, "gfpgan-1024.onnx")
+    model_path = _gfpgan_model_path()
     if not os.path.exists(model_path):
         update_status(
             f"GFPGAN ONNX model not found at {model_path}. "
-            "Please place gfpgan-1024.onnx in the models folder.",
+            f"Place {os.path.basename(model_path)} in the models folder.",
             NAME,
         )
         return False
@@ -72,7 +90,7 @@ def get_face_enhancer() -> onnxruntime.InferenceSession:
 
     with THREAD_LOCK:
         if FACE_ENHANCER is None:
-            model_path = os.path.join(models_dir, "gfpgan-1024.onnx")
+            model_path = _gfpgan_model_path()
 
             if not os.path.exists(model_path):
                 raise FileNotFoundError(
@@ -84,6 +102,7 @@ def get_face_enhancer() -> onnxruntime.InferenceSession:
                     create_onnx_session,
                 )
 
+                print(f"{NAME}: Loading GFPGAN ONNX model from {model_path}")
                 FACE_ENHANCER = create_onnx_session(model_path)
 
                 input_info = FACE_ENHANCER.get_inputs()[0]
