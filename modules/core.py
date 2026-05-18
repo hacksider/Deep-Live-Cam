@@ -56,9 +56,10 @@ def parse_args() -> None:
     program.add_argument('-l', '--lang', help='Ui language', default="en")
     program.add_argument('--live-mirror', help='The live camera display as you see it in the front-facing camera frame', dest='live_mirror', action='store_true', default=False)
     program.add_argument('--live-resizable', help='The live camera frame is resizable', dest='live_resizable', action='store_true', default=False)
+    default_execution_provider = suggest_default_execution_provider()
     program.add_argument('--max-memory', help='maximum amount of RAM in GB', dest='max_memory', type=int, default=suggest_max_memory())
-    program.add_argument('--execution-provider', help='execution provider', dest='execution_provider', default=[suggest_default_execution_provider()], choices=suggest_execution_providers(), nargs='+')
-    program.add_argument('--execution-threads', help='number of execution threads', dest='execution_threads', type=int, default=suggest_execution_threads())
+    program.add_argument('--execution-provider', help='execution provider', dest='execution_provider', default=[default_execution_provider], choices=suggest_execution_providers(), nargs='+')
+    program.add_argument('--execution-threads', help='number of execution threads', dest='execution_threads', type=int, default=suggest_execution_threads([default_execution_provider]))
     program.add_argument('-v', '--version', action='version', version=f'{modules.metadata.name} {modules.metadata.version}')
 
     # register deprecated args
@@ -144,20 +145,22 @@ def suggest_execution_providers() -> List[str]:
     return encode_execution_providers(onnxruntime.get_available_providers())
 
 
-def suggest_execution_threads() -> int:
+def suggest_execution_threads(execution_providers: List[str] | None = None) -> int:
     """Suggest optimal thread count based on hardware and execution provider."""
     import os
-    
+
     # Get CPU count
     cpu_count = os.cpu_count() or 4
-    
-    if 'DmlExecutionProvider' in modules.globals.execution_providers:
+    selected_execution_providers = execution_providers or modules.globals.execution_providers
+    encoded_execution_providers = encode_execution_providers(selected_execution_providers)
+
+    if 'dml' in encoded_execution_providers:
         return 1
-    if 'ROCMExecutionProvider' in modules.globals.execution_providers:
+    if 'rocm' in encoded_execution_providers:
         return 1
-    if 'CUDAExecutionProvider' in modules.globals.execution_providers:
+    if 'cuda' in encoded_execution_providers:
         return 2
-    
+
     # For CPU execution, use most cores but leave some for system
     return max(4, min(cpu_count - 2, 16))
 
