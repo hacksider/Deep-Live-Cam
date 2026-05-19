@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Deep Live Cam</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#080b14;--surface:#0f1320;--surface2:#151929;--surface3:#1c2235;
+  --border:#1e2540;--border2:#252d48;
+  --accent:#4f7cff;--accent-h:#6b93ff;--accent-glow:rgba(79,124,255,.25);
+  --danger:#ff4f6b;--ok:#00e676;--warn:#ffb300;
+  --text:#e8eaf6;--text2:#a8b0d0;--muted:#5a6285;
+  --r:14px;--rs:8px;--r-sm:6px;
+  --sidebar:300px;
+}
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:13px;display:flex;flex-direction:column}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+
+/* ── Header ── */
+.hdr{display:flex;align-items:center;gap:12px;padding:0 20px;height:52px;
+  background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;
+  backdrop-filter:blur(12px);z-index:10}
+.logo{font-size:17px;font-weight:800;letter-spacing:-.3px}
+.logo em{color:var(--accent);font-style:normal}
+.logo-dot{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px var(--ok);margin-left:2px;flex-shrink:0}
+.logo-dot.off{background:var(--muted);box-shadow:none}
+.hdr-tabs{display:flex;gap:2px;margin-left:24px}
+.htab{padding:6px 16px;border-radius:var(--rs);font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;transition:.15s;border:1px solid transparent}
+.htab:hover{color:var(--text2);background:var(--surface3)}
+.htab.active{color:var(--text);background:var(--surface3);border-color:var(--border2)}
+.hdr-right{margin-left:auto;display:flex;align-items:center;gap:8px}
+.pill{font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;letter-spacing:.5px}
+.pill-blue{background:rgba(79,124,255,.15);color:var(--accent);border:1px solid rgba(79,124,255,.3)}
+
+/* ── Main layout ── */
+.main{flex:1;display:flex;overflow:hidden}
+
+/* ── Sidebar ── */
+.sidebar{width:var(--sidebar);flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;overflow:hidden}
+.sidebar-body{flex:1;overflow-y:auto;padding:14px 14px 20px}
+.sidebar-footer{padding:12px 14px;border-top:1px solid var(--border);flex-shrink:0}
+
+/* ── Feed area ── */
+.feed-area{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--bg)}
+.feed-wrap{flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;padding:20px}
+.feed-box{width:100%;height:100%;max-width:960px;margin:0 auto;
+  background:#000;border-radius:var(--r);overflow:hidden;border:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;position:relative}
+.feed-box img{width:100%;height:100%;object-fit:contain}
+.feed-placeholder{display:flex;flex-direction:column;align-items:center;gap:12px;color:var(--muted)}
+.feed-placeholder .icon{font-size:52px;opacity:.4}
+.feed-placeholder p{font-size:13px}
+.feed-overlay{position:absolute;top:12px;left:12px;display:flex;gap:6px;pointer-events:none}
+.feed-badge{font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;letter-spacing:.4px;backdrop-filter:blur(8px)}
+.feed-badge-live{background:rgba(255,79,107,.85);color:#fff}
+.feed-badge-idle{background:rgba(30,37,64,.85);color:var(--muted)}
+.feed-status{padding:8px 20px;flex-shrink:0;border-top:1px solid var(--border)}
+
+/* ── Section ── */
+.sec{margin-bottom:14px}
+.sec-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.9px;color:var(--muted);margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.sec-title::after{content:'';flex:1;height:1px;background:var(--border)}
+
+/* ── Source face card ── */
+.src-card{background:var(--surface3);border:1px solid var(--border);border-radius:var(--r);padding:10px;
+  display:flex;gap:10px;align-items:center;cursor:pointer;transition:.2s;position:relative;overflow:hidden}
+.src-card:hover{border-color:var(--accent);background:#1a2040}
+.src-card input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer}
+.src-thumb{width:56px;height:56px;border-radius:var(--rs);background:var(--surface2);flex-shrink:0;
+  overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:22px;border:1px solid var(--border2)}
+.src-thumb img{width:100%;height:100%;object-fit:cover}
+.src-info{flex:1;min-width:0}
+.src-name{font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.src-hint{font-size:11px;color:var(--muted);margin-top:2px}
+.src-actions{display:flex;gap:5px;margin-top:8px}
+
+/* ── Controls ── */
+.ctrl-row{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
+.ctrl-row:last-child{margin-bottom:0}
+.ctrl-label{display:flex;justify-content:space-between;align-items:center}
+.ctrl-label span:first-child{font-size:11px;color:var(--text2);font-weight:500}
+.ctrl-val{font-size:11px;color:var(--accent);font-weight:600;font-variant-numeric:tabular-nums;min-width:32px;text-align:right}
+input[type=range]{width:100%;-webkit-appearance:none;height:3px;border-radius:2px;
+  background:linear-gradient(to right,var(--accent) var(--pct,0%),var(--border2) var(--pct,0%));
+  outline:none;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;
+  background:var(--accent);cursor:pointer;box-shadow:0 0 0 3px var(--accent-glow);transition:.1s}
+input[type=range]::-webkit-slider-thumb:hover{box-shadow:0 0 0 5px var(--accent-glow)}
+
+select{width:100%;background:var(--surface3);color:var(--text);border:1px solid var(--border2);
+  border-radius:var(--rs);padding:7px 10px;font-size:12px;outline:none;cursor:pointer;appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%235a6285'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 10px center}
+select:focus{border-color:var(--accent)}
+
+/* ── Toggle ── */
+.toggle-row{display:flex;align-items:center;justify-content:space-between;padding:6px 0}
+.toggle-label{font-size:12px;color:var(--text2)}
+.sw{position:relative;width:32px;height:18px;flex-shrink:0}
+.sw input{opacity:0;width:0;height:0;position:absolute}
+.sw .tk{position:absolute;inset:0;background:var(--border2);border-radius:9px;cursor:pointer;transition:.2s}
+.sw input:checked+.tk{background:var(--accent)}
+.sw .tk::after{content:'';position:absolute;top:2px;left:2px;width:14px;height:14px;background:#fff;border-radius:50%;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.sw input:checked+.tk::after{transform:translateX(14px)}
+
+/* ── Buttons ── */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:7px 14px;
+  border-radius:var(--rs);border:none;font-size:12px;font-weight:600;cursor:pointer;transition:.15s;white-space:nowrap;letter-spacing:.2px}
+.btn:active{transform:scale(.97)}
+.btn-primary{background:var(--accent);color:#fff;box-shadow:0 2px 12px var(--accent-glow)}
+.btn-primary:hover{background:var(--accent-h);box-shadow:0 4px 20px var(--accent-glow)}
+.btn-primary:disabled{background:var(--surface3);color:var(--muted);cursor:not-allowed;transform:none;box-shadow:none}
+.btn-ghost{background:var(--surface3);color:var(--text2);border:1px solid var(--border2)}
+.btn-ghost:hover{background:#1e2540;color:var(--text)}
+.btn-danger{background:rgba(255,79,107,.1);color:var(--danger);border:1px solid rgba(255,79,107,.3)}
+.btn-danger:hover{background:rgba(255,79,107,.2)}
+.btn-danger:disabled{opacity:.4;cursor:not-allowed}
+.btn-sm{padding:4px 10px;font-size:11px}
+.btn-icon{padding:6px;border-radius:var(--r-sm);width:28px;height:28px}
+.btn-full{width:100%}
+
+/* ── Status bar ── */
+.status-bar{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);
+  padding:7px 12px;background:var(--surface3);border-radius:var(--rs);border:1px solid var(--border);min-height:36px}
+.status-bar.ok{color:var(--ok);border-color:rgba(0,230,118,.25);background:rgba(0,230,118,.05)}
+.status-bar.err{color:var(--danger);border-color:rgba(255,79,107,.25);background:rgba(255,79,107,.05)}
+.status-bar.warn{color:var(--warn);border-color:rgba(255,179,0,.25);background:rgba(255,179,0,.05)}
+.spin{width:13px;height:13px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+.dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.dot-ok{background:var(--ok);box-shadow:0 0 6px var(--ok)}
+.dot-err{background:var(--danger)}
+.dot-idle{background:var(--muted)}
+
+/* ── Cam select row ── */
+.cam-row{display:flex;gap:6px;align-items:center}
+.cam-row select{flex:1}
+
+/* ── Action buttons row ── */
+.action-row{display:flex;gap:8px}
+.action-row .btn{flex:1;padding:10px}
+
+/* ── Image swap tab ── */
+.swap-layout{display:grid;grid-template-columns:280px 1fr;gap:0;height:100%;overflow:hidden}
+.swap-panel{display:flex;flex-direction:column;overflow:hidden;border-right:1px solid var(--border)}
+.swap-panel:last-child{border-right:none}
+.swap-panel-body{flex:1;overflow-y:auto;padding:16px}
+.swap-panel-footer{padding:12px 16px;border-top:1px solid var(--border);flex-shrink:0}
+
+/* upload cards */
+.upload-card{position:relative;border:2px dashed var(--border2);border-radius:var(--r);background:var(--surface3);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:6px;cursor:pointer;overflow:hidden;transition:.2s;min-height:130px}
+.upload-card:hover,.upload-card.over{border-color:var(--accent);background:#151d35}
+.upload-card input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;z-index:2}
+.upload-card img.uc-preview{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:calc(var(--r) - 2px)}
+.upload-card .uc-ov{position:absolute;inset:0;background:rgba(0,0,0,.6);display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:5px;opacity:0;transition:.2s;border-radius:calc(var(--r) - 2px);z-index:1}
+.upload-card:hover .uc-ov{opacity:1}
+.uc-icon{font-size:26px;line-height:1;opacity:.45}
+.uc-text{font-size:11px;color:var(--muted);text-align:center;padding:0 10px}
+
+/* swap arrow button */
+.swap-arrow{display:flex;align-items:center;justify-content:center;margin:6px 0}
+.swap-arrow button{background:var(--surface3);border:1px solid var(--border2);border-radius:50%;
+  width:28px;height:28px;cursor:pointer;color:var(--text2);font-size:13px;transition:.15s;display:flex;align-items:center;justify-content:center}
+.swap-arrow button:hover{background:var(--border2);color:var(--text)}
+
+/* ── Compare viewer ── */
+.compare-area{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--bg)}
+.compare-wrap{flex:1;display:flex;align-items:center;justify-content:center;padding:20px;overflow:hidden}
+.compare-box{position:relative;overflow:hidden;border-radius:var(--r);border:1px solid var(--border);
+  background:var(--surface);max-width:100%;max-height:100%;
+  display:flex;align-items:center;justify-content:center;user-select:none}
+/* placeholder when no images */
+.compare-ph{display:flex;flex-direction:column;align-items:center;gap:10px;color:var(--muted);padding:60px 40px}
+.compare-ph .cph-icon{font-size:52px;opacity:.18}
+.compare-ph p{font-size:12px;text-align:center;line-height:1.6}
+/* the two image layers */
+.cmp-before{display:block;max-width:100%;max-height:100%;object-fit:contain;pointer-events:none}
+.cmp-after-wrap{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+.cmp-after-wrap img{display:block;max-width:100%;max-height:100%;object-fit:contain;pointer-events:none}
+/* divider line */
+.cmp-divider{position:absolute;top:0;bottom:0;width:2px;background:rgba(255,255,255,.9);
+  box-shadow:0 0 8px rgba(0,0,0,.6);cursor:ew-resize;z-index:4;transform:translateX(-50%)}
+.cmp-divider::before,.cmp-divider::after{content:'';position:absolute;left:50%;transform:translateX(-50%);
+  width:36px;height:36px;border-radius:50%;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.4);
+  display:flex;align-items:center;justify-content:center}
+.cmp-divider::before{top:50%;transform:translate(-50%,-50%)}
+/* handle icon via pseudo */
+.cmp-handle{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  width:36px;height:36px;border-radius:50%;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.5);
+  display:flex;align-items:center;justify-content:center;cursor:ew-resize;z-index:5;pointer-events:none}
+.cmp-handle svg{width:16px;height:16px;fill:none;stroke:#333;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+/* labels */
+.cmp-label{position:absolute;top:12px;font-size:10px;font-weight:700;letter-spacing:.5px;
+  padding:3px 8px;border-radius:20px;backdrop-filter:blur(6px);pointer-events:none;z-index:3}
+.cmp-label-before{left:12px;background:rgba(20,25,50,.75);color:var(--text2)}
+.cmp-label-after{right:12px;background:rgba(79,124,255,.75);color:#fff}
+/* compare toolbar */
+.compare-toolbar{padding:10px 20px;border-top:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0}
+.compare-toolbar .btn-ghost{font-size:11px}
+
+/* drop-zone compat alias */
+.drop-zone{position:relative;border:2px dashed var(--border2);border-radius:var(--r);background:var(--surface3);
+  aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:8px;cursor:pointer;overflow:hidden;transition:.2s}
+.drop-zone:hover,.drop-zone.over{border-color:var(--accent);background:#151d35}
+.drop-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;z-index:2}
+.drop-zone img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:calc(var(--r) - 2px)}
+.drop-zone .dz-ov{position:absolute;inset:0;background:rgba(0,0,0,.6);display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:6px;opacity:0;transition:.2s;border-radius:calc(var(--r) - 2px);z-index:1}
+.drop-zone:hover .dz-ov{opacity:1}
+.dz-icon{font-size:32px;line-height:1;opacity:.5}
+.dz-text{font-size:11px;color:var(--muted);text-align:center;padding:0 12px}
+
+/* ── Divider ── */
+.divider{height:1px;background:var(--border);margin:4px 0}
+
+/* ── Responsive ── */
+@media(max-width:900px){
+  :root{--sidebar:260px}
+}
+@media(max-width:640px){
+  .main{flex-direction:column}
+  .sidebar{width:100%;height:auto;border-right:none;border-bottom:1px solid var(--border)}
+  html,body{overflow:auto}
+  .feed-area{min-height:300px}
+  .swap-layout{grid-template-columns:1fr;height:auto}
+  .swap-panel{border-right:none;border-bottom:1px solid var(--border)}
+  .result-area{min-height:300px}
+}
+</style>
+</head>
+<body>
+
+<!-- ══════════════ HEADER ══════════════ -->
+<header class="hdr">
+  <div class="logo">Deep<em>Live</em>Cam</div>
+  <div class="logo-dot off" id="liveDot"></div>
+  <nav class="hdr-tabs">
+    <div class="htab active" data-tab="live">📷 Live</div>
+    <div class="htab" data-tab="swap">🖼 图片换脸</div>
+  </nav>
+  <div class="hdr-right">
+    <span class="pill pill-blue">Web UI</span>
+  </div>
+</header>
+
+<!-- ══════════════ MAIN ══════════════ -->
+<div class="main">
+
+<!-- ════════ TAB: LIVE ════════ -->
+<div id="tab-live" class="tab-panel" style="display:flex;flex:1;overflow:hidden">
+
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar">
+    <div class="sidebar-body">
+
+      <!-- Source Face -->
+      <div class="sec">
+        <div class="sec-title">源人脸</div>
+        <div class="src-card" id="liveSrcCard">
+          <input type="file" id="liveSrcFile" accept="image/*"/>
+          <div class="src-thumb" id="liveSrcThumb"><span>🧑</span></div>
+          <div class="src-info">
+            <div class="src-name" id="liveSrcName">未选择</div>
+            <div class="src-hint">点击上传 / 拖拽 / 随机</div>
+          </div>
+        </div>
+        <div class="src-actions" style="margin-top:8px">
+          <button class="btn btn-ghost btn-sm" id="liveRandom" style="flex:1">🔄 随机人脸</button>
+        </div>
+      </div>
+
+      <!-- Camera -->
+      <div class="sec">
+        <div class="sec-title">摄像头</div>
+        <div class="cam-row">
+          <select id="camSelect"><option value="0">Camera 0</option></select>
+          <button class="btn btn-ghost btn-icon" id="btnRefreshCam" title="刷新">↺</button>
+        </div>
+      </div>
+
+      <!-- Parameters -->
+      <div class="sec">
+        <div class="sec-title">参数</div>
+
+        <div class="ctrl-row">
+          <div class="ctrl-label"><span>增强器</span></div>
+          <select id="liveEnhancer">
+            <option value="none">无增强</option>
+            <option value="gfpgan">GFPGAN</option>
+            <option value="gpen512">GPEN-512</option>
+            <option value="gpen256">GPEN-256</option>
+          </select>
+        </div>
+
+        <div class="ctrl-row">
+          <div class="ctrl-label">
+            <span>透明度</span>
+            <span class="ctrl-val" id="liveOpV">100%</span>
+          </div>
+          <input type="range" id="liveOpacity" min="0" max="100" value="100"/>
+        </div>
+
+        <div class="ctrl-row">
+          <div class="ctrl-label">
+            <span>锐化</span>
+            <span class="ctrl-val" id="liveShV">0.0</span>
+          </div>
+          <input type="range" id="liveSharpness" min="0" max="50" value="0"/>
+        </div>
+
+        <div class="ctrl-row">
+          <div class="ctrl-label">
+            <span>嘴部遮罩</span>
+            <span class="ctrl-val" id="liveMmV">0</span>
+          </div>
+          <input type="range" id="liveMouthMask" min="0" max="100" value="0"/>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="toggle-row">
+          <span class="toggle-label">多人脸模式</span>
+          <label class="sw"><input type="checkbox" id="liveManyFaces"/><span class="tk"></span></label>
+        </div>
+      </div>
+
+    </div><!-- /sidebar-body -->
+
+    <!-- Footer: action buttons -->
+    <div class="sidebar-footer">
+      <div class="status-bar" id="liveStatus" style="margin-bottom:10px">
+        <div class="dot dot-idle" id="liveDotBar"></div>
+        <span id="liveMsg">选择摄像头和源人脸后开始</span>
+      </div>
+      <div class="action-row">
+        <button class="btn btn-primary" id="btnLiveStart">▶ 开始</button>
+        <button class="btn btn-danger" id="btnLiveStop" disabled>■ 停止</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── Feed ── -->
+  <div class="feed-area">
+    <div class="feed-wrap">
+      <div class="feed-box" id="liveFeed">
+        <div class="feed-overlay">
+          <span class="feed-badge feed-badge-idle" id="feedBadge">IDLE</span>
+        </div>
+        <div class="feed-placeholder" id="noFeed">
+          <div class="icon">📷</div>
+          <p>摄像头未启动</p>
+        </div>
+        <img id="liveImg" style="display:none" alt="live stream"/>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /tab-live -->
+
+<!-- ════════ TAB: IMAGE SWAP ════════ -->
+<div id="tab-swap" class="tab-panel" style="display:none;flex:1;overflow:hidden">
+  <div class="swap-layout">
+
+    <!-- ── 左侧：上传 + 参数 + 按钮 ── -->
+    <div class="swap-panel">
+      <div class="swap-panel-body">
+
+        <!-- 源人脸 -->
+        <div class="sec">
+          <div class="sec-title">源人脸</div>
+          <div class="upload-card" id="srcZone">
+            <input type="file" id="srcFile" accept="image/*"/>
+            <div class="uc-icon">🧑</div>
+            <div class="uc-text">点击或拖拽上传</div>
+            <div class="uc-ov"><div style="font-size:20px">🔄</div><div style="font-size:11px;color:#fff">更换</div></div>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:7px">
+            <button class="btn btn-ghost btn-sm" id="btnRandom" style="flex:1">🔄 随机人脸</button>
+          </div>
+        </div>
+
+        <!-- 互换 -->
+        <div class="swap-arrow">
+          <button id="btnSwapImgs" title="互换源/目标">⇅</button>
+        </div>
+
+        <!-- 目标图片 -->
+        <div class="sec">
+          <div class="sec-title">目标图片</div>
+          <div class="upload-card" id="tgtZone">
+            <input type="file" id="tgtFile" accept="image/*"/>
+            <div class="uc-icon">🖼️</div>
+            <div class="uc-text">点击或拖拽上传</div>
+            <div class="uc-ov"><div style="font-size:20px">🔄</div><div style="font-size:11px;color:#fff">更换</div></div>
+          </div>
+        </div>
+
+        <div class="divider" style="margin:12px 0"></div>
+
+        <!-- 参数 -->
+        <div class="sec">
+          <div class="sec-title">增强器</div>
+          <select id="enhancer">
+            <option value="none">无增强</option>
+            <option value="gfpgan">GFPGAN</option>
+            <option value="gpen512">GPEN-512</option>
+            <option value="gpen256">GPEN-256</option>
+          </select>
+        </div>
+
+        <div class="sec">
+          <div class="sec-title">调节</div>
+          <div class="ctrl-row">
+            <div class="ctrl-label"><span>透明度</span><span class="ctrl-val" id="opV">100%</span></div>
+            <input type="range" id="opacity" min="0" max="100" value="100"/>
+          </div>
+          <div class="ctrl-row">
+            <div class="ctrl-label"><span>锐化</span><span class="ctrl-val" id="shV">0.0</span></div>
+            <input type="range" id="sharpness" min="0" max="50" value="0"/>
+          </div>
+          <div class="ctrl-row">
+            <div class="ctrl-label"><span>嘴部遮罩</span><span class="ctrl-val" id="mmV">0</span></div>
+            <input type="range" id="mouthMask" min="0" max="100" value="0"/>
+          </div>
+          <div class="toggle-row" style="margin-top:4px">
+            <span class="toggle-label">多人脸模式</span>
+            <label class="sw"><input type="checkbox" id="manyFaces"/><span class="tk"></span></label>
+          </div>
+        </div>
+
+      </div>
+      <div class="swap-panel-footer">
+        <div class="status-bar" id="swapStatus" style="margin-bottom:10px">
+          <div class="dot dot-idle" id="swapDot"></div>
+          <span id="swapMsg">上传图片后即可开始</span>
+        </div>
+        <button class="btn btn-primary btn-full" id="btnSwap" disabled style="padding:11px">✨ 开始换脸</button>
+      </div>
+    </div>
+
+    <!-- ── 右侧：对比查看器 ── -->
+    <div class="swap-panel" style="border-right:none">
+      <div class="compare-area">
+        <div class="compare-wrap" id="compareWrap">
+          <!-- placeholder -->
+          <div class="compare-ph" id="comparePh">
+            <div class="cph-icon">🎭</div>
+            <p>换脸完成后<br/>可在此拖动对比<br/>原图 vs 结果</p>
+          </div>
+          <!-- compare box (hidden until result ready) -->
+          <div class="compare-box" id="compareBox" style="display:none">
+            <span class="cmp-label cmp-label-before">原图</span>
+            <span class="cmp-label cmp-label-after">换脸</span>
+            <!-- before = target image -->
+            <img class="cmp-before" id="cmpBefore" alt="原图"/>
+            <!-- after = result, clipped by divider -->
+            <div class="cmp-after-wrap" id="cmpAfterWrap">
+              <img id="cmpAfter" alt="换脸结果" style="display:block;max-width:100%;max-height:100%;object-fit:contain"/>
+            </div>
+            <!-- drag handle -->
+            <div class="cmp-divider" id="cmpDivider">
+              <div class="cmp-handle">
+                <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/><polyline points="9 18 3 12 9 6" transform="translate(12,0)"/></svg>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- toolbar -->
+      <div class="compare-toolbar" id="compareToolbar" style="display:none">
+        <span style="font-size:11px;color:var(--muted);flex:1">拖动中线对比原图与换脸结果</span>
+        <button class="btn btn-ghost btn-sm" id="btnDl">⬇ 下载结果</button>
+        <button class="btn btn-ghost btn-sm" id="btnClr">✕ 清除</button>
+      </div>
+    </div>
+
+  </div>
+</div><!-- /tab-swap -->
+
+</div><!-- /main -->
+
+<script>
+// ── Helpers ──────────────────────────────────────────────────────────────
+function fileToUrl(file){
+  return new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=rej;r.readAsDataURL(file);});
+}
+
+// Range slider gradient fill
+function updateRangeGradient(el){
+  const pct = (el.value - el.min) / (el.max - el.min) * 100;
+  el.style.setProperty('--pct', pct + '%');
+}
+document.querySelectorAll('input[type=range]').forEach(r=>{
+  updateRangeGradient(r);
+  r.addEventListener('input',()=>updateRangeGradient(r));
+});
+
+// ── Tab switching ─────────────────────────────────────────────────────────
+document.querySelectorAll('.htab').forEach(t=>{
+  t.addEventListener('click',()=>{
+    document.querySelectorAll('.htab').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    const tab = t.dataset.tab;
+    document.querySelectorAll('.tab-panel').forEach(p=>p.style.display='none');
+    const panel = document.getElementById('tab-'+tab);
+    panel.style.display = tab==='live' ? 'flex' : 'block';
+    if(tab==='swap') panel.style.flex='1';
+  });
+});
+
+// ════════════════════════════════════════════
+//  LIVE CAM
+// ════════════════════════════════════════════
+let liveRunning = false;
+let liveSrcUrl = null;
+
+const liveStatus  = document.getElementById('liveStatus');
+const liveMsg     = document.getElementById('liveMsg');
+const liveDotBar  = document.getElementById('liveDotBar');
+const liveDot     = document.getElementById('liveDot');   // header dot
+const liveImg     = document.getElementById('liveImg');
+const noFeed      = document.getElementById('noFeed');
+const feedBadge   = document.getElementById('feedBadge');
+const liveSrcThumb= document.getElementById('liveSrcThumb');
+const liveSrcName = document.getElementById('liveSrcName');
+
+function setLiveStat(txt, state='idle'){
+  liveMsg.textContent = txt;
+  liveStatus.className = 'status-bar' + (state==='ok'?' ok':state==='err'?' err':state==='warn'?' warn':'');
+  liveDotBar.className = 'dot' + (state==='ok'?' dot-ok':state==='err'?' dot-err':' dot-idle');
+}
+
+function setLiveRunning(on){
+  liveRunning = on;
+  liveDot.className = 'logo-dot' + (on?'':' off');
+  feedBadge.textContent = on ? 'LIVE' : 'IDLE';
+  feedBadge.className = 'feed-badge ' + (on ? 'feed-badge-live' : 'feed-badge-idle');
+  document.getElementById('btnLiveStart').disabled = on;
+  document.getElementById('btnLiveStop').disabled = !on;
+}
+
+// Load cameras
+async function loadCameras(){
+  try{
+    const r = await fetch('/api/cameras');
+    const j = await r.json();
+    const sel = document.getElementById('camSelect');
+    sel.innerHTML = '';
+    if(j.cameras && j.cameras.length){
+      j.cameras.forEach(c=>{
+        const o = document.createElement('option');
+        o.value = c.index; o.textContent = c.name; sel.appendChild(o);
+      });
+    } else {
+      sel.innerHTML = '<option value="0">Camera 0</option>';
+    }
+  }catch(e){}
+}
+loadCameras();
+document.getElementById('btnRefreshCam').addEventListener('click', loadCameras);
+
+// Source face upload
+function setLiveSrc(url, name){
+  liveSrcUrl = url;
+  liveSrcThumb.innerHTML = '';
+  const img = document.createElement('img'); img.src = url;
+  liveSrcThumb.appendChild(img);
+  liveSrcName.textContent = name || '已选择';
+}
+
+document.getElementById('liveSrcFile').addEventListener('change', async e=>{
+  if(!e.target.files[0]) return;
+  const url = await fileToUrl(e.target.files[0]);
+  setLiveSrc(url, e.target.files[0].name);
+  if(liveRunning) await pushLiveSource();
+});
+
+// Drag & drop on src card
+const liveSrcCard = document.getElementById('liveSrcCard');
+liveSrcCard.addEventListener('dragover', e=>{e.preventDefault();liveSrcCard.style.borderColor='var(--accent)';});
+liveSrcCard.addEventListener('dragleave', ()=>{liveSrcCard.style.borderColor='';});
+liveSrcCard.addEventListener('drop', async e=>{
+  e.preventDefault(); liveSrcCard.style.borderColor='';
+  const f = e.dataTransfer.files[0];
+  if(f && f.type.startsWith('image/')){
+    const url = await fileToUrl(f);
+    setLiveSrc(url, f.name);
+    if(liveRunning) await pushLiveSource();
+  }
+});
+
+// Random face
+document.getElementById('liveRandom').addEventListener('click', async()=>{
+  const btn = document.getElementById('liveRandom');
+  btn.disabled = true; btn.textContent = '⏳ 获取中…';
+  try{
+    const r = await fetch('/api/random_face');
+    const j = await r.json();
+    if(j.error) throw new Error(j.error);
+    setLiveSrc(j.image, '随机人脸');
+    if(liveRunning) await pushLiveSource();
+  }catch(e){
+    setLiveStat('获取失败: '+e.message, 'err');
+  }finally{
+    btn.disabled = false; btn.textContent = '🔄 随机人脸';
+  }
+});
+
+async function pushLiveSource(){
+  if(!liveSrcUrl) return;
+  setLiveStat('正在更新源人脸…', 'idle');
+  try{
+    const r = await fetch('/api/live/source',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({source:liveSrcUrl, many_faces:document.getElementById('liveManyFaces').checked})
+    });
+    const j = await r.json();
+    if(j.error) setLiveStat('源人脸更新失败: '+j.error, 'err');
+    else setLiveStat('实时换脸中…', 'ok');
+  }catch(e){
+    setLiveStat('网络错误: '+e.message, 'err');
+  }
+}
+
+// Start
+document.getElementById('btnLiveStart').addEventListener('click', async()=>{
+  if(liveRunning) return;
+  const camIdx = parseInt(document.getElementById('camSelect').value)||0;
+  setLiveStat('正在启动摄像头…');
+  document.getElementById('btnLiveStart').disabled = true;
+
+  const payload = {
+    camera_index: camIdx,
+    many_faces: document.getElementById('liveManyFaces').checked,
+    opacity: parseFloat(document.getElementById('liveOpacity').value)/100,
+    sharpness: parseFloat(document.getElementById('liveSharpness').value)/10,
+    mouth_mask_size: parseFloat(document.getElementById('liveMouthMask').value),
+    enhancer: document.getElementById('liveEnhancer').value,
+  };
+  if(liveSrcUrl) payload.source = liveSrcUrl;
+
+  try{
+    const r = await fetch('/api/live/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const j = await r.json();
+    if(!r.ok||j.error) throw new Error(j.error||'HTTP '+r.status);
+
+    liveImg.src = '/api/live/stream?t='+Date.now();
+    liveImg.style.display = 'block';
+    noFeed.style.display = 'none';
+    setLiveRunning(true);
+
+    if(liveSrcUrl){
+      await pushLiveSource();
+    } else {
+      setLiveStat('摄像头已启动，请上传源人脸', 'warn');
+    }
+  }catch(e){
+    setLiveStat('启动失败: '+e.message, 'err');
+    document.getElementById('btnLiveStart').disabled = false;
+  }
+});
+
+// Stop
+document.getElementById('btnLiveStop').addEventListener('click', async()=>{
+  try{ await fetch('/api/live/stop',{method:'POST'}); }catch(e){}
+  liveImg.src=''; liveImg.style.display='none';
+  noFeed.style.display='flex';
+  setLiveRunning(false);
+  setLiveStat('已停止');
+});
+
+// Settings push
+async function pushLiveSettings(){
+  if(!liveRunning) return;
+  try{
+    await fetch('/api/live/settings',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        opacity:         parseFloat(document.getElementById('liveOpacity').value)/100,
+        sharpness:       parseFloat(document.getElementById('liveSharpness').value)/10,
+        mouth_mask_size: parseFloat(document.getElementById('liveMouthMask').value),
+        many_faces:      document.getElementById('liveManyFaces').checked,
+        enhancer:        document.getElementById('liveEnhancer').value,
+      })
+    });
+  }catch(e){}
+}
+
+document.getElementById('liveOpacity').addEventListener('input', e=>{
+  document.getElementById('liveOpV').textContent = e.target.value+'%';
+  pushLiveSettings();
+});
+document.getElementById('liveSharpness').addEventListener('input', e=>{
+  document.getElementById('liveShV').textContent = (e.target.value/10).toFixed(1);
+  pushLiveSettings();
+});
+document.getElementById('liveMouthMask').addEventListener('input', e=>{
+  document.getElementById('liveMmV').textContent = e.target.value;
+  pushLiveSettings();
+});
+document.getElementById('liveManyFaces').addEventListener('change', pushLiveSettings);
+document.getElementById('liveEnhancer').addEventListener('change', pushLiveSettings);
+
+liveImg.addEventListener('error', ()=>{
+  if(!liveRunning) return;
+  liveImg.style.display='none'; noFeed.style.display='flex';
+  setLiveRunning(false);
+  setLiveStat('摄像头连接断开', 'err');
+});
+
+// ════════════════════════════════════════════
+//  IMAGE SWAP
+// ════════════════════════════════════════════
+let srcUrl=null, tgtUrl=null;
+
+const swapStatus = document.getElementById('swapStatus');
+const swapMsg    = document.getElementById('swapMsg');
+const swapDot    = document.getElementById('swapDot');
+const srcZone    = document.getElementById('srcZone');
+const tgtZone    = document.getElementById('tgtZone');
+
+function setSwapStat(txt, state='idle'){
+  swapMsg.textContent = txt;
+  swapStatus.className = 'status-bar'+(state==='ok'?' ok':state==='err'?' err':'');
+  swapDot.className = 'dot'+(state==='ok'?' dot-ok':state==='err'?' dot-err':' dot-idle');
+}
+
+function checkSwapReady(){
+  document.getElementById('btnSwap').disabled = !(srcUrl && tgtUrl);
+  if(!srcUrl&&!tgtUrl) setSwapStat('上传源人脸和目标图片后即可开始');
+  else if(!srcUrl) setSwapStat('请上传源人脸图片');
+  else if(!tgtUrl) setSwapStat('请上传目标图片');
+  else setSwapStat('准备就绪，点击「开始换脸」');
+}
+
+function loadUploadCard(zone, url){
+  zone.querySelectorAll('img.uc-preview').forEach(i=>i.remove());
+  zone.querySelectorAll('.uc-icon,.uc-text').forEach(el=>el.style.display='none');
+  const img = document.createElement('img'); img.src=url; img.className='uc-preview';
+  zone.insertBefore(img, zone.querySelector('.uc-ov'));
+}
+function clearUploadCard(zone){
+  zone.querySelectorAll('img.uc-preview').forEach(i=>i.remove());
+  zone.querySelectorAll('.uc-icon,.uc-text').forEach(el=>el.style.display='');
+}
+
+function setupUploadDrop(zone, cb){
+  zone.addEventListener('dragover', e=>{e.preventDefault();zone.classList.add('over');});
+  zone.addEventListener('dragleave', ()=>zone.classList.remove('over'));
+  zone.addEventListener('drop', async e=>{
+    e.preventDefault(); zone.classList.remove('over');
+    const f=e.dataTransfer.files[0];
+    if(f&&f.type.startsWith('image/')) cb(f);
+  });
+}
+
+document.getElementById('srcFile').addEventListener('change', async e=>{
+  if(!e.target.files[0]) return;
+  srcUrl = await fileToUrl(e.target.files[0]); loadUploadCard(srcZone,srcUrl); checkSwapReady();
+});
+document.getElementById('tgtFile').addEventListener('change', async e=>{
+  if(!e.target.files[0]) return;
+  tgtUrl = await fileToUrl(e.target.files[0]); loadUploadCard(tgtZone,tgtUrl); checkSwapReady();
+});
+setupUploadDrop(srcZone, async f=>{srcUrl=await fileToUrl(f);loadUploadCard(srcZone,srcUrl);checkSwapReady();});
+setupUploadDrop(tgtZone, async f=>{tgtUrl=await fileToUrl(f);loadUploadCard(tgtZone,tgtUrl);checkSwapReady();});
+
+document.getElementById('btnRandom').addEventListener('click', async()=>{
+  const btn=document.getElementById('btnRandom');
+  btn.disabled=true; btn.textContent='⏳ 获取中…';
+  try{
+    const r=await fetch('/api/random_face'); const j=await r.json();
+    if(j.error) throw new Error(j.error);
+    srcUrl=j.image; loadUploadCard(srcZone,srcUrl); checkSwapReady();
+  }catch(e){ setSwapStat('获取失败: '+e.message,'err'); }
+  finally{ btn.disabled=false; btn.textContent='🔄 随机人脸'; }
+});
+
+document.getElementById('btnSwapImgs').addEventListener('click', ()=>{
+  [srcUrl,tgtUrl]=[tgtUrl,srcUrl];
+  if(srcUrl) loadUploadCard(srcZone,srcUrl); else clearUploadCard(srcZone);
+  if(tgtUrl) loadUploadCard(tgtZone,tgtUrl); else clearUploadCard(tgtZone);
+  checkSwapReady();
+});
+
+document.getElementById('opacity').addEventListener('input', e=>document.getElementById('opV').textContent=e.target.value+'%');
+document.getElementById('sharpness').addEventListener('input', e=>document.getElementById('shV').textContent=(e.target.value/10).toFixed(1));
+document.getElementById('mouthMask').addEventListener('input', e=>document.getElementById('mmV').textContent=e.target.value);
+
+// ── Compare viewer ──────────────────────────────────────────────────────
+const compareBox    = document.getElementById('compareBox');
+const comparePh     = document.getElementById('comparePh');
+const compareToolbar= document.getElementById('compareToolbar');
+const cmpBefore     = document.getElementById('cmpBefore');
+const cmpAfter      = document.getElementById('cmpAfter');
+const cmpAfterWrap  = document.getElementById('cmpAfterWrap');
+const cmpDivider    = document.getElementById('cmpDivider');
+
+let cmpPct = 50; // divider position %
+let cmpDragging = false;
+
+function setCmpPosition(pct){
+  cmpPct = Math.max(2, Math.min(98, pct));
+  cmpDivider.style.left = cmpPct + '%';
+  cmpAfterWrap.style.clipPath = `inset(0 0 0 ${cmpPct}%)`;
+}
+
+function showCompare(beforeUrl, afterUrl){
+  // Size the compare-box to match the image natural aspect ratio
+  const img = new Image();
+  img.onload = ()=>{
+    const wrap = document.getElementById('compareWrap');
+    const ww = wrap.clientWidth - 40;
+    const wh = wrap.clientHeight - 40;
+    const ar = img.naturalWidth / img.naturalHeight;
+    let bw = ww, bh = ww / ar;
+    if(bh > wh){ bh = wh; bw = wh * ar; }
+    compareBox.style.width  = bw + 'px';
+    compareBox.style.height = bh + 'px';
+    // set images
+    cmpBefore.src = beforeUrl;
+    cmpBefore.style.width  = bw + 'px';
+    cmpBefore.style.height = bh + 'px';
+    cmpAfter.src  = afterUrl;
+    cmpAfter.style.width  = bw + 'px';
+    cmpAfter.style.height = bh + 'px';
+    setCmpPosition(50);
+    comparePh.style.display  = 'none';
+    compareBox.style.display = 'flex';
+    compareToolbar.style.display = 'flex';
+  };
+  img.src = beforeUrl;
+}
+
+// Drag events on divider
+cmpDivider.addEventListener('mousedown', e=>{e.preventDefault();cmpDragging=true;});
+cmpDivider.addEventListener('touchstart', e=>{cmpDragging=true;},{passive:true});
+
+document.addEventListener('mousemove', e=>{
+  if(!cmpDragging) return;
+  const rect = compareBox.getBoundingClientRect();
+  setCmpPosition((e.clientX - rect.left) / rect.width * 100);
+});
+document.addEventListener('touchmove', e=>{
+  if(!cmpDragging) return;
+  const rect = compareBox.getBoundingClientRect();
+  setCmpPosition((e.touches[0].clientX - rect.left) / rect.width * 100);
+},{passive:true});
+document.addEventListener('mouseup',  ()=>cmpDragging=false);
+document.addEventListener('touchend', ()=>cmpDragging=false);
+
+// Click anywhere on compare box to jump divider
+compareBox.addEventListener('click', e=>{
+  if(cmpDragging) return;
+  const rect = compareBox.getBoundingClientRect();
+  setCmpPosition((e.clientX - rect.left) / rect.width * 100);
+});
+
+// ── Swap button ──────────────────────────────────────────────────────────
+let lastResultUrl = null;
+
+document.getElementById('btnSwap').addEventListener('click', async()=>{
+  if(!srcUrl||!tgtUrl) return;
+  swapStatus.innerHTML='<div class="spin"></div><span id="swapMsg">处理中，请稍候…</span>';
+  document.getElementById('btnSwap').disabled=true;
+  // reset compare
+  compareBox.style.display='none';
+  comparePh.style.display='flex';
+  compareToolbar.style.display='none';
+
+  const payload={
+    source:srcUrl, target:tgtUrl,
+    opacity:parseFloat(document.getElementById('opacity').value)/100,
+    sharpness:parseFloat(document.getElementById('sharpness').value)/10,
+    mouth_mask_size:parseFloat(document.getElementById('mouthMask').value),
+    many_faces:document.getElementById('manyFaces').checked,
+    enhancer:document.getElementById('enhancer').value,
+  };
+  try{
+    const r=await fetch('/api/swap',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const j=await r.json();
+    if(!r.ok||j.error) throw new Error(j.error||'HTTP '+r.status);
+    lastResultUrl = j.result;
+    // show compare: before = target, after = result
+    showCompare(tgtUrl, j.result);
+    swapStatus.innerHTML='<div class="dot dot-ok" id="swapDot"></div><span id="swapMsg"></span>';
+    setSwapStat('换脸完成！拖动中线对比效果','ok');
+  }catch(e){
+    swapStatus.innerHTML='<div class="dot dot-err" id="swapDot"></div><span id="swapMsg"></span>';
+    setSwapStat('错误: '+e.message,'err');
+  }finally{
+    document.getElementById('btnSwap').disabled=false;
+  }
+});
+
+document.getElementById('btnDl').addEventListener('click', ()=>{
+  if(!lastResultUrl) return;
+  const a=document.createElement('a'); a.href=lastResultUrl; a.download='dlc_result.jpg'; a.click();
+});
+document.getElementById('btnClr').addEventListener('click', ()=>{
+  lastResultUrl=null;
+  compareBox.style.display='none';
+  comparePh.style.display='flex';
+  compareToolbar.style.display='none';
+  checkSwapReady();
+});
+
+checkSwapReady();
+</script>
+</body>
+</html>
