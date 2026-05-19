@@ -55,9 +55,9 @@ def reset_face_enhancer() -> None:
     global FACE_ENHANCER
     with THREAD_LOCK:
         FACE_ENHANCER = None
-    # Also invalidate the feathered-mask cache — output size will likely change
-    _enhancer_cache['mask'] = None
-    _enhancer_cache['mask_size'] = 0
+        # Also invalidate the feathered-mask cache — output size will likely change
+        _enhancer_cache['mask'] = None
+        _enhancer_cache['mask_size'] = 0
 
 
 def pre_check() -> bool:
