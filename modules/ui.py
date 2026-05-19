@@ -116,11 +116,11 @@ def _aspect_crop_to(frame, out_w: int, out_h: int):
     elif in_aspect < out_aspect:
         new_h = max(1, int(round(w / out_aspect)))
         y0 = max(0, (h - new_h) // 2)
-        cropped = frame[y0:y0 + new_h, :, :]
+        cropped = frame[y0:y0 + new_h, :]
     else:
         new_w = max(1, int(round(h * out_aspect)))
         x0 = max(0, (w - new_w) // 2)
-        cropped = frame[:, x0:x0 + new_w, :]
+        cropped = frame[:, x0:x0 + new_w]
     if cropped.shape[1] == out_w and cropped.shape[0] == out_h:
         return cropped
     return cv2.resize(cropped, (out_w, out_h), interpolation=cv2.INTER_LINEAR)
