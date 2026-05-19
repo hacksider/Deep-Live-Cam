@@ -73,7 +73,10 @@ interpolation_weight: float = 0  # Blend weight for current frame (0.0-1.0). Low
 # Face detection resolution (160, 320, or 640).
 # Lower = faster detection, fewer FLOPs, less accurate at distance.
 # Changes require face analyser re-init (handled in UI by clearing FACE_ANALYSER).
-det_size: int = 640
+# DEFAULT_DET_SIZE is the single source of truth for the default — UI,
+# face_analyser, and CLI all reference it so they can't drift apart.
+DEFAULT_DET_SIZE: int = 640
+det_size: int = DEFAULT_DET_SIZE
 
 # Webcam capture resolution requested via cv2.CAP_PROP_FRAME_WIDTH/HEIGHT.
 # Camera may negotiate to its nearest supported size — actual size is

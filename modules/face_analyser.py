@@ -17,7 +17,7 @@ FACE_ANALYSER_LOCK = threading.Lock()
 
 
 def _current_det_size() -> tuple:
-    s = int(getattr(modules.globals, 'det_size', 640))
+    s = int(getattr(modules.globals, 'det_size', modules.globals.DEFAULT_DET_SIZE))
     return (s, s)
 
 

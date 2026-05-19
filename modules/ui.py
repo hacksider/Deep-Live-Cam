@@ -757,8 +757,8 @@ class MainWindow(QMainWindow):
         self._det_size_options = [160, 320, 640]
         for v in self._det_size_options:
             self.cb_det_size.addItem(f"{v} x {v}")
-        cur_det = int(getattr(modules.globals, 'det_size', 640))
-        idx = self._det_size_options.index(cur_det) if cur_det in self._det_size_options else 2
+        cur_det = int(getattr(modules.globals, 'det_size', modules.globals.DEFAULT_DET_SIZE))
+        idx = self._det_size_options.index(cur_det) if cur_det in self._det_size_options else self._det_size_options.index(modules.globals.DEFAULT_DET_SIZE)
         self.cb_det_size.setCurrentIndex(idx)
         self.cb_det_size.currentIndexChanged.connect(self._on_det_size_change)
         self.cb_det_size.setToolTip(_(
