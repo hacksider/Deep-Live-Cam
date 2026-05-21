@@ -113,12 +113,14 @@ class FitImageToSizeTests(unittest.TestCase):
         self.assertEqual(resized.dtype, fake_numpy.uint8)
         self.assertEqual(resized.fill_value, 0)
 
-    def test_preserves_original_frame_when_target_size_is_invalid(self) -> None:
+    def test_returns_fallback_frame_when_target_size_is_invalid(self) -> None:
         image = fake_zeros((12, 18, 3), dtype=fake_numpy.uint8)
 
         resized = fit_image_to_size(image, 0, 240)
 
-        self.assertIs(resized, image)
+        self.assertEqual(resized.shape, (240, 1, 3))
+        self.assertEqual(resized.dtype, fake_numpy.uint8)
+        self.assertEqual(resized.fill_value, 0)
 
 
 if __name__ == "__main__":
