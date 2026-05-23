@@ -610,8 +610,6 @@ class MainWindow(QMainWindow):
 
             def _on_toggle(v, f=field):
                 setattr(modules.globals, f, v)
-                if f == "virtual_cam":
-                    print(f"[vcam] toggle -> globals.virtual_cam = {v}")
                 save_switch_states()
 
             sw.toggled.connect(_on_toggle)
@@ -1216,8 +1214,9 @@ class _ProcessingWorker(QThread):
 
 
 class WebcamPreviewWindow(QWidget):
-    def __init__(self, camera_index: int):
+    def __init__(self, camera_index: int, on_close: Optional[Callable[[], None]] = None):
         super().__init__()
+        self._on_close_callback = on_close
         self.setWindowTitle("Live Preview")
         self.resize(PREVIEW_DEFAULT_WIDTH, PREVIEW_DEFAULT_HEIGHT)
         layout = QVBoxLayout(self)
@@ -1249,7 +1248,6 @@ class WebcamPreviewWindow(QWidget):
         self._vcam = None
         self._vcam_last_send_ts = 0.0
         vcam_requested = getattr(modules.globals, "virtual_cam", False)
-        print(f"[vcam] Live start — virtual_cam global = {vcam_requested}")
         if vcam_requested:
             try:
                 import pyvirtualcam
@@ -1370,21 +1368,19 @@ class WebcamPreviewWindow(QWidget):
             _WEBCAM_PREVIEW = None
         # Notify whoever opened us (typically MainWindow) so they can
         # reset their button state regardless of how we got closed.
-        cb = getattr(self, "_on_close_callback", None)
-        if cb is not None:
+        if self._on_close_callback is not None:
             try:
-                cb()
+                self._on_close_callback()
             except Exception as e:
-                print(f"[live] on_close callback raised: {e}")
+                update_status(f"Live close callback error: {e}")
         event.accept()
 
 
-def _open_webcam_preview(camera_index: int, on_close=None) -> None:
+def _open_webcam_preview(camera_index: int, on_close: Optional[Callable[[], None]] = None) -> None:
     global _WEBCAM_PREVIEW
     if _WEBCAM_PREVIEW is not None:
         _WEBCAM_PREVIEW.close()
-    _WEBCAM_PREVIEW = WebcamPreviewWindow(camera_index)
-    _WEBCAM_PREVIEW._on_close_callback = on_close
+    _WEBCAM_PREVIEW = WebcamPreviewWindow(camera_index, on_close=on_close)
     _WEBCAM_PREVIEW.show()
 
 
