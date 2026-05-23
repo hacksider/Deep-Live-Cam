@@ -9,17 +9,11 @@ would otherwise introduce:
    inference with the known input size and replace these chains with constants.
    Float32-noise-level differences only (max ~6e-6).
 
-2. **Pad(reflect) decomposition** — CoreML doesn't support ``Pad(mode=reflect)``.
-   Models using reflect padding (e.g. inswapper_128) get split into many CoreML
-   subgraphs with CPU fallbacks between each.  We rewrite each ``Pad(reflect)``
-   as equivalent ``Slice`` + ``Concat`` ops that CoreML handles natively.
-   Bit-for-bit identical output. (Fixed upstream in microsoft/onnxruntime#28073.)
-
-3. **Split → Slice decomposition** — CoreML's EP doesn't support the ONNX
+2. **Split → Slice decomposition** — CoreML's EP doesn't support the ONNX
    ``Split`` op, causing partition boundaries in models with channel-wise
    splits (e.g. GFPGAN's SFT modulation). Each 2-way Split becomes two Slices.
 
-4. **Scalar Gather widening** — ORT's CoreML EP rejects ``Gather`` nodes with
+3. **Scalar Gather widening** — ORT's CoreML EP rejects ``Gather`` nodes with
    rank-0 (scalar) indices. StyleGAN-derived models (GFPGAN) slice per-layer
    style codes using exactly this pattern. We widen each scalar index to
    ``[1]`` and squeeze the added axis on the Gather output.
@@ -67,10 +61,6 @@ def optimize_for_coreml(model_path: str, input_shape: tuple = None) -> str:
     changed = False
 
     if _fold_shape_gather(model, input_shape):
-        changed = True
-
-    # TODO(ort>=1.26): drop this pass. Fixed upstream by microsoft/onnxruntime#28073.
-    if _decompose_reflect_pad(model):
         changed = True
 
     if _decompose_split(model):
@@ -207,149 +197,7 @@ def _fold_shape_gather(model, input_shape) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Pass 2: Decompose Pad(reflect) → Slice + Concat
-#
-# TEMPORARY: fixed upstream in microsoft/onnxruntime#28073 (merged 2026-04-20).
-# Once the ORT floor is >= 1.26.0, MLProgram handles Pad(mode=reflect) natively
-# via MIL tensor_operation.pad and this entire pass can be deleted.
-# ---------------------------------------------------------------------------
-
-def _decompose_reflect_pad(model) -> bool:
-    """Rewrite Pad(reflect) as Slice+Concat sequences CoreML can handle."""
-    from onnx import numpy_helper, helper
-
-    graph = model.graph
-    inits = {init.name: numpy_helper.to_array(init) for init in graph.initializer}
-
-    reflect_pads = []
-    for node in graph.node:
-        if node.op_type == "Pad":
-            mode = "constant"
-            for attr in node.attribute:
-                if attr.name == "mode":
-                    mode = attr.s.decode()
-            if mode == "reflect" and len(node.input) > 1 and node.input[1] in inits:
-                reflect_pads.append(node)
-
-    if not reflect_pads:
-        return False
-
-    existing_names = {i.name for i in graph.initializer}
-
-    def ensure_const(name, value):
-        if name not in existing_names:
-            graph.initializer.append(
-                numpy_helper.from_array(np.array(value, dtype=np.int64), name=name)
-            )
-            existing_names.add(name)
-
-    ensure_const("_rp_ax2", [2])
-    ensure_const("_rp_ax3", [3])
-
-    max_pad = 0
-    for node in reflect_pads:
-        pads = inits[node.input[1]].tolist()
-        max_pad = max(max_pad, int(pads[2]), int(pads[3]))
-
-    for v in range(1, max_pad + 2):
-        ensure_const(f"_rp_p{v}", [v])
-        ensure_const(f"_rp_n{v}", [-v])
-
-    _counter = [0]
-
-    def uid():
-        _counter[0] += 1
-        return _counter[0]
-
-    pad_ids = {id(n) for n in reflect_pads}
-    pad_init_names = set()
-
-    new_nodes = []
-    for node in graph.node:
-        if id(node) not in pad_ids:
-            new_nodes.append(node)
-            continue
-
-        pads = inits[node.input[1]].tolist()
-        h_pad, w_pad = int(pads[2]), int(pads[3])
-
-        for inp in node.input[1:]:
-            if inp in inits:
-                pad_init_names.add(inp)
-
-        current = node.input[0]
-
-        if h_pad > 0:
-            top = []
-            for i in range(h_pad, 0, -1):
-                name = f"_rp_t{uid()}"
-                new_nodes.append(helper.make_node(
-                    "Slice",
-                    inputs=[current, f"_rp_p{i}", f"_rp_p{i+1}", "_rp_ax2"],
-                    outputs=[name],
-                ))
-                top.append(name)
-
-            bot = []
-            for i in range(1, h_pad + 1):
-                name = f"_rp_b{uid()}"
-                new_nodes.append(helper.make_node(
-                    "Slice",
-                    inputs=[current, f"_rp_n{i+1}", f"_rp_n{i}", "_rp_ax2"],
-                    outputs=[name],
-                ))
-                bot.append(name)
-
-            h_out = f"_rp_h{uid()}"
-            new_nodes.append(helper.make_node(
-                "Concat", inputs=top + [current] + bot, outputs=[h_out], axis=2
-            ))
-            current = h_out
-
-        if w_pad > 0:
-            left = []
-            for i in range(w_pad, 0, -1):
-                name = f"_rp_l{uid()}"
-                new_nodes.append(helper.make_node(
-                    "Slice",
-                    inputs=[current, f"_rp_p{i}", f"_rp_p{i+1}", "_rp_ax3"],
-                    outputs=[name],
-                ))
-                left.append(name)
-
-            right = []
-            for i in range(1, w_pad + 1):
-                name = f"_rp_r{uid()}"
-                new_nodes.append(helper.make_node(
-                    "Slice",
-                    inputs=[current, f"_rp_n{i+1}", f"_rp_n{i}", "_rp_ax3"],
-                    outputs=[name],
-                ))
-                right.append(name)
-
-            new_nodes.append(helper.make_node(
-                "Concat",
-                inputs=left + [current] + right,
-                outputs=[node.output[0]],
-                axis=3,
-            ))
-        elif h_pad > 0:
-            new_nodes.append(helper.make_node(
-                "Identity", inputs=[current], outputs=[node.output[0]]
-            ))
-
-    # Remove old Pad initializers
-    clean_inits = [i for i in graph.initializer if i.name not in pad_init_names]
-    del graph.initializer[:]
-    graph.initializer.extend(clean_inits)
-
-    del graph.node[:]
-    graph.node.extend(new_nodes)
-    return True
-
-
-# ---------------------------------------------------------------------------
-# Pass 3: Decompose Split → Slice pairs
+# Pass 2: Decompose Split → Slice pairs
 # ---------------------------------------------------------------------------
 
 def _decompose_split(model) -> bool:
@@ -424,7 +272,7 @@ def _decompose_split(model) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Pass 4: Widen scalar Gather indices to [1] + Squeeze
+# Pass 3: Widen scalar Gather indices to [1] + Squeeze
 #
 # TEMPORARY: filed upstream as microsoft/onnxruntime#28180. ORT's CoreML EP
 # GatherOpBuilder::IsOpSupportedImpl rejects rank-0 (scalar) indices with
@@ -537,11 +385,10 @@ def _preserve_emap_position(model, numpy_helper):
     graph = model.graph
     emap_init = None
     for init in graph.initializer:
-        if not init.name.startswith("_rp_"):
-            arr = numpy_helper.to_array(init)
-            if len(arr.shape) == 2 and arr.shape[0] == 512 and arr.shape[1] == 512:
-                emap_init = init
-                break
+        arr = numpy_helper.to_array(init)
+        if len(arr.shape) == 2 and arr.shape[0] == 512 and arr.shape[1] == 512:
+            emap_init = init
+            break
 
     if emap_init is not None:
         inits = [i for i in graph.initializer if i.name != emap_init.name]

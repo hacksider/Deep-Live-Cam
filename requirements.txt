@@ -8,8 +8,8 @@ psutil==5.9.8
 PySide6>=6.7,<7
 pillow==12.1.1
 tqdm>=4.65.0
-onnxruntime-silicon==1.16.3; sys_platform == 'darwin' and platform_machine == 'arm64'
-onnxruntime-gpu==1.23.2; sys_platform != 'darwin'
+onnxruntime==1.26.0; sys_platform == 'darwin' and platform_machine == 'arm64'
+onnxruntime-gpu==1.26.0; sys_platform != 'darwin'
 tensorflow>=2.15.0; sys_platform != 'darwin'
 tensorflow>=2.15.0; sys_platform == 'darwin' and python_version < '3.13'
 opennsfw2==0.10.2
