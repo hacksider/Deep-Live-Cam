@@ -257,6 +257,8 @@ def get_unique_faces_from_target_image() -> Any:
         modules.globals.source_target_map = []
         target_frame = cv2.imread(modules.globals.target_path)
         many_faces = get_many_faces(target_frame)
+        if many_faces is None:
+            return None
         i = 0
 
         for face in many_faces:
@@ -291,6 +293,8 @@ def get_unique_faces_from_target_video() -> Any:
         for temp_frame_path in tqdm(temp_frame_paths, desc="Extracting face embeddings from frames"):
             temp_frame = cv2.imread(temp_frame_path)
             many_faces = get_many_faces(temp_frame)
+            if many_faces is None:
+                continue
 
             for face in many_faces:
                 face_embeddings.append(face.normed_embedding)
