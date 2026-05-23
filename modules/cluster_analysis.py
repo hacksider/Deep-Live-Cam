@@ -1,6 +1,5 @@
 import numpy as np
 from sklearn.cluster import KMeans
-from sklearn.metrics import silhouette_score
 from typing import Any
 
 

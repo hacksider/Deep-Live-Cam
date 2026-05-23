@@ -11,7 +11,7 @@ import onnxruntime
 import modules.globals
 import modules.processors.frame.core
 from modules.core import update_status
-from modules.face_analyser import get_one_face, get_many_faces
+from modules.face_analyser import get_many_faces
 from modules.typing import Frame, Face
 from modules.utilities import (
     is_image,

@@ -392,7 +392,7 @@ def _decompose_split(model) -> bool:
 
     # Collect all needed boundary constants
     for _, (a, b) in splits:
-        ensure_const(f"_sp_s0", [0])
+        ensure_const("_sp_s0", [0])
         ensure_const(f"_sp_s{a}", [a])
         ensure_const(f"_sp_s{a + b}", [a + b])
 
