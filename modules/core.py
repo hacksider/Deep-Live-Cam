@@ -170,6 +170,10 @@ def limit_resources() -> None:
             tensorflow.config.experimental.set_memory_growth(gpu, True)
     # limit memory usage
     if modules.globals.max_memory:
+        # setrlimit(RLIMIT_DATA) is unusable on macOS.
+        # See https://github.com/python/cpython/issues/142317
+        if platform.system().lower() == 'darwin':
+            return
         memory = modules.globals.max_memory * 1024 ** 3
         if platform.system().lower() == 'windows':
             import ctypes
