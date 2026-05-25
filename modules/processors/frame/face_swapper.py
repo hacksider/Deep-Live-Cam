@@ -17,6 +17,7 @@ from modules.utilities import (
 )
 from modules.cluster_analysis import find_closest_centroid
 from modules.gpu_processing import gpu_gaussian_blur, gpu_sharpen, gpu_add_weighted, gpu_resize, gpu_cvt_color
+import hashlib
 import os
 from collections import deque
 import time
@@ -187,6 +188,41 @@ models_dir = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(abs_dir))), "models"
 )
 
+# SHA-256 hashes of known-good model files.  Only filenames listed here are
+# permitted to load; any unlisted filename is rejected outright to enforce an
+# explicit allowlist and prevent bypass via a renamed malicious model.
+# A None value means the file is explicitly allowed but its hash has not yet
+# been registered (hash verification is skipped for that entry).
+_MODEL_SHA256: dict = {
+    "inswapper_128.onnx": "e4a3f08c753cb72d04e10aa0f7dbe3deebbf39567d4ead6dce08e98aa49e16af",
+    # FP16 variant: entry prevents unknown-filename bypass; populate hash once available.
+    "inswapper_128_fp16.onnx": None,
+}
+
+
+def _verify_model_integrity(model_path: str) -> bool:
+    """Return True if the file passes SHA-256 verification.
+
+    Files whose filename is absent from _MODEL_SHA256 are rejected to enforce
+    an explicit allowlist and prevent bypass via a renamed malicious model.
+    Files with a None hash entry are permitted without hash verification.
+    Returns False on any I/O error so callers receive a clean failure signal.
+    """
+    filename = os.path.basename(model_path)
+    if filename not in _MODEL_SHA256:
+        return False  # Unknown model: reject to enforce strict allowlist
+    expected = _MODEL_SHA256[filename]
+    if expected is None:
+        return True  # Registered but hash not yet populated; allow through
+    try:
+        sha256 = hashlib.sha256()
+        with open(model_path, "rb") as fh:
+            for chunk in iter(lambda: fh.read(65536), b""):
+                sha256.update(chunk)
+        return sha256.hexdigest() == expected
+    except OSError:
+        return False
+
 def pre_check() -> bool:
     # Use models_dir instead of abs_dir to save to the correct location
     download_directory_path = models_dir
@@ -242,6 +278,12 @@ def get_face_swapper() -> Any:
             else:
                 update_status(f"No inswapper model found in {models_dir}.", NAME)
                 return None
+            # Verify model integrity before loading to prevent execution of
+            # arbitrary native code via malicious custom ONNX operators.
+            if not _verify_model_integrity(model_path):
+                update_status(f"Model integrity check failed for: {model_path}", NAME)
+                return None
+
             # On Apple Silicon, rewrite Pad(reflect) → Slice+Concat so
             # CoreML can run the entire model in a single partition on
             # the Neural Engine instead of bouncing between CPU and ANE.
@@ -448,7 +490,8 @@ def _fast_paste_back(target_img: Frame, bgr_fake: np.ndarray, aimg: np.ndarray, 
     # inswapper's aligned-face space is square (128x128). _get_soft_alpha
     # caches a single NxN template keyed by N, so fail loudly if that ever
     # stops being true rather than silently mis-warping the alpha mask.
-    assert face_h == face_w, f"Expected square aligned face, got {face_h}x{face_w}"
+    if face_h != face_w:
+        raise ValueError(f"Expected square aligned face, got {face_h}x{face_w}")
     IM = cv2.invertAffineTransform(M)
 
     # Bbox in output coords from the affine corners of the aligned-face square.
