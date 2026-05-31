@@ -14,7 +14,6 @@ if sys.platform == "win32":
 
 import insightface
 from insightface.app import FaceAnalysis
-from insightface.utils import face_align
 from modules.processors.frame.face_swapper import _fast_paste_back
 from modules import platform_info
 
@@ -81,10 +80,14 @@ def capture_thread():
         try:
             capture_queue.put_nowait(frame)
         except queue.Full:
-            try: capture_queue.get_nowait()
-            except queue.Empty: pass
-            try: capture_queue.put_nowait(frame)
-            except queue.Full: pass
+            try:
+                capture_queue.get_nowait()
+            except queue.Empty:
+                pass
+            try:
+                capture_queue.put_nowait(frame)
+            except queue.Full:
+                pass
 
 cap_t = threading.Thread(target=capture_thread, daemon=True)
 cap_t.start()

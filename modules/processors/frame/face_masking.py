@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 from modules.typing import Face, Frame
 import modules.globals
-from modules.gpu_processing import gpu_gaussian_blur, gpu_resize, gpu_cvt_color
+from modules.gpu_processing import gpu_gaussian_blur, gpu_resize
 
 def apply_color_transfer(source, target):
     """

@@ -5,7 +5,6 @@ import os
 import threading
 
 import cv2
-import numpy as np
 
 import modules.globals
 import modules.processors.frame.core

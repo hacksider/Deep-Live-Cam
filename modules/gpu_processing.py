@@ -21,7 +21,7 @@ from __future__ import annotations
 import os
 import cv2
 import numpy as np
-from typing import Tuple, Optional
+from typing import Tuple
 
 # ---------------------------------------------------------------------------
 # CUDA availability detection (evaluated once at import time)

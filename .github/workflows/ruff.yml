@@ -1,0 +1,16 @@
+name: ruff
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  ruff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/ruff-action@v4.0.0
+        with:
+          version: "0.15.7"
+          args: "check --output-format=github"
