@@ -30,8 +30,12 @@ def run_ffmpeg(args: List[str]) -> bool:
     try:
         subprocess.check_output(commands, stderr=subprocess.STDOUT)
         return True
-    except Exception:
-        pass
+    except subprocess.CalledProcessError as error:
+        output = error.output.decode(errors="ignore").strip()
+        if output:
+            print(output)
+    except Exception as error:
+        print(f"ffmpeg execution failed: {error}")
     return False
 
 
@@ -61,19 +65,19 @@ def extract_frames(target_path: str) -> None:
     """Extract frames with hardware acceleration and optimized settings."""
     temp_directory_path = get_temp_directory_path(target_path)
     
-    # Use hardware-accelerated decoding and optimized pixel format
+    # Write a contiguous image sequence so the later "%04d.png" input pattern
+    # used during encoding can consume every frame reliably.
     run_ffmpeg(
         [
             "-i", target_path,
             "-vf", "format=rgb24",  # Use video filter for format conversion (faster)
             "-vsync", "0",  # Prevent frame duplication
-            "-frame_pts", "1",  # Preserve frame timing
             os.path.join(temp_directory_path, "%04d.png"),
         ]
     )
 
 
-def create_video(target_path: str, fps: float = 30.0) -> None:
+def create_video(target_path: str, fps: float = 30.0) -> bool:
     """Create video with hardware-accelerated encoding and optimized settings."""
     temp_output_path = get_temp_output_path(target_path)
     temp_directory_path = get_temp_directory_path(target_path)
@@ -182,7 +186,8 @@ def create_video(target_path: str, fps: float = 30.0) -> None:
             "-y",
             temp_output_path,
         ]
-        run_ffmpeg(ffmpeg_args_fallback)
+        success = run_ffmpeg(ffmpeg_args_fallback)
+    return success and os.path.isfile(temp_output_path)
 
 
 def restore_audio(target_path: str, output_path: str) -> None:
@@ -309,3 +314,35 @@ def conditional_download(download_directory_path: str, urls: List[str]) -> None:
 
 def resolve_relative_path(path: str) -> str:
     return os.path.abspath(os.path.join(os.path.dirname(__file__), path))
+
+
+def get_video_dimensions(target_path: str) -> tuple:
+    """Get video width and height using ffprobe."""
+    command = [
+        "ffprobe", "-v", "error",
+        "-select_streams", "v:0",
+        "-show_entries", "stream=width,height",
+        "-of", "csv=p=0:s=x",
+        target_path,
+    ]
+    output = subprocess.check_output(command).decode().strip()
+    width, height = map(int, output.split("x"))
+    return width, height
+
+
+def estimate_frame_count(target_path: str, fps: float = None) -> int:
+    """Estimate total frame count from video duration and fps."""
+    if fps is None:
+        fps = detect_fps(target_path)
+    command = [
+        "ffprobe", "-v", "error",
+        "-show_entries", "format=duration",
+        "-of", "csv=p=0",
+        target_path,
+    ]
+    try:
+        output = subprocess.check_output(command).decode().strip()
+        duration = float(output)
+        return int(duration * fps)
+    except Exception:
+        return 0

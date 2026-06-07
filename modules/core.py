@@ -2,7 +2,7 @@ import os
 import sys
 # single thread doubles cuda performance - needs to be set before torch import
 if any(arg.startswith('--execution-provider') for arg in sys.argv):
-    os.environ['OMP_NUM_THREADS'] = '1'
+    os.environ['OMP_NUM_THREADS'] = '6'
 # reduce tensorflow log level
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import warnings
@@ -17,12 +17,16 @@ try:
 except ImportError:
     HAS_TORCH = False
 import onnxruntime
-import tensorflow
+try:
+    import tensorflow
+    HAS_TENSORFLOW = True
+except ImportError:
+    HAS_TENSORFLOW = False
 
 import modules.globals
 import modules.metadata
 import modules.ui as ui
-from modules.processors.frame.core import get_frame_processors_modules
+from modules.processors.frame.core import get_frame_processors_modules, process_video_in_memory
 from modules.utilities import has_image_extension, is_image, is_video, detect_fps, create_video, extract_frames, get_temp_frame_paths, restore_audio, create_temp, move_temp, clean_temp, normalize_output_path
 
 if HAS_TORCH and 'ROCMExecutionProvider' in modules.globals.execution_providers:
@@ -53,7 +57,7 @@ def parse_args() -> None:
     program.add_argument('--live-mirror', help='The live camera display as you see it in the front-facing camera frame', dest='live_mirror', action='store_true', default=False)
     program.add_argument('--live-resizable', help='The live camera frame is resizable', dest='live_resizable', action='store_true', default=False)
     program.add_argument('--max-memory', help='maximum amount of RAM in GB', dest='max_memory', type=int, default=suggest_max_memory())
-    program.add_argument('--execution-provider', help='execution provider', dest='execution_provider', default=['cpu'], choices=suggest_execution_providers(), nargs='+')
+    program.add_argument('--execution-provider', help='execution provider', dest='execution_provider', default=[suggest_default_execution_provider()], choices=suggest_execution_providers(), nargs='+')
     program.add_argument('--execution-threads', help='number of execution threads', dest='execution_threads', type=int, default=suggest_execution_threads())
     program.add_argument('-v', '--version', action='version', version=f'{modules.metadata.name} {modules.metadata.version}')
 
@@ -127,6 +131,15 @@ def suggest_max_memory() -> int:
     return 16
 
 
+def suggest_default_execution_provider() -> str:
+    """Pick the best available provider: cuda > rocm > coreml > dml > cpu."""
+    available = encode_execution_providers(onnxruntime.get_available_providers())
+    for pref in ('cuda', 'rocm', 'coreml', 'dml'):
+        if pref in available:
+            return pref
+    return 'cpu'
+
+
 def suggest_execution_providers() -> List[str]:
     return encode_execution_providers(onnxruntime.get_available_providers())
 
@@ -143,8 +156,7 @@ def suggest_execution_threads() -> int:
     if 'ROCMExecutionProvider' in modules.globals.execution_providers:
         return 1
     if 'CUDAExecutionProvider' in modules.globals.execution_providers:
-        # For CUDA, use more threads for parallel frame processing
-        return min(cpu_count, 16)
+        return 2
     
     # For CPU execution, use most cores but leave some for system
     return max(4, min(cpu_count - 2, 16))
@@ -152,14 +164,13 @@ def suggest_execution_threads() -> int:
 
 def limit_resources() -> None:
     # prevent tensorflow memory leak
-    gpus = tensorflow.config.experimental.list_physical_devices('GPU')
-    for gpu in gpus:
-        tensorflow.config.experimental.set_memory_growth(gpu, True)
+    if HAS_TENSORFLOW:
+        gpus = tensorflow.config.experimental.list_physical_devices('GPU')
+        for gpu in gpus:
+            tensorflow.config.experimental.set_memory_growth(gpu, True)
     # limit memory usage
     if modules.globals.max_memory:
         memory = modules.globals.max_memory * 1024 ** 3
-        if platform.system().lower() == 'darwin':
-            memory = modules.globals.max_memory * 1024 ** 6
         if platform.system().lower() == 'windows':
             import ctypes
             kernel32 = ctypes.windll.kernel32
@@ -223,40 +234,70 @@ def start() -> None:
     if modules.globals.nsfw_filter and ui.check_and_ignore_nsfw(modules.globals.target_path, destroy):
         return
 
-    extraction_start = time.time()
-    if not modules.globals.map_faces:
-        update_status('Creating temp resources...')
-        create_temp(modules.globals.target_path)
-        update_status('Extracting frames...')
-        extract_frames(modules.globals.target_path)
-    extraction_time = time.time() - extraction_start
-    update_status(f'Frame extraction completed in {extraction_time:.2f}s')
-
-    temp_frame_paths = get_temp_frame_paths(modules.globals.target_path)
-    total_frames = len(temp_frame_paths)
-    update_status(f'Processing {total_frames} frames with {modules.globals.execution_threads} threads...')
-    
-    processing_start = time.time()
-    for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
-        update_status('Progressing...', frame_processor.NAME)
-        frame_processor.process_video(modules.globals.source_path, temp_frame_paths)
-        release_resources()
-    processing_time = time.time() - processing_start
-    fps_processing = total_frames / processing_time if processing_time > 0 else 0
-    update_status(f'Frame processing completed in {processing_time:.2f}s ({fps_processing:.2f} fps)')
-    
-    # handles fps
-    encoding_start = time.time()
+    # Detect FPS early (needed by both pipelines)
     if modules.globals.keep_fps:
         update_status('Detecting fps...')
         fps = detect_fps(modules.globals.target_path)
-        update_status(f'Creating video with {fps} fps...')
-        create_video(modules.globals.target_path, fps)
     else:
-        update_status('Creating video with 30.0 fps...')
-        create_video(modules.globals.target_path)
-    encoding_time = time.time() - encoding_start
-    update_status(f'Video encoding completed in {encoding_time:.2f}s')
+        fps = 30.0
+
+    video_created = False
+
+    # --- In-memory pipeline (non-map_faces only) ---
+    # Reads frames from FFmpeg pipe, processes in memory, encodes directly.
+    # Eliminates all per-frame PNG disk I/O for a major speed-up.
+    if not modules.globals.map_faces:
+        update_status(f'Processing video in-memory at {fps} fps...')
+        create_temp(modules.globals.target_path)
+
+        processing_start = time.time()
+        video_created = process_video_in_memory(
+            modules.globals.source_path,
+            modules.globals.target_path,
+            fps,
+        )
+        processing_time = time.time() - processing_start
+        release_resources()
+
+        if video_created:
+            update_status(f'In-memory processing + encoding completed in {processing_time:.2f}s')
+
+    # --- Disk-based fallback (required for map_faces, or if pipe failed) ---
+    if not video_created:
+        if not modules.globals.map_faces:
+            update_status('Falling back to disk-based processing...')
+
+        extraction_start = time.time()
+        if not modules.globals.map_faces:
+            create_temp(modules.globals.target_path)
+            update_status('Extracting frames...')
+            extract_frames(modules.globals.target_path)
+        extraction_time = time.time() - extraction_start
+
+        temp_frame_paths = get_temp_frame_paths(modules.globals.target_path)
+        total_frames = len(temp_frame_paths)
+        update_status(f'Processing {total_frames} frames with {modules.globals.execution_threads} threads...')
+
+        processing_start = time.time()
+        for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
+            update_status('Progressing...', frame_processor.NAME)
+            frame_processor.process_video(modules.globals.source_path, temp_frame_paths)
+            release_resources()
+        processing_time = time.time() - processing_start
+        fps_processing = total_frames / processing_time if processing_time > 0 else 0
+        update_status(f'Frame processing completed in {processing_time:.2f}s ({fps_processing:.2f} fps)')
+
+        encoding_start = time.time()
+        update_status(f'Creating video with {fps} fps...')
+        video_created = create_video(modules.globals.target_path, fps)
+        encoding_time = time.time() - encoding_start
+        if video_created:
+            update_status(f'Video encoding completed in {encoding_time:.2f}s')
+
+    if not video_created:
+        update_status('Video encoding failed. No temporary output video was created.')
+        clean_temp(modules.globals.target_path)
+        return
     
     # handle audio
     if modules.globals.keep_audio:
@@ -272,8 +313,8 @@ def start() -> None:
     clean_temp(modules.globals.target_path)
     
     total_time = time.time() - start_time
-    if is_video(modules.globals.target_path):
-        update_status(f'Processing to video succeed! Total time: {total_time:.2f}s')
+    if is_video(modules.globals.target_path) and modules.globals.output_path and os.path.isfile(modules.globals.output_path):
+        update_status(f'Video processing succeeded! Total time: {total_time:.2f}s')
     else:
         update_status('Processing to video failed!')
 
@@ -281,7 +322,8 @@ def start() -> None:
 def destroy(to_quit=True) -> None:
     if modules.globals.target_path:
         clean_temp(modules.globals.target_path)
-    if to_quit: quit()
+    if to_quit:
+        quit()
 
 
 def run() -> None:
@@ -291,6 +333,9 @@ def run() -> None:
     for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
         if not frame_processor.pre_check():
             return
+    # Pre-load face analyser in main thread before GUI starts
+    #from modules.face_analyser import get_face_analyser
+    #get_face_analyser()
     limit_resources()
     if modules.globals.headless:
         start()

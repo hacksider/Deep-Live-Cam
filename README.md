@@ -1,4 +1,4 @@
-<h1 align="center">Deep-Live-Cam 2.1</h1>
+<h1 align="center">Deep-Live-Cam 2.1.6</h1>
 
 <p align="center">
   Real-time face swap and video deepfake with a single click and only a single image.
@@ -30,7 +30,7 @@ By using this software, you agree to these terms and commit to using it in a man
 
 Users are expected to use this software responsibly and legally. If using a real person's face, obtain their consent and clearly label any output as a deepfake when sharing online. We are not responsible for end-user actions.
 
-## Exclusive v2.7 beta Quick Start - Pre-built (Windows/Mac Silicon/CPU)
+## Exclusive v2.7 RC2 Quick Start - Pre-built (Windows/Mac Silicon/CPU)
 
   <a href="https://deeplivecam.net/index.php/quickstart"> <img src="media/Download.png" width="285" height="77" />
 
@@ -142,7 +142,7 @@ pip install -r requirements.txt
 ```
 For Linux:
 ```bash
-# Ensure you use the installed Python 3.10
+# Ensure you use the installed Python 3.11
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -157,7 +157,7 @@ Apple Silicon (M1/M2/M3) requires specific setup:
 brew install python@3.11
 
 # Install tkinter package (required for the GUI)
-brew install python-tk@3.10
+brew install python-tk@3.11
 
 # Create and activate virtual environment with Python 3.11
 python3.11 -m venv venv
@@ -214,7 +214,7 @@ python run.py --execution-provider cuda
 
 Apple Silicon (M1/M2/M3) specific installation:
 
-1. Make sure you've completed the macOS setup above using Python 3.10.
+1. Make sure you've completed the macOS setup above using Python 3.11.
 2. Install dependencies:
 
 ```bash
@@ -222,25 +222,25 @@ pip uninstall onnxruntime onnxruntime-silicon
 pip install onnxruntime-silicon==1.13.1
 ```
 
-3. Usage (important: specify Python 3.10):
+3. Usage:
 
 ```bash
-python3.10 run.py --execution-provider coreml
+python3.11 run.py --execution-provider coreml
 ```
 
 **Important Notes for macOS:**
-- You **must** use Python 3.10, not newer versions like 3.11 or 3.13
-- Always run with `python3.10` command not just `python` if you have multiple Python versions installed
-- If you get error about `_tkinter` missing, reinstall the tkinter package: `brew reinstall python-tk@3.10`
+- You **must** use Python 3.11, not newer versions like 3.13
+- Always run with `python3.11` command not just `python` if you have multiple Python versions installed
+- If you get error about `_tkinter` missing, reinstall the tkinter package: `brew reinstall python-tk@3.11`
 - If you get model loading errors, check that your models are in the correct folder
 - If you encounter conflicts with other Python versions, consider uninstalling them:
   ```bash
   # List all installed Python versions
   brew list | grep python
-  
+
   # Uninstall conflicting versions if needed
-  brew uninstall --ignore-dependencies python@3.11 python@3.13
-  
+  brew uninstall --ignore-dependencies python@3.13
+
   # Keep only Python 3.11
   brew cleanup
   ```
@@ -365,6 +365,7 @@ Looking for a CLI mode? Using the -s/--source argument will make the run program
 -   [kier007](https://github.com/kier007): for improving the user experience
 -   [qitianai](https://github.com/qitianai): for multi-lingual support
 -   [laurigates](https://github.com/laurigates): Decoupling stuffs to make everything faster!
+-   [maxwbuckley](https://github.com/maxwbuckley): For making the effort to optimize this for mac!
 -   and [all developers](https://github.com/hacksider/Deep-Live-Cam/graphs/contributors) behind libraries used in this project.
 -   Footnote: Please be informed that the base author of the code is [s0md3v](https://github.com/s0md3v/roop)
 -   All the wonderful users who helped make this project go viral by starring the repo ❤️

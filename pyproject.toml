@@ -1,0 +1,9 @@
+[tool.ruff]
+target-version = "py310"
+
+[tool.ruff.lint]
+# Deterministic, low-risk rules enforced in CI. Other rules (F841, E402, F821)
+# surface real findings but require human judgement to fix safely, so they are
+# left out of the gate for now. Intentional side-effect imports should be
+# annotated with `# noqa: F401`.
+select = ["E701", "E711", "E712", "F401", "F541"]

@@ -5,7 +5,6 @@ import os
 import threading
 
 import cv2
-import numpy as np
 
 import modules.globals
 import modules.processors.frame.core
@@ -82,8 +81,11 @@ def enhance_face(temp_frame: Frame, face: Face) -> Frame:
         return temp_frame
 
 
-def process_frame(source_face: Face | None, temp_frame: Frame) -> Frame:
-    target_face = get_one_face(temp_frame)
+def process_frame(source_face: Face | None, temp_frame: Frame, detected_faces=None) -> Frame:
+    if detected_faces:
+        target_face = detected_faces[0]
+    else:
+        target_face = get_one_face(temp_frame)
     if target_face is None:
         return temp_frame
     return enhance_face(temp_frame, target_face)

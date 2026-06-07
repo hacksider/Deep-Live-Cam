@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import time
 from typing import Optional, Tuple, Callable
 import platform
 import threading
@@ -17,6 +18,10 @@ class VideoCapturer:
         self._frame_ready = threading.Event()
         self.is_running = False
         self.cap = None
+        # Actual values reported by the camera after configuration
+        self.actual_width: int = 0
+        self.actual_height: int = 0
+        self.actual_fps: float = 0.0
 
         # Initialize Windows-specific components if on Windows
         if platform.system() == "Windows":
@@ -32,17 +37,35 @@ class VideoCapturer:
         """Initialize and start video capture"""
         try:
             if platform.system() == "Windows":
-                # Windows-specific capture methods
+                # device_index comes from pygrabber.FilterGraph (DirectShow
+                # enumeration), so open with DSHOW first to preserve mapping.
+                # MSMF and DirectShow enumerate cameras in different orders, so
+                # opening MSMF with a DSHOW index silently selects the wrong
+                # camera. MSMF/ANY remain as fallbacks for cameras DSHOW can't
+                # open.
+                #
+                # Pass codec + resolution + fps as construction params (OpenCV
+                # 4.6+). DSHOW locks the pixel format at open time and ignores
+                # later cap.set(CAP_PROP_FOURCC, ...) — without this, DSHOW
+                # falls back to uncompressed YUYV at 1080p, which is USB-
+                # bandwidth-limited to ~5 fps. Setting MJPG at construction
+                # negotiates compressed frames from the first read.
+                mjpg = cv2.VideoWriter_fourcc(*'MJPG')
+                open_params = [
+                    cv2.CAP_PROP_FOURCC, mjpg,
+                    cv2.CAP_PROP_FRAME_WIDTH, width,
+                    cv2.CAP_PROP_FRAME_HEIGHT, height,
+                    cv2.CAP_PROP_FPS, fps,
+                ]
                 capture_methods = [
-                    (self.device_index, cv2.CAP_DSHOW),  # Try DirectShow first
-                    (self.device_index, cv2.CAP_ANY),  # Then try default backend
-                    (-1, cv2.CAP_ANY),  # Try -1 as fallback
-                    (0, cv2.CAP_ANY),  # Finally try 0 without specific backend
+                    (self.device_index, cv2.CAP_DSHOW),
+                    (self.device_index, cv2.CAP_MSMF),
+                    (self.device_index, cv2.CAP_ANY),
                 ]
 
                 for dev_id, backend in capture_methods:
                     try:
-                        self.cap = cv2.VideoCapture(dev_id, backend)
+                        self.cap = cv2.VideoCapture(dev_id, backend, open_params)
                         if self.cap.isOpened():
                             break
                         self.cap.release()
@@ -55,10 +78,29 @@ class VideoCapturer:
             if not self.cap or not self.cap.isOpened():
                 raise RuntimeError("Failed to open camera")
 
-            # Configure format
-            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
-            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
-            self.cap.set(cv2.CAP_PROP_FPS, fps)
+            # Belt-and-braces: also set via cap.set() for backends that honor
+            # post-open changes (MSMF, V4L2). DSHOW ignores these, but the
+            # construction params above already handled it.
+            if platform.system() != "Windows":
+                self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
+                self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+                self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+                self.cap.set(cv2.CAP_PROP_FPS, fps)
+
+            # Read back resolution (usually reliable)
+            self.actual_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            self.actual_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+            # CAP_PROP_FPS is unreliable on DirectShow — often reports 30
+            # even when the camera delivers 60.  Measure empirically by
+            # timing a burst of frames.
+            reported_fps = self.cap.get(cv2.CAP_PROP_FPS)
+            self.actual_fps = self._measure_fps(warmup=10, sample=30,
+                                                fallback=reported_fps or fps)
+
+            print(f"[VideoCapturer] {self.actual_width}x{self.actual_height} "
+                  f"@ {self.actual_fps:.1f}fps (reported={reported_fps:.0f})",
+                  flush=True)
 
             self.is_running = True
             return True
@@ -88,6 +130,29 @@ class VideoCapturer:
             self.cap.release()
             self.is_running = False
             self.cap = None
+
+    def _measure_fps(self, warmup: int = 10, sample: int = 30,
+                     fallback: float = 30.0) -> float:
+        """Read warmup+sample frames and return measured FPS.
+
+        This is more reliable than CAP_PROP_FPS which often lies on
+        DirectShow.  Takes ~0.5-1s at startup but gives a ground-truth
+        number for adaptive polling/detection intervals.
+        """
+        try:
+            for _ in range(warmup):
+                self.cap.read()
+            t0 = time.perf_counter()
+            for _ in range(sample):
+                ret, _ = self.cap.read()
+                if not ret:
+                    return fallback
+            elapsed = time.perf_counter() - t0
+            if elapsed <= 0:
+                return fallback
+            return sample / elapsed
+        except Exception:
+            return fallback
 
     def set_frame_callback(self, callback: Callable[[np.ndarray], None]) -> None:
         """Set callback for frame processing"""

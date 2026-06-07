@@ -27,3 +27,5 @@ faceswap/
 switch_states.json
 /models
 install.bat
+/.claude
+*.bat
