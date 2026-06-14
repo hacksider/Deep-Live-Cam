@@ -7,6 +7,7 @@ import numpy as np
 import platform
 import modules.globals
 import modules.processors.frame.core
+from modules import imread_unicode, imwrite_unicode
 from modules.core import update_status
 from modules.face_analyser import get_one_face, get_many_faces, default_source_face
 from modules.typing import Face, Frame
@@ -917,7 +918,7 @@ def process_frames(
             # Log the error but allow proceeding; subsequent check will stop processing.
         else:
             try:
-                source_img = cv2.imread(source_path)
+                source_img = imread_unicode(source_path)
                 if source_img is None:
                     # Specific error for file reading failure
                     update_status(f"Error reading source image file {source_path}. Please check the path and file integrity.", NAME)
@@ -957,7 +958,7 @@ def process_frames(
         # Read the target frame
         temp_frame = None
         try:
-            temp_frame = cv2.imread(temp_frame_path)
+            temp_frame = imread_unicode(temp_frame_path)
             if temp_frame is None:
                 print(f"{NAME}: Error: Could not read frame: {temp_frame_path}, skipping.")
                 if progress:
@@ -995,7 +996,7 @@ def process_frames(
         # Write the result back to the same frame path with optimized compression
         try:
             # Use PNG compression level 3 (faster) instead of default 9
-            write_success = cv2.imwrite(temp_frame_path, result_frame, [cv2.IMWRITE_PNG_COMPRESSION, 3])
+            write_success = imwrite_unicode(temp_frame_path, result_frame, [cv2.IMWRITE_PNG_COMPRESSION, 3])
             if not write_success:
                 print(f"{NAME}: Error: Failed to write processed frame to {temp_frame_path}")
         except Exception as write_e:
@@ -1025,7 +1026,7 @@ def process_image(source_path: str, target_path: str, output_path: str) -> None:
 
     # Read target first
     try:
-        target_frame = cv2.imread(target_path)
+        target_frame = imread_unicode(target_path)
         if target_frame is None:
             update_status(f"Error: Could not read target image: {target_path}", NAME)
             return
@@ -1044,7 +1045,7 @@ def process_image(source_path: str, target_path: str, output_path: str) -> None:
 
         else: # Simple mode
             try:
-                source_img = cv2.imread(source_path)
+                source_img = imread_unicode(source_path)
                 if source_img is None:
                     update_status(f"Error: Could not read source image: {source_path}", NAME)
                     return
@@ -1060,7 +1061,7 @@ def process_image(source_path: str, target_path: str, output_path: str) -> None:
 
         # Write the result if processing was successful
         if result is not None:
-            write_success = cv2.imwrite(output_path, result)
+            write_success = imwrite_unicode(output_path, result)
             if write_success:
                 update_status(f"Output image saved to: {output_path}", NAME)
             else:

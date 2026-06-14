@@ -73,6 +73,7 @@ from modules.utilities import (
     is_image,
     is_video,
 )
+from modules import imread_unicode
 from modules.video_capture import VideoCapturer
 
 if platform.system() == "Windows":
@@ -988,7 +989,7 @@ class PreviewWindow(QWidget):
         from modules.processors.frame.core import get_frame_processors_modules as _gfpm
         for fp in _gfpm(modules.globals.frame_processors):
             temp_frame = fp.process_frame(
-                get_one_face(cv2.imread(modules.globals.source_path)), temp_frame
+                get_one_face(imread_unicode(modules.globals.source_path)), temp_frame
             )
         # Fit to current widget size while preserving aspect ratio.
         h, w = temp_frame.shape[:2]
@@ -1071,7 +1072,7 @@ class _ProcessingWorker(QThread):
                     and modules.globals.source_path != last_source_path
                 ):
                     last_source_path = modules.globals.source_path
-                    source_image = get_one_face(cv2.imread(modules.globals.source_path))
+                    source_image = get_one_face(imread_unicode(modules.globals.source_path))
 
                 det_count += 1
                 if det_count % det_interval == 0:
@@ -1337,7 +1338,7 @@ class MapperDialog(QDialog):
         )
         if not path:
             return
-        cv2_img = cv2.imread(path)
+        cv2_img = imread_unicode(path)
         face = get_one_face(cv2_img)
         if face is None:
             self.set_status("Face could not be detected in last upload!")
@@ -1442,7 +1443,7 @@ class LiveMapperDialog(QDialog):
         )
         if not path:
             return
-        cv2_img = cv2.imread(path)
+        cv2_img = imread_unicode(path)
         face = get_one_face(cv2_img)
         if face is None:
             self.set_status("Face could not be detected in last upload!")
