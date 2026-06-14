@@ -1,0 +1,52 @@
+name: Close stale issues
+
+# Marks an issue as "stale" after 60 days with no activity, then closes it
+# 7 days later if there is still no activity. Any new comment removes the
+# stale label and resets the clock. Pull requests are not touched.
+on:
+  schedule:
+    - cron: "30 1 * * *"   # daily at 01:30 UTC
+  workflow_dispatch: {}     # allow manual runs from the Actions tab
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/stale@v9
+        with:
+          # --- timing (inactivity-based) ---
+          days-before-stale: 60      # mark stale after 60 days with no activity
+          days-before-close: 7       # close 7 days after being marked stale
+          remove-stale-when-updated: true   # a new comment resets the clock
+
+          # apply only to issues, never to pull requests ("tickets" = issues)
+          days-before-pr-stale: -1
+          days-before-pr-close: -1
+
+          # --- labels ---
+          stale-issue-label: stale
+          # never auto-close issues carrying any of these labels
+          exempt-issue-labels: "pinned,security,keep-open,in-progress"
+
+          # close as "not planned" (gray) — accurate for inactivity, not a fix.
+          # change to "completed" if you'd rather they show as resolved.
+          close-issue-reason: not_planned
+
+          # --- messages (kept factual; no unverifiable claims) ---
+          stale-issue-message: >
+            This issue has had no activity for 60 days and has been marked as
+            stale. If it's still relevant, please leave a comment — otherwise it
+            will be closed automatically in 7 days. Thank you for contributing! 🙏
+          close-issue-message: >
+            This issue was closed automatically because it had no activity for 7
+            days after being marked stale. If you're still hitting this on the
+            current release, please reopen it or open a new issue with up-to-date
+            details (OS, version, and logs). Thank you! 🙏
+
+          # process oldest issues first, and enough per run to clear a backlog
+          ascending: true
+          operations-per-run: 100
