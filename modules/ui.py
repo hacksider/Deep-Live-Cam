@@ -313,6 +313,7 @@ def save_switch_states():
         "mouth_mask": modules.globals.mouth_mask,
         "show_mouth_mask_box": modules.globals.show_mouth_mask_box,
         "mouth_mask_size": modules.globals.mouth_mask_size,
+        "gfpgan_model_filename": modules.globals.gfpgan_model_filename,
     }
     try:
         with open("switch_states.json", "w") as f:
@@ -335,13 +336,25 @@ def load_switch_states():
         modules.globals.nsfw_filter = state.get("nsfw_filter", False)
         modules.globals.live_mirror = state.get("live_mirror", False)
         modules.globals.live_resizable = state.get("live_resizable", False)
-        modules.globals.fp_ui = state.get("fp_ui", {"face_enhancer": False})
+        # Normalize fp_ui so every expected key exists — the live worker reads
+        # fp_ui["face_enhancer"] by subscript, which would KeyError on a
+        # persisted dict that omitted it.
+        fp = state.get("fp_ui") or {}
+        modules.globals.fp_ui = {
+            "face_enhancer": fp.get("face_enhancer", False),
+            "face_enhancer_gpen256": fp.get("face_enhancer_gpen256", False),
+            "face_enhancer_gpen512": fp.get("face_enhancer_gpen512", False),
+        }
         modules.globals.show_fps = state.get("show_fps", False)
         # Mouth mask always starts disabled (slider at 0) on launch,
         # regardless of the persisted value — enable it explicitly each session.
         modules.globals.mouth_mask_size = 0.0
         modules.globals.mouth_mask = False
         modules.globals.show_mouth_mask_box = False
+        # Restore the GFPGAN variant; reject unknown values (corrupt file or a
+        # removed model file) so a bad filename can't reach onnxruntime.
+        if state.get("gfpgan_model_filename") in ("gfpgan-1024.onnx", "GFPGANv1.4.onnx"):
+            modules.globals.gfpgan_model_filename = state["gfpgan_model_filename"]
     except FileNotFoundError:
         pass
     except (OSError, json.JSONDecodeError):
@@ -839,15 +852,16 @@ class MainWindow(QMainWindow):
         if selected:
             _update_tumbler(selected, True)
 
-        # If user picked a GFPGAN variant, update the model filename and
-        # drop the cached session so the next inference reloads from disk.
+        # If the user picked a GFPGAN variant, switch models atomically:
+        # reset_face_enhancer(new_fn) sets the filename and drops the cached
+        # session + derived caches under one lock, so the live worker can never
+        # observe a new filename paired with a stale session (or vice versa).
         if choice in gfpgan_filename:
-            prev = getattr(modules.globals, "gfpgan_model_filename", None)
-            modules.globals.gfpgan_model_filename = gfpgan_filename[choice]
-            if prev != gfpgan_filename[choice]:
+            new_fn = gfpgan_filename[choice]
+            if getattr(modules.globals, "gfpgan_model_filename", None) != new_fn:
                 from modules.processors.frame.face_enhancer import reset_face_enhancer
-                reset_face_enhancer()
-                update_status(f"GFPGAN model set to {gfpgan_filename[choice]}")
+                reset_face_enhancer(new_fn)
+                update_status(f"GFPGAN model set to {new_fn}")
 
         save_switch_states()
 
