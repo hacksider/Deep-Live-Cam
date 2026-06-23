@@ -6,9 +6,17 @@ from typing import List, Dict, Any
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 WORKFLOW_DIR = os.path.join(ROOT_DIR, "workflow")
 
+# Canonical media extensions, defined once so file dialogs, file_types and
+# has_image_extension never drift. GIF is intentionally excluded: OpenCV's
+# cv2.imread/imwrite (the only image I/O this app uses) cannot decode or
+# encode GIF on 4.10 or 4.11, so offering it would silently fail. WEBP works
+# via the libwebp bundled with opencv-python.
+IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".bmp", ".webp")
+VIDEO_EXTENSIONS = (".mp4", ".mkv")
+
 file_types = [
-    ("Image", ("*.png", "*.jpg", "*.jpeg", "*.gif", "*.bmp", "*.webp")),
-    ("Video", ("*.mp4", "*.mkv")),
+    ("Image", tuple(f"*{ext}" for ext in IMAGE_EXTENSIONS)),
+    ("Video", tuple(f"*{ext}" for ext in VIDEO_EXTENSIONS)),
 ]
 
 # Face Mapping Data

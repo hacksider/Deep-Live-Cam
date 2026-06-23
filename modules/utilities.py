@@ -262,7 +262,9 @@ def clean_temp(target_path: str) -> None:
 
 
 def has_image_extension(image_path: str) -> bool:
-    return image_path.lower().endswith(("png", "jpg", "jpeg", "gif", "bmp", "webp"))
+    # splitext so only the real extension counts (e.g. "photo.png.bak" is not
+    # an image); the set is centralized in globals to stay in sync with dialogs.
+    return os.path.splitext(image_path)[1].lower() in modules.globals.IMAGE_EXTENSIONS
 
 
 def is_image(image_path: str) -> bool:
