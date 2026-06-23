@@ -244,6 +244,9 @@ _IMAGE_FILE_FILTER = "Images (" + " ".join(
 _MEDIA_FILE_FILTER = "Media (" + " ".join(
     f"*{ext}" for ext in (*modules.globals.IMAGE_EXTENSIONS, *modules.globals.VIDEO_EXTENSIONS)
 ) + ")"
+_VIDEO_FILE_FILTER = "Videos (" + " ".join(
+    f"*{ext}" for ext in modules.globals.VIDEO_EXTENSIONS
+) + ")"
 
 
 # ─── image utilities ─────────────────────────────────────────────────────
@@ -900,7 +903,7 @@ class MainWindow(QMainWindow):
             path, _f = QFileDialog.getSaveFileName(
                 self, _("save video output file"),
                 os.path.join(_RECENT_OUTPUT_DIR or "", "output.mp4"),
-                "Videos (*.mp4 *.mkv)",
+                _VIDEO_FILE_FILTER,
             )
         else:
             return
