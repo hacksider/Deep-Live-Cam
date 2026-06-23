@@ -54,8 +54,9 @@ def get_face_analyser() -> Any:
                     providers=providers,
                     allowed_modules=['detection', 'recognition', 'landmark_2d_106']
                 )
-                analyser.prepare(ctx_id=0, det_size=_current_det_size())
-                _optimize_det_model(analyser, providers)
+                det_size = _current_det_size()
+                analyser.prepare(ctx_id=0, det_size=det_size)
+                _optimize_det_model(analyser, providers, det_size)
                 # Publish only after prepare()/optimize() complete, so a
                 # lock-free reader can never observe a half-built analyser
                 # (insightface fixes det shape at prepare() time).
@@ -65,7 +66,7 @@ def get_face_analyser() -> Any:
     return analyser
 
 
-def _optimize_det_model(fa: Any, providers) -> None:
+def _optimize_det_model(fa: Any, providers, det_size: tuple) -> None:
     """Replace the detection model's ONNX session with a CoreML-optimized one.
 
     Folds dynamic Shape→Gather chains into constants (the input size is
@@ -81,7 +82,7 @@ def _optimize_det_model(fa: Any, providers) -> None:
     if model_path is None or not os.path.exists(model_path):
         return
 
-    ds = _current_det_size()
+    ds = det_size
     input_shape = (1, 3, ds[1], ds[0])
     optimized_path = optimize_for_coreml(model_path, input_shape=input_shape)
     if optimized_path == model_path:

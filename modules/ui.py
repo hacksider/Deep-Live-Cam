@@ -351,7 +351,9 @@ def load_switch_states():
         res = state.get("capture_resolution")
         if isinstance(res, (list, tuple)) and len(res) == 2:
             try:
-                modules.globals.capture_resolution = (int(res[0]), int(res[1]))
+                w, h = int(res[0]), int(res[1])
+                if w > 0 and h > 0:
+                    modules.globals.capture_resolution = (w, h)
             except (TypeError, ValueError):
                 pass
         if state.get("det_size") in (160, 320, 640):
@@ -771,7 +773,14 @@ class MainWindow(QMainWindow):
         for v in self._det_size_options:
             self.cb_det_size.addItem(f"{v} x {v}")
         cur_det = int(getattr(modules.globals, 'det_size', modules.globals.DEFAULT_DET_SIZE))
-        idx = self._det_size_options.index(cur_det) if cur_det in self._det_size_options else self._det_size_options.index(modules.globals.DEFAULT_DET_SIZE)
+        # Normalize to a valid option first so .index() can never raise: fall back
+        # to the default size, then to the last (highest) option if even that is
+        # somehow missing.
+        if cur_det not in self._det_size_options:
+            cur_det = (modules.globals.DEFAULT_DET_SIZE
+                       if modules.globals.DEFAULT_DET_SIZE in self._det_size_options
+                       else self._det_size_options[-1])
+        idx = self._det_size_options.index(cur_det)
         self.cb_det_size.setCurrentIndex(idx)
         self.cb_det_size.currentIndexChanged.connect(self._on_det_size_change)
         self.cb_det_size.setToolTip(_(
