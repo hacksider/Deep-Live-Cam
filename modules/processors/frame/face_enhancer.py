@@ -5,13 +5,14 @@ import cv2
 import threading
 import numpy as np
 import os
+import gc
 
 import onnxruntime
 
 import modules.globals
 import modules.processors.frame.core
 from modules.core import update_status
-from modules.face_analyser import get_one_face, get_many_faces
+from modules.face_analyser import get_many_faces
 from modules.typing import Frame, Face
 from modules.utilities import (
     is_image,
@@ -89,7 +90,6 @@ def reset_face_enhancer(model_filename: str | None = None) -> None:
     # outside the lock so collection never blocks a waiting worker.
     if old_session is not None:
         del old_session
-        import gc
         gc.collect()
 
 
@@ -135,7 +135,12 @@ def get_face_enhancer() -> onnxruntime.InferenceSession:
                     create_onnx_session,
                 )
 
-                update_status(f"Loading GFPGAN ONNX model from {model_path}", NAME)
+                # print (not update_status): runs under THREAD_LOCK, and
+                # update_status can re-enter the Qt event loop (processEvents)
+                # on the UI thread and deadlock on the non-reentrant lock.
+                # The user-facing failure is surfaced by enhance_face's
+                # handler, outside the lock.
+                print(f"{NAME}: Loading GFPGAN ONNX model from {model_path}")
                 FACE_ENHANCER = create_onnx_session(model_path)
 
                 input_info = FACE_ENHANCER.get_inputs()[0]
@@ -155,18 +160,19 @@ def get_face_enhancer() -> onnxruntime.InferenceSession:
                 print(f"{NAME}: Active providers: {active_providers}")
 
             except Exception as e:
-                update_status(f"Error loading GFPGAN ONNX model: {e}", NAME)
                 FACE_ENHANCER = None
                 raise RuntimeError(
                     f"{NAME}: Failed to load GFPGAN ONNX model: {e}"
                 )
 
-    if FACE_ENHANCER is None:
-        raise RuntimeError(
-            f"{NAME}: Failed to initialize GFPGAN ONNX session. Check logs."
-        )
-
-    return FACE_ENHANCER
+        # Validate + return under the lock so a concurrent reset_face_enhancer()
+        # can't null FACE_ENHANCER between this check and the return (which would
+        # hand the worker None -> AttributeError on session.get_inputs()).
+        if FACE_ENHANCER is None:
+            raise RuntimeError(
+                f"{NAME}: Failed to initialize GFPGAN ONNX session. Check logs."
+            )
+        return FACE_ENHANCER
 
 
 def _align_face(
@@ -437,13 +443,19 @@ def enhance_face(temp_frame: Frame, detected_faces=None) -> Frame:
                 print(f"{NAME}: Error enhancing a face: {e}")
                 continue
         else:
-            # Reuse cached enhanced face — just paste back onto current frame
-            cached = _enh_live_cache
-            if cached['enhanced_bgr'] is not None:
+            # Reuse cached enhanced face — just paste back onto current frame.
+            # Snapshot all three fields together under THREAD_LOCK: a concurrent
+            # reset_face_enhancer() nulls them as a set, so an unlocked multi-read
+            # could see enhanced_bgr still set but affine_matrix already None and
+            # hand _paste_back a None matrix (crash in invertAffineTransform).
+            with THREAD_LOCK:
+                cached_bgr = _enh_live_cache['enhanced_bgr']
+                cached_affine = _enh_live_cache['affine_matrix']
+                cached_align = _enh_live_cache['align_size']
+            if cached_bgr is not None:
                 _paste_back(
-                    temp_frame, cached['enhanced_bgr'],
-                    cached['affine_matrix'],
-                    output_size=cached['align_size'],
+                    temp_frame, cached_bgr, cached_affine,
+                    output_size=cached_align,
                 )
         if not many_faces_mode:
             break  # single-face live mode — only process first face

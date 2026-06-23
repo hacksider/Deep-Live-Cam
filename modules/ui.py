@@ -856,12 +856,16 @@ class MainWindow(QMainWindow):
         # reset_face_enhancer(new_fn) sets the filename and drops the cached
         # session + derived caches under one lock, so the live worker can never
         # observe a new filename paired with a stale session (or vice versa).
+        from modules.processors.frame.face_enhancer import reset_face_enhancer
         if choice in gfpgan_filename:
             new_fn = gfpgan_filename[choice]
             if getattr(modules.globals, "gfpgan_model_filename", None) != new_fn:
-                from modules.processors.frame.face_enhancer import reset_face_enhancer
                 reset_face_enhancer(new_fn)
-                update_status(f"GFPGAN model set to {new_fn}")
+                update_status(_("GFPGAN model set to") + f" {new_fn}")
+        else:
+            # Switched to a GPEN variant or None — drop the cached GFPGAN
+            # session so its VRAM isn't pinned for the rest of the session.
+            reset_face_enhancer()
 
         save_switch_states()
 
