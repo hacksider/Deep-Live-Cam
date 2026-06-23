@@ -63,6 +63,7 @@ from modules.face_analyser import (
     get_unique_faces_from_target_image,
     get_unique_faces_from_target_video,
     has_valid_map,
+    reset_face_analyser,
     simplify_maps,
 )
 from modules.gettext import LanguageManager
@@ -314,6 +315,8 @@ def save_switch_states():
         "mouth_mask": modules.globals.mouth_mask,
         "show_mouth_mask_box": modules.globals.show_mouth_mask_box,
         "mouth_mask_size": modules.globals.mouth_mask_size,
+        "capture_resolution": list(modules.globals.capture_resolution),
+        "det_size": modules.globals.det_size,
     }
     try:
         with open("switch_states.json", "w") as f:
@@ -343,6 +346,16 @@ def load_switch_states():
         modules.globals.mouth_mask_size = 0.0
         modules.globals.mouth_mask = False
         modules.globals.show_mouth_mask_box = False
+        # Validate persisted camera settings before trusting them — a hand-
+        # edited/corrupt file shouldn't push a bad size into cv2/insightface.
+        res = state.get("capture_resolution")
+        if isinstance(res, (list, tuple)) and len(res) == 2:
+            try:
+                modules.globals.capture_resolution = (int(res[0]), int(res[1]))
+            except (TypeError, ValueError):
+                pass
+        if state.get("det_size") in (160, 320, 640):
+            modules.globals.det_size = int(state["det_size"])
     except FileNotFoundError:
         pass
     except (OSError, json.JSONDecodeError):
@@ -774,15 +787,25 @@ class MainWindow(QMainWindow):
         if 0 <= idx < len(self._resolution_options):
             _label, wh = self._resolution_options[idx]
             modules.globals.capture_resolution = wh
-            update_status(f"Capture resolution set to {wh[0]}x{wh[1]} (applies on next Live start)")
+            save_switch_states()
+            # Pre-translate the static template; append the dynamic size after
+            # so the message still participates in localization (update_status
+            # only translates whole-string keys).
+            update_status(
+                _("Capture resolution set (applies on next Live start):")
+                + f" {wh[0]}x{wh[1]}"
+            )
 
     def _on_det_size_change(self, idx: int) -> None:
         if 0 <= idx < len(self._det_size_options):
             v = self._det_size_options[idx]
             modules.globals.det_size = v
-            from modules.face_analyser import reset_face_analyser
             reset_face_analyser()
-            update_status(f"Face detection size set to {v}x{v} (analyser will re-init on next call)")
+            save_switch_states()
+            update_status(
+                _("Face detection size set (analyser re-inits on next call):")
+                + f" {v}x{v}"
+            )
 
     # ── slot handlers ────────────────────────────────────────────────────
 

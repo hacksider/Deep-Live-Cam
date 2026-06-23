@@ -37,7 +37,11 @@ def get_face_analyser() -> Any:
     """Get face analyser with thread-safe initialization."""
     global FACE_ANALYSER
 
-    if FACE_ANALYSER is None:
+    # Snapshot the global so a concurrent reset_face_analyser() (e.g. a
+    # det_size change from the UI thread mid-Live) can't null it between our
+    # check and the return.
+    analyser = FACE_ANALYSER
+    if analyser is None:
         with FACE_ANALYSER_LOCK:
             # Double-check after acquiring lock
             if FACE_ANALYSER is None:
@@ -45,14 +49,20 @@ def get_face_analyser() -> Any:
                     build_provider_config,
                 )
                 providers = build_provider_config()
-                FACE_ANALYSER = insightface.app.FaceAnalysis(
+                analyser = insightface.app.FaceAnalysis(
                     name='buffalo_l',
                     providers=providers,
                     allowed_modules=['detection', 'recognition', 'landmark_2d_106']
                 )
-                FACE_ANALYSER.prepare(ctx_id=0, det_size=_current_det_size())
-                _optimize_det_model(FACE_ANALYSER, providers)
-    return FACE_ANALYSER
+                analyser.prepare(ctx_id=0, det_size=_current_det_size())
+                _optimize_det_model(analyser, providers)
+                # Publish only after prepare()/optimize() complete, so a
+                # lock-free reader can never observe a half-built analyser
+                # (insightface fixes det shape at prepare() time).
+                FACE_ANALYSER = analyser
+            else:
+                analyser = FACE_ANALYSER
+    return analyser
 
 
 def _optimize_det_model(fa: Any, providers) -> None:
