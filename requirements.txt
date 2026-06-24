@@ -8,6 +8,7 @@ psutil==5.9.8
 PySide6>=6.7,<7
 pillow==12.1.1
 tqdm>=4.65.0
+scikit-learn>=1.4
 onnxruntime-silicon==1.16.3; sys_platform == 'darwin' and platform_machine == 'arm64'
 onnxruntime-gpu==1.23.2; sys_platform != 'darwin'
 tensorflow>=2.15.0; sys_platform != 'darwin'
@@ -15,3 +16,7 @@ tensorflow>=2.15.0; sys_platform == 'darwin' and python_version < '3.13'
 opennsfw2==0.10.2
 protobuf==4.25.1
 pygrabber; sys_platform == 'win32'
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30,<1
+websockets>=12,<16
+pyvirtualcam>=0.12; sys_platform == 'win32'

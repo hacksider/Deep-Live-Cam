@@ -1,31 +1,123 @@
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
-*.pyc
-.idea
-.todo
-*.log
-*.backup
-tf_env/
-*.png
-*.mp4
-*.mkv
+*.pyd
 
-.tmp/
-temp/
+# C extensions
+*.so
+
+# Virtual environments / local Python
+.Python
+.env
 .venv/
 venv/
 env/
+ENV/
+env.bak/
+venv.bak/
+__pypackages__/
+.pdm.toml
+.pdm-python
+.pdm-build/
+
+# Build / packaging
+build/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+*.manifest
+*.spec
+
+# Test / coverage / tooling caches
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.cache/
+.hypothesis/
+cover/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+.ruff_cache/
+cython_debug/
+
+# Editors / IDEs
+.idea/
+.vscode/
+.spyderproject
+.spyproject
+.ropeproject
+.cursorignore
+.cursorindexingignore
+
+# Logs and local state
+*.log
+*.backup
+.todo
+local_settings.py
+.windows_app_state.json
+switch_states.json
+
+# Jupyter / notebook temp files
+.ipynb_checkpoints/
+*_roundtrip.py
+*_roundtrip.ipynb
+roundtrip.ipynb
+tmp_roundtrip.*
+
+# Local temp/scratch folders
+.tmp/
+temp/
+tmp/
+/tmp/
 workflow/
+faceswap/
+tf_env/
 gfpgan/
+
+# Downloaded models / large generated assets
+models/*.onnx
+models/*.pth
+models/*.pt
+models/*.safetensors
 models/inswapper_128.onnx
 models/GFPGANv1.4.pth
-*.onnx
 models/DMDNet.pth
-faceswap/
-.vscode/
-switch_states.json
 /models
-install.bat
+*.onnx
+
+# Generated media outputs; keep existing tracked media untouched
+*.mp4
+*.mkv
+*.avi
+*.mov
+*.webm
+*.zip
+outputs/
+
+# Secrets / local service config
+*.env
+*.pem
+*.key
+*.token
+
+# Local assistant/tooling folders
 /.claude
-*.bat

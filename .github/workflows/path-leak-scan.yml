@@ -1,0 +1,110 @@
+name: Absolute Path Leak Scan
+
+on:
+#  pull_request:
+#    types: [opened, synchronize, reopened]
+#  push:
+#    branches:
+#      - main
+  workflow_dispatch:
+    inputs:
+      scan_scope:
+        description: "Scan changed files or the full tracked repo"
+        required: true
+        default: "changed"
+        type: choice
+        options:
+          - changed
+          - all
+      extension_scope:
+        description: "File extension scope"
+        required: true
+        default: "text_only"
+        type: choice
+        options:
+          - text_only
+          - any_extension
+      check_mode:
+        description: "Manual check mode (non-secret PII/path checks)"
+        required: true
+        default: "absolute_only"
+        type: choice
+        options:
+          - absolute_only
+          - personal_basic
+          - personal_full
+
+permissions:
+  contents: read
+  pull-requests: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  path-leak-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Scan changed files in pull request
+        if: github.event_name == 'pull_request'
+        run: |
+          python ./scripts/check_absolute_path_leaks.py \
+            --mode changed \
+            --checks absolute_only \
+            --base-ref "${{ github.event.pull_request.base.sha }}" \
+            --head-ref "${{ github.event.pull_request.head.sha }}" \
+            | tee leak-results.txt
+
+      - name: Scan changed files pushed to main
+        if: github.event_name == 'push'
+        run: |
+          python ./scripts/check_absolute_path_leaks.py \
+            --mode changed \
+            --checks absolute_only \
+            --base-ref "${{ github.event.before }}" \
+            --head-ref "${{ github.sha }}" \
+            | tee leak-results.txt
+
+      - name: Scan selected scope manually
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          set -euo pipefail
+          EXTRA_ARGS=""
+          if [ "${{ inputs.extension_scope }}" = "any_extension" ]; then
+            EXTRA_ARGS="--any-extension"
+          fi
+          python ./scripts/check_absolute_path_leaks.py \
+            --mode "${{ inputs.scan_scope }}" \
+            --checks "${{ inputs.check_mode }}" \
+            ${EXTRA_ARGS} \
+            | tee leak-results.txt
+
+      - name: Output leak scan to Summary
+        if: always()
+        run: |
+          echo "### 🔍 Path Leak Scan Results" >> $GITHUB_STEP_SUMMARY
+          if [ -f leak-results.txt ]; then
+            if grep -q "Leak pattern(s) detected:" leak-results.txt; then
+              echo "Status: ❌ Leaks detected" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "Status: ✅ No leaks detected" >> $GITHUB_STEP_SUMMARY
+            fi
+            echo "<details><summary>Expand to view full scan logs</summary>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo '```text' >> $GITHUB_STEP_SUMMARY
+            cat leak-results.txt >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "</details>" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "No scan results found." >> $GITHUB_STEP_SUMMARY
+          fi

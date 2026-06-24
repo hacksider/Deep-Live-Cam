@@ -1,4 +1,4 @@
-"""GPEN-BFR-256 face enhancer — ONNX-based face restoration at 256x256."""
+"""GPEN-BFR-256 face enhancer - ONNX-based face restoration at 256x256."""
 
 from typing import Any, List
 import os
@@ -10,10 +10,7 @@ from modules import imread_unicode, imwrite_unicode
 from modules.core import update_status
 from modules.face_analyser import get_one_face
 from modules.typing import Frame, Face
-from modules.utilities import (
-    is_image,
-    is_video,
-)
+from modules.utilities import conditional_download, is_image, is_video
 from modules.processors.frame._onnx_enhancer import (
     create_onnx_session,
     warmup_session,
@@ -22,8 +19,9 @@ from modules.processors.frame._onnx_enhancer import (
 
 NAME = "DLC.FACE-ENHANCER-GPEN256"
 INPUT_SIZE = 256
-MODEL_URL = "https://github.com/harisreedhar/Face-Upscalers-ONNX/releases/download/GPEN-BFR/GPEN-BFR-256.onnx"
+MODEL_URL = "https://huggingface.co/netrunner-exe/Face-Upscalers-onnx/resolve/main/GPEN-BFR-256.onnx"
 MODEL_FILE = "GPEN-BFR-256.onnx"
+MIN_MODEL_BYTES = 10 * 1024 * 1024
 
 ENHANCER = None
 THREAD_LOCK = threading.Lock()
@@ -34,13 +32,30 @@ models_dir = os.path.join(
 )
 
 
-def pre_check() -> bool:
-    model_path = os.path.join(models_dir, MODEL_FILE)
-    if not os.path.exists(model_path):
-        update_status(f"Downloading {MODEL_FILE}...", NAME)
-        from modules.utilities import conditional_download
-        conditional_download(models_dir, [MODEL_URL])
+def model_path() -> str:
+    return os.path.join(models_dir, MODEL_FILE)
+
+
+def model_ready(path: str) -> bool:
+    return os.path.exists(path) and os.path.getsize(path) >= MIN_MODEL_BYTES
+
+
+def ensure_model() -> bool:
+    path = model_path()
+    if model_ready(path):
+        return True
+    if os.path.exists(path):
+        os.remove(path)
+    update_status(f"Downloading {MODEL_FILE}...", NAME)
+    conditional_download(models_dir, [MODEL_URL])
+    if not model_ready(path):
+        update_status(f"{MODEL_FILE} download failed or is incomplete at {path}", NAME)
+        return False
     return True
+
+
+def pre_check() -> bool:
+    return ensure_model()
 
 
 def pre_start() -> bool:
@@ -54,14 +69,10 @@ def get_enhancer() -> Any:
     global ENHANCER
     with THREAD_LOCK:
         if ENHANCER is None:
-            model_path = os.path.join(models_dir, MODEL_FILE)
-            if not os.path.exists(model_path):
-                from modules.utilities import conditional_download
-                conditional_download(models_dir, [MODEL_URL])
-            if not os.path.exists(model_path):
-                raise FileNotFoundError(f"Model file not found: {model_path}")
-            print(f"{NAME}: Loading ONNX model from {model_path}")
-            ENHANCER = create_onnx_session(model_path)
+            if not ensure_model():
+                raise FileNotFoundError(f"Model file not found or incomplete: {model_path()}")
+            print(f"{NAME}: Loading ONNX model from {model_path()}")
+            ENHANCER = create_onnx_session(model_path())
             warmup_session(ENHANCER)
             print(f"{NAME}: Model loaded successfully.")
     return ENHANCER
