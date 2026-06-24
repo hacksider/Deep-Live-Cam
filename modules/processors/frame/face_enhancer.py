@@ -5,6 +5,7 @@ import cv2
 import threading
 import numpy as np
 import os
+import gc
 
 import onnxruntime
 
@@ -23,6 +24,15 @@ FACE_ENHANCER = None
 THREAD_SEMAPHORE = threading.Semaphore()
 THREAD_LOCK = threading.Lock()
 NAME = "DLC.FACE-ENHANCER"
+
+# Whitelist of shipped GFPGAN ONNX variants. Guards _gfpgan_model_path against
+# a corrupt/hand-edited gfpgan_model_filename (typo or path traversal) reaching
+# onnxruntime — anything unrecognized falls back to the default.
+_GFPGAN_MODELS = ("gfpgan-1024.onnx", "GFPGANv1.4.onnx")
+_GFPGAN_DEFAULT = "gfpgan-1024.onnx"
+# Set when a model fails to load so the per-frame degrade path warns once
+# instead of spamming the status bar every frame. Cleared on reset.
+_enh_load_warned = False
 
 abs_dir = os.path.dirname(os.path.abspath(__file__))
 models_dir = os.path.join(
@@ -43,12 +53,53 @@ FFHQ_TEMPLATE_512 = np.array(
 )
 
 
+def _gfpgan_model_path() -> str:
+    filename = getattr(modules.globals, "gfpgan_model_filename", _GFPGAN_DEFAULT)
+    if filename not in _GFPGAN_MODELS:
+        filename = _GFPGAN_DEFAULT
+    return os.path.join(models_dir, filename)
+
+
+def reset_face_enhancer(model_filename: str | None = None) -> None:
+    """Drop the cached GFPGAN session so the next call reloads from disk.
+
+    Called by the UI on enhancer dropdown change so the user can hot-swap
+    GFPGAN-1024 <-> GFPGAN-512 mid-session. Pass ``model_filename`` to switch
+    variants atomically: the filename, the cached session and all derived
+    caches are updated together under THREAD_LOCK, so a worker mid-frame can
+    never observe a new filename with a stale session (or vice versa).
+    """
+    global FACE_ENHANCER, _enh_load_warned
+    with THREAD_LOCK:
+        if model_filename is not None:
+            modules.globals.gfpgan_model_filename = model_filename
+        old_session = FACE_ENHANCER
+        FACE_ENHANCER = None
+        _enh_load_warned = False
+        # Invalidate the feathered-mask cache — output size likely changes.
+        _enhancer_cache['mask'] = None
+        _enhancer_cache['mask_size'] = 0
+        # Invalidate the temporal (live) cache too — it holds the previous
+        # model's enhanced face/affine at the old align size; reusing it after
+        # a switch would paste a mismatched-size face for a frame or two.
+        _enh_live_cache['enhanced_bgr'] = None
+        _enh_live_cache['affine_matrix'] = None
+        _enh_live_cache['align_size'] = 0
+        _enh_live_cache['frame_count'] = 0
+    # Release the old onnxruntime session's VRAM promptly. onnxruntime exposes
+    # no close(), so drop the last reference and force a collection; done
+    # outside the lock so collection never blocks a waiting worker.
+    if old_session is not None:
+        del old_session
+        gc.collect()
+
+
 def pre_check() -> bool:
-    model_path = os.path.join(models_dir, "gfpgan-1024.onnx")
+    model_path = _gfpgan_model_path()
     if not os.path.exists(model_path):
         update_status(
             f"GFPGAN ONNX model not found at {model_path}. "
-            "Please place gfpgan-1024.onnx in the models folder.",
+            f"Place {os.path.basename(model_path)} in the models folder.",
             NAME,
         )
         return False
@@ -73,7 +124,7 @@ def get_face_enhancer() -> onnxruntime.InferenceSession:
 
     with THREAD_LOCK:
         if FACE_ENHANCER is None:
-            model_path = os.path.join(models_dir, "gfpgan-1024.onnx")
+            model_path = _gfpgan_model_path()
 
             if not os.path.exists(model_path):
                 raise FileNotFoundError(
@@ -85,6 +136,12 @@ def get_face_enhancer() -> onnxruntime.InferenceSession:
                     create_onnx_session,
                 )
 
+                # print (not update_status): runs under THREAD_LOCK, and
+                # update_status can re-enter the Qt event loop (processEvents)
+                # on the UI thread and deadlock on the non-reentrant lock.
+                # The user-facing failure is surfaced by enhance_face's
+                # handler, outside the lock.
+                print(f"{NAME}: Loading GFPGAN ONNX model from {model_path}")
                 FACE_ENHANCER = create_onnx_session(model_path)
 
                 input_info = FACE_ENHANCER.get_inputs()[0]
@@ -104,18 +161,19 @@ def get_face_enhancer() -> onnxruntime.InferenceSession:
                 print(f"{NAME}: Active providers: {active_providers}")
 
             except Exception as e:
-                print(f"{NAME}: Error loading GFPGAN ONNX model: {e}")
                 FACE_ENHANCER = None
                 raise RuntimeError(
                     f"{NAME}: Failed to load GFPGAN ONNX model: {e}"
                 )
 
-    if FACE_ENHANCER is None:
-        raise RuntimeError(
-            f"{NAME}: Failed to initialize GFPGAN ONNX session. Check logs."
-        )
-
-    return FACE_ENHANCER
+        # Validate + return under the lock so a concurrent reset_face_enhancer()
+        # can't null FACE_ENHANCER between this check and the return (which would
+        # hand the worker None -> AttributeError on session.get_inputs()).
+        if FACE_ENHANCER is None:
+            raise RuntimeError(
+                f"{NAME}: Failed to initialize GFPGAN ONNX session. Check logs."
+            )
+        return FACE_ENHANCER
 
 
 def _align_face(
@@ -179,18 +237,23 @@ def _paste_back(
     h, w = frame.shape[:2]
     inv_matrix = cv2.invertAffineTransform(affine_matrix)
 
-    # Build or reuse cached feathered mask (uint8 — blended via cv2 SIMD ops)
-    if _enhancer_cache['mask_size'] != output_size:
-        face_mask_f = np.ones((output_size, output_size), dtype=np.float32)
-        border = max(1, int(output_size * 0.05))
-        ramp_up = np.linspace(0.0, 1.0, border, dtype=np.float32)
-        ramp_down = np.linspace(1.0, 0.0, border, dtype=np.float32)
-        face_mask_f[:border, :] *= ramp_up[:, None]
-        face_mask_f[-border:, :] *= ramp_down[:, None]
-        face_mask_f[:, :border] *= ramp_up[None, :]
-        face_mask_f[:, -border:] *= ramp_down[None, :]
-        _enhancer_cache['mask'] = (face_mask_f * 255.0).astype(np.uint8)
-        _enhancer_cache['mask_size'] = output_size
+    # Build or reuse cached feathered mask (uint8 — blended via cv2 SIMD ops).
+    # Done under THREAD_LOCK and snapshotted into a local so a concurrent
+    # reset_face_enhancer() (which nulls the cache) can't race the read below
+    # and hand cv2.warpAffine a None mask.
+    with THREAD_LOCK:
+        if _enhancer_cache['mask_size'] != output_size:
+            face_mask_f = np.ones((output_size, output_size), dtype=np.float32)
+            border = max(1, int(output_size * 0.05))
+            ramp_up = np.linspace(0.0, 1.0, border, dtype=np.float32)
+            ramp_down = np.linspace(1.0, 0.0, border, dtype=np.float32)
+            face_mask_f[:border, :] *= ramp_up[:, None]
+            face_mask_f[-border:, :] *= ramp_down[:, None]
+            face_mask_f[:, :border] *= ramp_up[None, :]
+            face_mask_f[:, -border:] *= ramp_down[None, :]
+            _enhancer_cache['mask'] = (face_mask_f * 255.0).astype(np.uint8)
+            _enhancer_cache['mask_size'] = output_size
+        mask = _enhancer_cache['mask']
 
     # Compute tight bbox from affine corners (avoids full-frame warpAffine scan)
     corners = np.array([[0, 0], [output_size, 0],
@@ -220,7 +283,7 @@ def _paste_back(
         borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0),
     )
     inv_mask_crop = cv2.warpAffine(
-        _enhancer_cache['mask'], inv_crop, (crop_w, crop_h),
+        mask, inv_crop, (crop_w, crop_h),
         borderMode=cv2.BORDER_CONSTANT, borderValue=0,
     )
 
@@ -294,7 +357,18 @@ def enhance_face(temp_frame: Frame, detected_faces=None) -> Frame:
             Also enables temporal caching — inference runs every
             _ENH_INTERVAL frames, reusing the cached result otherwise.
     """
-    session = get_face_enhancer()
+    global _enh_load_warned
+    try:
+        session = get_face_enhancer()
+    except Exception as e:
+        # A missing/corrupt model (e.g. user picked GFPGAN-512 but only has
+        # the 1024 file) must NOT propagate — it would unwind out of the live
+        # worker thread and freeze the preview. Degrade to passthrough and
+        # warn once until the model is fixed or another variant is selected.
+        if not _enh_load_warned:
+            update_status(f"Face enhancer disabled: {e}", NAME)
+            _enh_load_warned = True
+        return temp_frame
 
     # Determine model input resolution from the session metadata
     input_info = session.get_inputs()[0]
@@ -370,13 +444,19 @@ def enhance_face(temp_frame: Frame, detected_faces=None) -> Frame:
                 print(f"{NAME}: Error enhancing a face: {e}")
                 continue
         else:
-            # Reuse cached enhanced face — just paste back onto current frame
-            cached = _enh_live_cache
-            if cached['enhanced_bgr'] is not None:
+            # Reuse cached enhanced face — just paste back onto current frame.
+            # Snapshot all three fields together under THREAD_LOCK: a concurrent
+            # reset_face_enhancer() nulls them as a set, so an unlocked multi-read
+            # could see enhanced_bgr still set but affine_matrix already None and
+            # hand _paste_back a None matrix (crash in invertAffineTransform).
+            with THREAD_LOCK:
+                cached_bgr = _enh_live_cache['enhanced_bgr']
+                cached_affine = _enh_live_cache['affine_matrix']
+                cached_align = _enh_live_cache['align_size']
+            if cached_bgr is not None:
                 _paste_back(
-                    temp_frame, cached['enhanced_bgr'],
-                    cached['affine_matrix'],
-                    output_size=cached['align_size'],
+                    temp_frame, cached_bgr, cached_affine,
+                    output_size=cached_align,
                 )
         if not many_faces_mode:
             break  # single-face live mode — only process first face
