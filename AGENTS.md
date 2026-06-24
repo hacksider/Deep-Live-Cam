@@ -2,11 +2,28 @@
 
 ## Start Here
 
-- You are working on Windows in PowerShell. Prefer explicit PowerShell cmdlets such as `Get-ChildItem`, `Set-Location`, `Get-Content`, and `Set-Content`; avoid Unix-only shell assumptions.
+- If you are working on Windows, use PowerShell 7 (`pwsh`) and prefer explicit PowerShell cmdlets such as `Get-ChildItem`, `Set-Location`, `Get-Content`, and `Set-Content`; avoid Unix-only shell assumptions.
 - Before editing, inspect the target tree and read repo-local guidance: `AGENTS.md`, `README.md`, `CONTRIBUTING.md`, and `HOWTO.md` when present.
 - Keep commands runnable from the repository root unless a section explicitly says otherwise.
 - This repository is a downstream fork of `hacksider/Deep-Live-Cam` focused on Google Colab batch processing and a desktop remote controller app.
 - `main` is the fork product/release branch. `upstream-main` is the clean sync branch from `hacksider/main`.
+
+## A0. Environment Gate for Windows PowerShell Workflows
+
+When working in a Windows PowerShell terminal, run this first:
+
+```powershell
+$PSVersionTable
+```
+
+Windows PowerShell workflows must satisfy:
+
+- `$PSVersionTable.PSEdition -eq 'Core'`
+- `$PSVersionTable.PSVersion.Major -eq 7`
+
+If either condition is not satisfied: **ABORT(A0)** for Windows-specific commands and switch to `pwsh` 7 before continuing.
+
+This gate applies to Windows/PowerShell workflows. It does not require Linux, macOS, or Colab-only contributors to use PowerShell.
 
 ## Repository Map
 
