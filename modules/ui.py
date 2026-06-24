@@ -237,6 +237,18 @@ _RECENT_SOURCE_DIR: Optional[str] = None
 _RECENT_TARGET_DIR: Optional[str] = None
 _RECENT_OUTPUT_DIR: Optional[str] = None
 
+# QFileDialog filter strings, built from the canonical extension sets in
+# globals so every dialog stays in sync (no hand-copied lists to drift).
+_IMAGE_FILE_FILTER = "Images (" + " ".join(
+    f"*{ext}" for ext in modules.globals.IMAGE_EXTENSIONS
+) + ")"
+_MEDIA_FILE_FILTER = "Media (" + " ".join(
+    f"*{ext}" for ext in (*modules.globals.IMAGE_EXTENSIONS, *modules.globals.VIDEO_EXTENSIONS)
+) + ")"
+_VIDEO_FILE_FILTER = "Videos (" + " ".join(
+    f"*{ext}" for ext in modules.globals.VIDEO_EXTENSIONS
+) + ")"
+
 
 # ─── image utilities ─────────────────────────────────────────────────────
 
@@ -734,7 +746,7 @@ class MainWindow(QMainWindow):
         path, _filter = QFileDialog.getOpenFileName(
             self, _("select an source image"),
             _RECENT_SOURCE_DIR or "",
-            "Images (*.png *.jpg *.jpeg *.gif *.bmp)",
+            _IMAGE_FILE_FILTER,
         )
         if path and is_image(path):
             modules.globals.source_path = path
@@ -755,7 +767,7 @@ class MainWindow(QMainWindow):
         path, _filter = QFileDialog.getOpenFileName(
             self, _("select an target image or video"),
             _RECENT_TARGET_DIR or "",
-            "Media (*.png *.jpg *.jpeg *.gif *.bmp *.mp4 *.mkv)",
+            _MEDIA_FILE_FILTER,
         )
         if not path:
             return
@@ -886,13 +898,13 @@ class MainWindow(QMainWindow):
             path, _f = QFileDialog.getSaveFileName(
                 self, _("save image output file"),
                 os.path.join(_RECENT_OUTPUT_DIR or "", "output.png"),
-                "Images (*.png *.jpg *.jpeg *.bmp)",
+                _IMAGE_FILE_FILTER,
             )
         elif is_video(modules.globals.target_path):
             path, _f = QFileDialog.getSaveFileName(
                 self, _("save video output file"),
                 os.path.join(_RECENT_OUTPUT_DIR or "", "output.mp4"),
-                "Videos (*.mp4 *.mkv)",
+                _VIDEO_FILE_FILTER,
             )
         else:
             return
@@ -1334,7 +1346,7 @@ class MapperDialog(QDialog):
         path, _f = QFileDialog.getOpenFileName(
             self, _("select an source image"),
             _RECENT_SOURCE_DIR or "",
-            "Images (*.png *.jpg *.jpeg *.gif *.bmp)",
+            _IMAGE_FILE_FILTER,
         )
         if not path:
             return
@@ -1439,7 +1451,7 @@ class LiveMapperDialog(QDialog):
         path, _f = QFileDialog.getOpenFileName(
             self, _("select an source image"),
             _RECENT_SOURCE_DIR or "",
-            "Images (*.png *.jpg *.jpeg *.gif *.bmp)",
+            _IMAGE_FILE_FILTER,
         )
         if not path:
             return
