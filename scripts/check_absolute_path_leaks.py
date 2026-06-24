@@ -219,11 +219,10 @@ CHECK_HANDLERS = {
 
 CHECK_PRESETS = {
     "absolute_only": ["absolute_paths"],
-    "personal_basic": ["absolute_paths", "email", "ip"],
+    "personal_basic": ["absolute_paths", "email"],
     "personal_full": [
         "absolute_paths",
         "email",
-        "ip",
         "address",
         "national_id",
         "birthdate",
