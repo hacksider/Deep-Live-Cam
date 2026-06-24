@@ -1,4 +1,4 @@
-from windows_app.ui_patches import main
+from windows_app.processing_options_patches import main
 
 if __name__ == "__main__":
     raise SystemExit(main())
