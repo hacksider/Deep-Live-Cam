@@ -1,7 +1,7 @@
-<h1 align="center">Deep-Live-Cam 2.1.6</h1>
+<h1 align="center">Deep-Live-Cam Remote</h1>
 
 <p align="center">
-  Real-time face swap and video deepfake with a single click and only a single image.
+  Colab-native batch face swap with a desktop remote controller over Tailscale.
 </p>
 
 <p align="center">
@@ -11,6 +11,88 @@
 <p align="center">
   <img src="media/demo.gif" alt="Demo GIF" width="800">
 </p>
+
+## Colab-native folder batch workflow and desktop remote app
+
+This project variant adds a headless processor for photos/videos that already
+exist at Colab or mounted Google Drive paths, plus an optional desktop remote
+controller. The controller is remote-only: it talks to a private FastAPI server
+running in Colab over Tailscale and uses preset Google Drive folders instead of
+uploading large media through the app. The remote batch/controller path does not
+add NSFW filtering or consent-gate UI.
+
+- Notebook: `google-colab/Deep_Live_Cam_Remote_Batch.ipynb`
+- Round-trip source: `google-colab/Deep_Live_Cam_Remote_Batch.py`
+- Standalone batch entry point: `colab_batch.py`
+- Colab API entry point: `colab_api.py`
+- Desktop app entry point: `run_windows_remote_app.py`
+
+```bash
+python colab_batch.py process \
+  --source-face /content/source.png \
+  --input-dir /content/in \
+  --output-dir /content/out \
+  --zip-output /content/face-swapped.zip
+```
+
+The default pipeline caps processing/output at 30 FPS and 420 pixels wide,
+resizes before inference, preserves audio, uses bounded decode/encode queues,
+and skips only exact matches from its input/source/model/settings manifest.
+On the first run it downloads and validates `models/inswapper_128.onnx` before
+processing starts, instead of silently emitting unchanged frames.
+Use `--help` for SS/duration, multi-face, mouth mask, opacity, sharpness,
+interpolation, Poisson, color correction, and GFPGAN/GPEN options.
+
+
+### Desktop remote controller
+
+1. In Colab, open `google-colab/Deep_Live_Cam_Remote_Batch.ipynb`, run the setup
+   cell, mount Drive, run the API server cell, and connect the notebook runtime
+   to Tailscale.
+2. Put files under the preset Drive layout:
+   - `/content/drive/MyDrive/DeepLiveCamRemote/source/source.png`
+   - `/content/drive/MyDrive/DeepLiveCamRemote/photos/`
+   - `/content/drive/MyDrive/DeepLiveCamRemote/videos/`
+   - outputs land under `/content/drive/MyDrive/DeepLiveCamRemote/outputs/`.
+3. On Windows, install requirements in the project `.venv`, then launch:
+
+```powershell
+Set-Location .
+py -3.11 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\run_windows_remote_app.ps1
+```
+
+Enter the Colab Tailscale IP and port `7860`, then use the Photos, Videos, or
+Live tabs. Photo and video jobs mirror relative input folders under the selected
+output path. Cancel requests are graceful and stop before the next queued file.
+
+#### Desktop App Features
+- **Dark title bar** and custom app icon
+- **Full processing options** on both Photos and Videos tabs: recursive, overwrite, skip processed, many faces, enhancer, opacity, sharpness, mouth mask, interpolation, poisson blend, color correction
+- **Video percentage range**: start/end % to process only a portion of videos
+- **Start/Stop toggle**: buttons switch to red Stop when running
+- **Outputs tab**: resizable split view with preview/player and autoplay
+- **Local file support**: source faces and inputs can be local desktop paths (uploaded automatically)
+- **Settings sync**: changes in one tab sync to the other
+
+#### Colab Notebook Features
+- **Resumable cells**: re-run after session restart completes in seconds
+- **Auto-update**: setup cell runs `git pull` when repo exists
+
+Photo CLI usage is also available directly in Colab:
+
+```bash
+python colab_batch.py photos   --source-face /content/drive/MyDrive/DeepLiveCamRemote/source/source.png   --input-dir /content/drive/MyDrive/DeepLiveCamRemote/photos   --output-dir /content/drive/MyDrive/DeepLiveCamRemote/outputs/photos
+```
+
+For identity mapping, first generate contact sheets and editable JSON:
+
+```bash
+python colab_batch.py scan --input-dir /content/in --mapping-dir /content/mapping
+python colab_batch.py process --input-dir /content/in --output-dir /content/out \
+  --map-config /content/mapping/face_mapping.json
+```
 
 ##  Disclaimer
 

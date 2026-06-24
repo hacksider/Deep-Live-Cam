@@ -200,12 +200,23 @@ def pre_check() -> bool:
         return False
     
     # Use the direct download URL from Hugging Face (FP32 model for broad GPU compatibility)
-    conditional_download(
-        download_directory_path,
-        [
-            "https://huggingface.co/hacksider/deep-live-cam/resolve/main/inswapper_128.onnx"
-        ],
-    )
+    model_path = os.path.join(download_directory_path, "inswapper_128.onnx")
+    # Remove an interrupted/HTML error download so conditional_download retries.
+    if os.path.exists(model_path) and os.path.getsize(model_path) < 1024 * 1024:
+        os.remove(model_path)
+    try:
+        conditional_download(
+            download_directory_path,
+            [
+                "https://huggingface.co/hacksider/deep-live-cam/resolve/main/inswapper_128.onnx"
+            ],
+        )
+    except Exception as error:
+        update_status(f"Could not download inswapper_128.onnx: {error}", NAME)
+        return False
+    if not os.path.isfile(model_path) or os.path.getsize(model_path) < 1024 * 1024:
+        update_status(f"inswapper_128.onnx download is missing or incomplete: {model_path}", NAME)
+        return False
     return True
 
 
@@ -518,11 +529,12 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
     opacity = max(0.0, min(1.0, opacity))
     mouth_mask_enabled = getattr(modules.globals, "mouth_mask", False)
     poisson_blend_enabled = getattr(modules.globals, "poisson_blend", False)
+    color_correction_enabled = getattr(modules.globals, "color_correction", False)
     # Poisson blend's seamlessClone needs the genuine pre-swap frame as its
     # destination. Without this, original_frame aliases temp_frame, which
     # _fast_paste_back mutates in place — so seamlessClone would blend the
     # swapped face onto the already-swapped frame (no visible effect).
-    needs_original = opacity < 1.0 or mouth_mask_enabled or poisson_blend_enabled
+    needs_original = opacity < 1.0 or mouth_mask_enabled or poisson_blend_enabled or color_correction_enabled
     if needs_original:
         original_frame = temp_frame.copy()
     else:
@@ -556,6 +568,16 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
         # to create the white mask. Avoids redundant norm_crop2 (~0.6ms).
         _face_size = face_swapper.input_size[0]
         _aimg_dummy = np.empty((_face_size, _face_size, 3), dtype=np.uint8)
+
+        if color_correction_enabled:
+            target_aligned = cv2.warpAffine(
+                original_frame,
+                M,
+                (_face_size, _face_size),
+                flags=cv2.INTER_LINEAR,
+                borderMode=cv2.BORDER_REFLECT,
+            )
+            bgr_fake = apply_color_transfer(bgr_fake, target_aligned)
 
         swapped_frame = _fast_paste_back(temp_frame, bgr_fake, _aimg_dummy, M)
 
