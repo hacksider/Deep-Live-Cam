@@ -25,6 +25,20 @@ If either condition is not satisfied: **ABORT(A0)** for Windows-specific command
 
 This gate applies to Windows/PowerShell workflows. It does not require Linux, macOS, or Colab-only contributors to use PowerShell.
 
+## PowerShell Command Rules
+
+When working in Windows/PowerShell:
+
+- Use `-LiteralPath` for literal filesystem paths whenever available.
+- Use named parameters for commands with multiple meaningful arguments.
+- Do not use bash heredocs (`<<`). Use PowerShell here-strings only when the header is followed immediately by a newline and the terminator starts at column 1.
+- Do not use `Select-String -Recurse`; recurse with `Get-ChildItem -Recurse -File | Select-String`.
+- For large recursive searches, exclude high-volume/generated directories such as `.git`, `.venv`, `build`, `dist`, `coverage`, and `node_modules`, or filter by extension.
+- Quote git revspecs containing `@{}`; for example `git rev-list --left-right --count "@{u}...HEAD"`.
+- For native commands (`git`, `gh`, `python`, etc.), check `$LASTEXITCODE` immediately when command success matters.
+- For external `.ps1` execution from another shell or process boundary, prefer `pwsh -NoProfile -ExecutionPolicy Bypass -File .\script.ps1`. This is process-scoped and not a persistent machine policy change.
+- Write text files as UTF-8 without BOM and respect the repository EOL policy from `.gitattributes` or other repo config.
+
 ## Repository Map
 
 - `run.py` - upstream Deep-Live-Cam local GUI/CLI entry point.
@@ -86,6 +100,9 @@ Rules:
 - Preserve cell ids, marker lines, `meta_b64`, `NOTEBOOK_META_B64`, `MARKDOWN` / `ENDMARKDOWN`, and `RAW` / `ENDRAW` sentinels.
 - Remove throwaway round-trip files such as `_roundtrip.py`, `_roundtrip.ipynb`, or temp notebooks after validation unless the user asks to keep them.
 - Run conversions from the repo root, then check `git diff`.
+- Do not paste generated base64 payloads into the markerized `.py`; keep readable `IPYNB_EMBED_B64_FROM_CELL` directives when present.
+- Notebook round-trip does not preserve outputs, execution counts, or volatile runtime metadata. Do not rely on those in committed notebooks.
+- If scripting notebook edits, write to a temporary file and replace only after successful parsing/conversion.
 
 Commands:
 
@@ -107,9 +124,29 @@ Important: since the notebook clones from GitHub, push changes to `main` before 
 
 ## Context7 Documentation Rule
 
-Use Context7 MCP to fetch current documentation whenever the user asks about a library, framework, SDK, API, CLI tool, or cloud service. Start with `resolve-library-id` unless the user provides an exact `/org/project` library ID, then call `query-docs` with the selected ID and the user's full question. Prefer Context7 over web search for library docs.
+Use Context7 MCP to fetch current documentation whenever the user asks about a library, framework, SDK, API, CLI tool, or cloud service. Start with `resolve-library-id` unless the user provides an exact `/org/project` or `/org/project/version` library ID, then call `query-docs` with the selected ID and the user's full, specific question. Prefer Context7 over web search for library docs.
 
-Do not use Context7 for general refactoring, writing scripts from scratch, business-logic debugging, code review, or general programming concepts.
+Selection rules:
+
+- Prefer exact product/package matches, official or primary-source docs, High/Medium reputation, strong snippet coverage, and a matching version when specified.
+- Do not invent library IDs. Use only IDs returned by `resolve-library-id` or supplied by the user.
+- If results are irrelevant, retry with an official alternate spelling, package name, or parent project. Stop after at most three resolution attempts.
+- Answer from retrieved docs, and label limitations or inference when docs do not establish the requested behavior.
+
+Do not use Context7 for general refactoring, writing scripts from scratch, business-logic debugging, code review, or general programming concepts unless the task depends on current third-party API behavior or configuration.
+
+## GUI / Desktop App Implementation Rules
+
+For desktop remote app changes:
+
+- Do not push directly to `main`; use a feature/import branch and PR. Do not merge PRs unless the user explicitly asks.
+- Keep a live plan in `devdocs/plans/<date>-<slug>.md` for substantial GUI work. Include scope, affected components, action items, decisions, blockers, and user-deferred validation.
+- Sync docs whenever GUI behavior changes: `README.md`, `CONTRIBUTING.md` or `AGENTS.md` when workflow changes, and `devdocs/releases/unreleased.md` for release notes.
+- Preserve existing theme/style, asset paths, settings persistence, and window geometry/state behavior.
+- Avoid broad GUI rewrites unless requested. Make the smallest correct change first.
+- Avoid emojis in CLI/console output paths; handle Unicode output defensively on Windows.
+- For PyInstaller or packaged-app work, ensure icons, QSS, config, and other runtime assets are included and use `sys._MEIPASS`-compatible path resolution.
+- Validation/tests/builds are user-owned unless explicitly requested. Do not claim validation that was not run.
 
 ## Git / Safety
 
