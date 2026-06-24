@@ -11,6 +11,7 @@ __pycache__/
 .Python
 .env
 .venv/
+.venv_build/
 venv/
 env/
 ENV/
@@ -121,3 +122,4 @@ outputs/
 
 # Local assistant/tooling folders
 /.claude
+

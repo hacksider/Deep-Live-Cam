@@ -1,0 +1,269 @@
+name: Build and Release Desktop App
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref_override:
+        description: 'ADVANCED: source branch/ref override for code/scripts. Leave empty to use GitHub "Use workflow from".'
+        required: false
+        type: string
+        default: ''
+      release_tag:
+        description: 'Existing release tag to attach to (for example, v0.1.0)'
+        required: true
+        type: string
+      flavor:
+        description: 'Desktop app flavor to build'
+        required: true
+        type: choice
+        options:
+          - lite
+          - full
+          - both
+        default: lite
+      package_mode:
+        description: 'PyInstaller packaging mode. onedir outputs are zipped before release upload.'
+        required: true
+        type: choice
+        options:
+          - onefile
+          - onedir
+        default: onefile
+      clean:
+        description: 'Clean PyInstaller cache before building'
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+env:
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  build-and-release:
+    name: Build and upload release asset (${{ inputs.flavor }}, ${{ inputs.package_mode }})
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.source_ref_override || github.ref }}
+
+      - name: Confirm selected source ref
+        shell: pwsh
+        run: |
+          $override = '${{ inputs.source_ref_override }}'
+          $workflowRef = '${{ github.ref }}'
+          if ($override) {
+            Write-Host 'SOURCE REF OVERRIDE ENABLED'
+            Write-Host "Workflow YAML came from: $workflowRef"
+            Write-Host "Source code/scripts were checked out from: $override"
+          } else {
+            Write-Host 'No source override used.'
+            Write-Host "Workflow YAML and source code/scripts came from: $workflowRef"
+          }
+          Write-Host "Checked-out commit: $(git rev-parse HEAD)"
+
+      - name: Validate release tag
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REQUESTED_TAG: ${{ inputs.release_tag }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $userInput = $env:REQUESTED_TAG.Trim()
+          if (-not $userInput) { throw 'release_tag is required.' }
+
+          $tags = @(git tag -l | Sort-Object -Descending)
+          $normalizedInput = $userInput -replace '^v', ''
+          $matchingTag = $null
+          foreach ($tag in $tags) {
+            $normalizedTag = $tag -replace '^v', ''
+            if ($normalizedTag -eq $normalizedInput) {
+              $matchingTag = $tag
+              break
+            }
+          }
+          if (-not $matchingTag) {
+            Write-Host "Release tag '$userInput' does not exist."
+            Write-Host 'Available tags:'
+            $tags | Select-Object -First 20 | ForEach-Object { Write-Host "  - $_" }
+            exit 1
+          }
+
+          gh release view $matchingTag > $null
+          if ($LASTEXITCODE -ne 0) {
+            throw "GitHub Release for tag '$matchingTag' does not exist. Create the release first, then rerun this workflow."
+          }
+
+          $version = $matchingTag -replace '^v', ''
+          $safeVersion = $version -replace '[^0-9A-Za-z._-]', '-'
+          "RELEASE_TAG=$matchingTag" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "BUILD_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "SAFE_VERSION=$safeVersion" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Release tag: $matchingTag"
+          Write-Host "Build version: $version"
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\pip\Cache
+          key: ${{ runner.os }}-pip-build-${{ hashFiles('requirements-build.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-build-
+            ${{ runner.os }}-pip-
+
+      - name: Resolve Python metadata
+        shell: pwsh
+        run: |
+          $pyVersionShort = (& python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+          if ($LASTEXITCODE -ne 0 -or -not $pyVersionShort) {
+            throw 'Could not resolve Python version.'
+          }
+          $pyVersionShort = ($pyVersionShort | Select-Object -First 1).Trim()
+          "PY_VERSION_SHORT=$pyVersionShort" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Python: $pyVersionShort"
+
+      - name: Build selected flavor(s)
+        shell: pwsh
+        env:
+          FLAVOR: ${{ inputs.flavor }}
+          PACKAGE_MODE: ${{ inputs.package_mode }}
+          CLEAN_BUILD: ${{ inputs.clean }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $baseArgs = @(
+            '-NoProfile',
+            '-ExecutionPolicy', 'Bypass',
+            '-File', '.\scripts\build_remote_app.ps1',
+            '-Version', $env:BUILD_VERSION
+          )
+          if ($env:PACKAGE_MODE -eq 'onefile') { $baseArgs += '-OneFile' }
+          if ($env:CLEAN_BUILD -eq 'true') { $baseArgs += '-Clean' }
+
+          if ($env:FLAVOR -eq 'full' -or $env:FLAVOR -eq 'both') {
+            Write-Host 'Building full desktop app...'
+            & pwsh @baseArgs
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
+          if ($env:FLAVOR -eq 'lite' -or $env:FLAVOR -eq 'both') {
+            Write-Host 'Building Lite desktop app...'
+            & pwsh @($baseArgs + '-Lite')
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
+      - name: Package release assets
+        shell: pwsh
+        env:
+          PACKAGE_MODE: ${{ inputs.package_mode }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $distPath = Join-Path '.\dist' $env:SAFE_VERSION
+          if (-not (Test-Path -LiteralPath $distPath)) {
+            throw "Expected dist path not found: $distPath"
+          }
+
+          $assetDir = Join-Path $distPath 'release-assets'
+          New-Item -ItemType Directory -Force -Path $assetDir | Out-Null
+          $assetPaths = @()
+
+          if ($env:PACKAGE_MODE -eq 'onefile') {
+            $assetPaths = @(Get-ChildItem -LiteralPath $distPath -File -Filter '*.exe' | Sort-Object Name | ForEach-Object { $_.FullName })
+          } else {
+            $bundleDirs = @(Get-ChildItem -LiteralPath $distPath -Directory | Where-Object { $_.Name -ne 'release-assets' } | Sort-Object Name)
+            foreach ($dir in $bundleDirs) {
+              $zipPath = Join-Path $assetDir "$($dir.Name).zip"
+              if (Test-Path -LiteralPath $zipPath) { Remove-Item -LiteralPath $zipPath -Force }
+              Compress-Archive -LiteralPath $dir.FullName -DestinationPath $zipPath -Force
+              $assetPaths += $zipPath
+            }
+          }
+
+          if ($assetPaths.Count -eq 0) {
+            throw "No release assets found for package mode '$env:PACKAGE_MODE'."
+          }
+
+          $listPath = Join-Path $assetDir 'asset-paths.txt'
+          $assetPaths | Set-Content -LiteralPath $listPath -Encoding utf8
+          "ASSET_LIST=$listPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+          Write-Host 'Release assets:'
+          foreach ($asset in $assetPaths) {
+            $item = Get-Item -LiteralPath $asset
+            $mb = [math]::Round($item.Length / 1MB, 2)
+            Write-Host "  - $($item.Name) ($mb MB)"
+          }
+
+      - name: Upload assets to GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $assets = @(Get-Content -LiteralPath $env:ASSET_LIST)
+          foreach ($asset in $assets) {
+            if (-not (Test-Path -LiteralPath $asset)) {
+              throw "Asset not found: $asset"
+            }
+            Write-Host "Uploading asset to release $env:RELEASE_TAG: $asset"
+            gh release upload $env:RELEASE_TAG $asset --clobber
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
+      - name: Verify release assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $expected = @(Get-Content -LiteralPath $env:ASSET_LIST | ForEach-Object { Split-Path -Leaf $_ })
+          $actual = @(gh release view $env:RELEASE_TAG --json assets --jq '.assets[].name')
+          foreach ($name in $expected) {
+            if ($actual -notcontains $name) {
+              Write-Host "Expected release asset not found: $name"
+              Write-Host 'Assets currently on release:'
+              $actual | ForEach-Object { Write-Host "  - $_" }
+              exit 1
+            }
+            Write-Host "Verified release asset: $name"
+          }
+
+      - name: Post summary
+        if: success()
+        shell: pwsh
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          SOURCE_REF_OVERRIDE: ${{ inputs.source_ref_override }}
+          WORKFLOW_REF: ${{ github.ref }}
+        run: |
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Value '## Desktop App Release Upload Complete'
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Value ''
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Value "- Release: https://github.com/$env:GITHUB_REPOSITORY/releases/tag/$env:RELEASE_TAG"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Value "- Version: ``$env:BUILD_VERSION``"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Value "- Python: ``$env:PY_VERSION_SHORT``"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Value "- Flavor input: ``${{ inputs.flavor }}``"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Value "- Package mode: ``${{ inputs.package_mode }}``"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Value ''
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Value '### Uploaded assets'
+          Get-Content -LiteralPath $env:ASSET_LIST | ForEach-Object {
+            $name = Split-Path -Leaf $_
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Value "- ``$name``"
+          }
+
+      - name: Post failure summary
+        if: failure()
+        shell: pwsh
+        run: |
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Value '## Workflow Failed'
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Value ''
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Value 'The build or release upload workflow encountered an error. Check the job logs above.'

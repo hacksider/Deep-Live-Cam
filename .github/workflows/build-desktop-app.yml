@@ -1,0 +1,172 @@
+name: Build Desktop App EXE
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_version:
+        description: 'Artifact version. Leave empty to use pyproject.toml or git describe.'
+        required: false
+        type: string
+        default: ''
+      flavor:
+        description: 'Desktop app flavor to build'
+        required: true
+        type: choice
+        options:
+          - lite
+          - full
+          - both
+        default: lite
+      package_mode:
+        description: 'PyInstaller packaging mode'
+        required: true
+        type: choice
+        options:
+          - onefile
+          - onedir
+        default: onefile
+      clean:
+        description: 'Clean PyInstaller cache before building'
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  build:
+    name: Build desktop app (${{ inputs.flavor }}, ${{ inputs.package_mode }})
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\pip\Cache
+          key: ${{ runner.os }}-pip-build-${{ hashFiles('requirements-build.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-build-
+            ${{ runner.os }}-pip-
+
+      - name: Resolve build metadata
+        shell: pwsh
+        env:
+          REQUESTED_VERSION: ${{ inputs.build_version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          function Get-SafeFileNamePart([string] $Value) {
+            return ($Value -replace '[^0-9A-Za-z._-]', '-')
+          }
+
+          $version = $env:REQUESTED_VERSION
+          if (-not $version) {
+            if (Test-Path -LiteralPath .\pyproject.toml) {
+              $pyprojectText = Get-Content -LiteralPath .\pyproject.toml -Raw
+              $match = [regex]::Match($pyprojectText, '(?m)^\s*version\s*=\s*"([^"]+)"')
+              if ($match.Success) {
+                $version = $match.Groups[1].Value.Trim()
+              }
+            }
+          }
+          if (-not $version) {
+            $version = (& git describe --tags --always)
+          }
+          if (-not $version) {
+            throw 'Could not resolve build version. Provide build_version or create a tag.'
+          }
+
+          $version = ($version | Select-Object -First 1).Trim()
+          $safeVersion = Get-SafeFileNamePart $version
+          $pyVersionShort = (& python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+          if ($LASTEXITCODE -ne 0 -or -not $pyVersionShort) {
+            throw 'Could not resolve Python version.'
+          }
+          $pyVersionShort = ($pyVersionShort | Select-Object -First 1).Trim()
+
+          "BUILD_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "SAFE_VERSION=$safeVersion" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "PY_VERSION_SHORT=$pyVersionShort" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+          Write-Host "Version: $version"
+          Write-Host "Safe version: $safeVersion"
+          Write-Host "Python: $pyVersionShort"
+
+      - name: Build selected flavor(s)
+        shell: pwsh
+        env:
+          FLAVOR: ${{ inputs.flavor }}
+          PACKAGE_MODE: ${{ inputs.package_mode }}
+          CLEAN_BUILD: ${{ inputs.clean }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $baseArgs = @(
+            '-NoProfile',
+            '-ExecutionPolicy', 'Bypass',
+            '-File', '.\scripts\build_remote_app.ps1',
+            '-Version', $env:BUILD_VERSION
+          )
+          if ($env:PACKAGE_MODE -eq 'onefile') { $baseArgs += '-OneFile' }
+          if ($env:CLEAN_BUILD -eq 'true') { $baseArgs += '-Clean' }
+
+          if ($env:FLAVOR -eq 'full' -or $env:FLAVOR -eq 'both') {
+            Write-Host 'Building full desktop app...'
+            & pwsh @baseArgs
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
+          if ($env:FLAVOR -eq 'lite' -or $env:FLAVOR -eq 'both') {
+            Write-Host 'Building Lite desktop app...'
+            & pwsh @($baseArgs + '-Lite')
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
+      - name: Summarize build outputs
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $distPath = Join-Path '.\dist' $env:SAFE_VERSION
+          if (-not (Test-Path -LiteralPath $distPath)) {
+            throw "Expected dist path not found: $distPath"
+          }
+
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Value '## Desktop App Build Complete'
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Value ''
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Value "- Version: ``$env:BUILD_VERSION``"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Value "- Python: ``$env:PY_VERSION_SHORT``"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Value "- Flavor input: ``${{ inputs.flavor }}``"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Value "- Package mode: ``${{ inputs.package_mode }}``"
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Value ''
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Value '### Outputs'
+
+          $items = @(Get-ChildItem -LiteralPath $distPath -Recurse -File | Sort-Object FullName)
+          if ($items.Count -eq 0) {
+            throw "No files produced under $distPath"
+          }
+          foreach ($item in $items) {
+            $relative = Resolve-Path -LiteralPath $item.FullName -Relative
+            $mb = [math]::Round($item.Length / 1MB, 2)
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Value "- ``$relative`` ($mb MB)"
+          }
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Deep-Live-Cam-Remote-${{ env.SAFE_VERSION }}-py${{ env.PY_VERSION_SHORT }}-${{ inputs.flavor }}-${{ inputs.package_mode }}
+          path: dist/${{ env.SAFE_VERSION }}/**
+          if-no-files-found: error
+          retention-days: 7

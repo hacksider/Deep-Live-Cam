@@ -1,0 +1,14 @@
+# Desktop app build requirements only.
+# Do not include full requirements.txt here: server/model packages such as
+# insightface, onnxruntime-gpu, TensorFlow, and opennsfw2 are for Colab/local
+# processing, not for packaging the remote controller app.
+
+numpy>=1.23.5,<2
+opencv-python==4.10.0.84
+PySide6>=6.7,<7
+pillow==12.1.1
+websockets>=12,<16
+pyvirtualcam>=0.12; sys_platform == 'win32'
+
+# Build-only dependency.
+pyinstaller>=6.14,<7
