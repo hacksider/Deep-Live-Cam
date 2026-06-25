@@ -4,6 +4,7 @@ import asyncio
 import ctypes
 import json
 import mimetypes
+import subprocess
 import sys
 import tempfile
 import time
@@ -30,6 +31,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMainWindow,
+    QProgressBar,
     QPushButton,
     QSpinBox,
     QTabWidget,
@@ -137,6 +139,50 @@ def format_size(size: int | None) -> str:
     return f"{size} B"
 
 
+def check_tailscale_cli() -> bool:
+    """Check if tailscale CLI is available on PATH."""
+    try:
+        subprocess.run(
+            ["tailscale", "version"],
+            capture_output=True,
+            timeout=3.0,
+            check=False,
+        )
+        return True
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+
+
+def taildrop_receive_file(remote_host: str, remote_path: str, local_destination: Path) -> tuple[bool, str]:
+    """
+    Attempt to receive file via Taildrop.
+
+    Returns: (success: bool, message: str)
+    """
+    try:
+        local_destination.parent.mkdir(parents=True, exist_ok=True)
+
+        # tailscale file cp <remote-host>:<remote-path> <local-destination>
+        result = subprocess.run(
+            ["tailscale", "file", "cp", f"{remote_host}:{remote_path}", str(local_destination)],
+            capture_output=True,
+            text=True,
+            timeout=600.0,  # 10 minute timeout for large files
+            check=False,
+        )
+
+        if result.returncode == 0:
+            return (True, f"Taildrop transfer complete: {local_destination}")
+        else:
+            error_msg = result.stderr.strip() if result.stderr else f"exit code {result.returncode}"
+            return (False, f"Taildrop failed: {error_msg}")
+
+    except subprocess.TimeoutExpired:
+        return (False, "Taildrop transfer timed out (10 min)")
+    except Exception as exc:
+        return (False, f"Taildrop error: {exc}")
+
+
 class ApiClient:
     def __init__(self, settings: AppSettings):
         self.settings = settings
@@ -168,6 +214,14 @@ class ApiClient:
                     break
                 handle.write(chunk)
         return destination
+
+    def create_zip(self, kind: str, timeout: float = 120.0) -> dict[str, Any]:
+        """Call /create-zip endpoint to prepare archive for transfer."""
+        return self.request_json("POST", f"/outputs/{kind}/create-zip", timeout=timeout)
+
+    def download_archive(self, archive_id: str, destination: Path, timeout: float = 1800.0) -> Path:
+        """HTTP fallback download for pre-created archives."""
+        return self.download_file(f"/download-archive/{archive_id}", destination, timeout=timeout)
 
     def upload_file(self, endpoint: str, file_path: Path, field_name: str = "file", timeout: float = 120.0) -> dict[str, Any]:
         boundary = f"----DeepLiveCamBoundary{uuid.uuid4().hex}"
@@ -365,6 +419,7 @@ class MainWindow(QMainWindow):
         self.live_worker: LiveWorker | None = None
         self.active_job_id: str | None = None
         self.output_files: list[dict[str, Any]] = []
+        self.output_current_loaded = False
         self.output_temp_dir = Path(tempfile.gettempdir()) / "deep_live_cam_remote_outputs"
         self.output_temp_dir.mkdir(parents=True, exist_ok=True)
         self.output_timer = QTimer(self)
@@ -544,13 +599,8 @@ class MainWindow(QMainWindow):
         self.outputs_autoplay = QCheckBox("Auto-play")
         download_current = QPushButton("Download current")
         download_all = QPushButton("Download all")
-        refresh.clicked.connect(self.refresh_outputs)
-        previous.clicked.connect(self.previous_output)
-        next_button.clicked.connect(self.next_output)
-        self.outputs_autoplay.stateChanged.connect(self.toggle_outputs_autoplay)
-        self.outputs_kind.currentTextChanged.connect(lambda _text: self.refresh_outputs())
-        download_current.clicked.connect(self.download_current_output)
-        download_all.clicked.connect(self.download_all_outputs)
+        self.download_taildrop_btn = QPushButton("Download via Taildrop")
+        self.download_taildrop_btn.setToolTip("Fast P2P transfer over Tailscale (falls back to HTTP if unavailable)")
         controls.addWidget(QLabel("Kind"))
         controls.addWidget(self.outputs_kind)
         controls.addWidget(refresh)
@@ -559,8 +609,30 @@ class MainWindow(QMainWindow):
         controls.addWidget(self.outputs_autoplay)
         controls.addWidget(download_current)
         controls.addWidget(download_all)
+        controls.addWidget(self.download_taildrop_btn)
+        # Disable if tailscale not available
+        if not check_tailscale_cli():
+            self.download_taildrop_btn.setEnabled(False)
+            self.download_taildrop_btn.setToolTip("Tailscale CLI not found on PATH")
         controls.addStretch(1)
         layout.addLayout(controls)
+
+        self.outputs_progress = QProgressBar()
+        self.outputs_progress.setMaximum(100)
+        self.outputs_progress.setFixedHeight(20)
+        self.outputs_progress.setTextVisible(True)
+        self.outputs_progress.hide()
+        layout.addWidget(self.outputs_progress)
+
+        # Connect signals AFTER all widgets are created
+        refresh.clicked.connect(self.refresh_outputs)
+        previous.clicked.connect(self.previous_output)
+        next_button.clicked.connect(self.next_output)
+        self.outputs_autoplay.stateChanged.connect(self.toggle_outputs_autoplay)
+        self.outputs_kind.currentTextChanged.connect(lambda _text: self.refresh_outputs())
+        download_current.clicked.connect(self.download_current_output)
+        download_all.clicked.connect(self.download_all_outputs)
+        self.download_taildrop_btn.clicked.connect(self.download_via_taildrop)
 
         self.outputs_list = QListWidget()
         self.outputs_list.currentRowChanged.connect(self.show_output_at)
@@ -628,6 +700,7 @@ class MainWindow(QMainWindow):
             self.log(f"health failed: {exc}")
 
     def refresh_outputs(self) -> None:
+        # Note: This method is patched by async_outputs.py
         self.sync_settings()
         kind = self.outputs_kind.currentText()
         self.outputs_list.clear()
@@ -650,6 +723,7 @@ class MainWindow(QMainWindow):
             self.log(f"outputs refresh failed: {exc}")
 
     def show_output_at(self, index: int) -> None:
+        # Note: This method is patched by ui_patches.py
         if index < 0 or index >= len(self.output_files):
             return
         item = self.output_files[index]
@@ -678,6 +752,7 @@ class MainWindow(QMainWindow):
             self.log(f"output preview failed: {exc}")
 
     def show_video_output(self, item: dict[str, Any]) -> None:
+        # Note: This method is patched by async_outputs.py
         path = str(item.get("download_path") or "")
         relative = str(item.get("relative_path") or item.get("name") or "output.mp4")
         safe_relative = relative.replace("/", "_").replace("\\", "_")
@@ -719,6 +794,8 @@ class MainWindow(QMainWindow):
 
     def next_output(self) -> None:
         if not self.output_files:
+            return
+        if self.outputs_autoplay.isChecked() and not self.output_current_loaded:
             return
         index = self.outputs_list.currentRow()
         self.outputs_list.setCurrentRow((index + 1) % len(self.output_files))
@@ -765,6 +842,74 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             self.output_status.setText(f"download all failed: {exc}")
             self.log(f"download all failed: {exc}")
+
+    def download_via_taildrop(self) -> None:
+        """Download outputs using Taildrop (fast P2P), fallback to HTTP if fails."""
+        if not self.output_files:
+            self.output_status.setText("No outputs to download")
+            return
+
+        folder = QFileDialog.getExistingDirectory(self, "Download outputs to folder")
+        if not folder:
+            return
+
+        kind = self.outputs_kind.currentText()
+        destination_dir = Path(folder)
+
+        # Use async_outputs pattern for non-blocking operation
+        from windows_app import async_outputs as async_base
+
+        def transfer_task() -> str:
+            # Step 1: Request Colab to create zip
+            self.log(f"Creating {kind} output archive on Colab...")
+            zip_info = self.client.create_zip(kind, timeout=120.0)
+
+            zip_path = zip_info["zip_path"]
+            zip_id = zip_info["zip_id"]
+            size_mb = zip_info["size_bytes"] / (1024 * 1024)
+            tailscale_host = zip_info.get("tailscale_hostname")
+
+            self.log(f"Archive created: {zip_path} ({size_mb:.1f} MB)")
+
+            local_zip = destination_dir / Path(zip_path).name
+
+            # Step 2: Try Taildrop transfer
+            if tailscale_host and check_tailscale_cli():
+                self.log(f"Attempting Taildrop transfer from {tailscale_host}...")
+                success, msg = taildrop_receive_file(tailscale_host, zip_path, local_zip)
+
+                if success:
+                    self.log(msg)
+                    return str(local_zip)
+                else:
+                    self.log(f"Taildrop failed: {msg}")
+                    self.log("Falling back to HTTP download...")
+            else:
+                reason = "Tailscale not available" if not tailscale_host else "Tailscale CLI not found"
+                self.log(f"{reason}, using HTTP download...")
+
+            # Step 3: HTTP fallback
+            self.client.download_archive(zip_id, local_zip, timeout=1800.0)
+            self.log(f"HTTP download complete: {local_zip}")
+            return str(local_zip)
+
+        def succeeded(task_id: str, result: object) -> None:
+            if not hasattr(self, "output_taildrop_task_id") or task_id != self.output_taildrop_task_id:
+                return
+            self.output_status.setText(f"Downloaded to {result}")
+            self.log(f"Transfer complete: {result}")
+
+        def failed(task_id: str, error: str) -> None:
+            if not hasattr(self, "output_taildrop_task_id") or task_id != self.output_taildrop_task_id:
+                return
+            self.output_status.setText(f"Transfer failed: {error}")
+            self.log(f"Transfer failed: {error}")
+
+        if not hasattr(self, "output_taildrop_task_id"):
+            self.output_taildrop_task_id = ""
+        self.output_taildrop_task_id = async_base._start_output_task(
+            self, f"Transferring {kind} outputs...", transfer_task, succeeded, failed
+        )
 
     def upload_source_if_needed(self) -> str:
         source_face = self.settings.source_face

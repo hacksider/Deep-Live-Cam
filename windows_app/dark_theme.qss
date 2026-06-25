@@ -370,6 +370,33 @@ QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {
   font-weight: 600;
 }
 
+/* List widgets */
+QListWidget {
+  background: #1e1e1e;
+  border: 1px solid #3a3a3a;
+  border-radius: 4px;
+  color: #e6e6e6;
+}
+
+QListWidget::item {
+  padding: 6px 8px;
+  border-radius: 2px;
+}
+
+QListWidget::item:hover {
+  background-color: #2a2a2a;
+}
+
+QListWidget::item:selected {
+  background-color: #0068b8;
+  color: #ffffff;
+  font-weight: 500;
+}
+
+QListWidget::item:selected:hover {
+  background-color: #0d6db8;
+}
+
 /* Help text areas */
 #helpText {
   background: #252525;

@@ -14,8 +14,28 @@ from pathlib import Path
 
 FACE_ANALYSER = None
 FACE_ANALYSER_LOCK = threading.Lock()
+FACE_ANALYSER_MODEL_PACK = "buffalo_l"
+FACE_ANALYSER_MODEL_PACKS = {"buffalo_l", "buffalo_m", "buffalo_s"}
 
 DET_SIZE = (640, 640)
+
+
+def set_face_analyser_model_pack(model_pack: str | None) -> str:
+    """Select the InsightFace model pack used by future FaceAnalysis calls."""
+    global FACE_ANALYSER, FACE_ANALYSER_MODEL_PACK
+
+    selected = str(model_pack or "buffalo_l")
+    if selected not in FACE_ANALYSER_MODEL_PACKS:
+        selected = "buffalo_l"
+    with FACE_ANALYSER_LOCK:
+        if selected != FACE_ANALYSER_MODEL_PACK:
+            FACE_ANALYSER = None
+            FACE_ANALYSER_MODEL_PACK = selected
+    return FACE_ANALYSER_MODEL_PACK
+
+
+def get_face_analyser_model_pack() -> str:
+    return FACE_ANALYSER_MODEL_PACK
 
 
 def get_face_analyser() -> Any:
@@ -31,12 +51,13 @@ def get_face_analyser() -> Any:
                 )
                 providers = build_provider_config()
                 FACE_ANALYSER = insightface.app.FaceAnalysis(
-                    name='buffalo_l',
+                    name=FACE_ANALYSER_MODEL_PACK,
                     providers=providers,
                     allowed_modules=['detection', 'recognition', 'landmark_2d_106']
                 )
                 FACE_ANALYSER.prepare(ctx_id=0, det_size=DET_SIZE)
                 _optimize_det_model(FACE_ANALYSER, providers)
+                print(f"InsightFace model pack: {FACE_ANALYSER_MODEL_PACK}")
     return FACE_ANALYSER
 
 

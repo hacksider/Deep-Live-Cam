@@ -23,6 +23,9 @@ from collections import deque
 import time
 
 FACE_SWAPPER = None
+FACE_SWAPPER_PRECISION = "fp32"
+FACE_SWAPPER_LOADED_PRECISION = ""
+FACE_SWAPPER_LOADED_PATH = ""
 THREAD_LOCK = threading.Lock()
 NAME = "DLC.FACE-SWAPPER"
 
@@ -188,6 +191,41 @@ models_dir = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(abs_dir))), "models"
 )
 
+
+def set_face_swapper_precision(precision: str | None) -> str:
+    """Select which inswapper ONNX precision to load for future sessions."""
+    global FACE_SWAPPER, FACE_SWAPPER_PRECISION, FACE_SWAPPER_LOADED_PRECISION, FACE_SWAPPER_LOADED_PATH
+
+    selected = str(precision or "fp32").lower()
+    if selected not in {"fp32", "fp16"}:
+        selected = "fp32"
+    with THREAD_LOCK:
+        if selected != FACE_SWAPPER_PRECISION:
+            FACE_SWAPPER = None
+            FACE_SWAPPER_LOADED_PRECISION = ""
+            FACE_SWAPPER_LOADED_PATH = ""
+            _cuda_graph_session["recorded"] = False
+        FACE_SWAPPER_PRECISION = selected
+    return FACE_SWAPPER_PRECISION
+
+
+def get_face_swapper_precision() -> str:
+    return FACE_SWAPPER_PRECISION
+
+
+def get_face_swapper_diagnostics() -> dict[str, str]:
+    return {
+        "requested_precision": FACE_SWAPPER_PRECISION,
+        "loaded_precision": FACE_SWAPPER_LOADED_PRECISION,
+        "model_path": FACE_SWAPPER_LOADED_PATH,
+    }
+
+
+def _remove_incomplete_model(path: str) -> None:
+    if os.path.exists(path) and os.path.getsize(path) < 1024 * 1024:
+        os.remove(path)
+
+
 def pre_check() -> bool:
     # Use models_dir instead of abs_dir to save to the correct location
     download_directory_path = models_dir
@@ -199,24 +237,36 @@ def pre_check() -> bool:
         logging.error(f"Failed to create directory {download_directory_path} due to permission error: {e}")
         return False
     
-    # Use the direct download URL from Hugging Face (FP32 model for broad GPU compatibility)
-    model_path = os.path.join(download_directory_path, "inswapper_128.onnx")
-    # Remove an interrupted/HTML error download so conditional_download retries.
-    if os.path.exists(model_path) and os.path.getsize(model_path) < 1024 * 1024:
-        os.remove(model_path)
+    # Use direct download URLs from Hugging Face. FP32 is the safe baseline;
+    # FP16 is provisioned when explicitly selected for live T4/RTX comparison.
+    fp32_path = os.path.join(download_directory_path, "inswapper_128.onnx")
+    fp16_path = os.path.join(download_directory_path, "inswapper_128_fp16.onnx")
+    _remove_incomplete_model(fp32_path)
+    _remove_incomplete_model(fp16_path)
     try:
         conditional_download(
             download_directory_path,
-            [
-                "https://huggingface.co/hacksider/deep-live-cam/resolve/main/inswapper_128.onnx"
-            ],
+            ["https://huggingface.co/hacksider/deep-live-cam/resolve/main/inswapper_128.onnx"],
         )
     except Exception as error:
         update_status(f"Could not download inswapper_128.onnx: {error}", NAME)
         return False
-    if not os.path.isfile(model_path) or os.path.getsize(model_path) < 1024 * 1024:
-        update_status(f"inswapper_128.onnx download is missing or incomplete: {model_path}", NAME)
+    if not os.path.isfile(fp32_path) or os.path.getsize(fp32_path) < 1024 * 1024:
+        update_status(f"inswapper_128.onnx download is missing or incomplete: {fp32_path}", NAME)
         return False
+
+    if FACE_SWAPPER_PRECISION == "fp16":
+        try:
+            conditional_download(
+                download_directory_path,
+                ["https://huggingface.co/Jonny001/Models-Pack-01/resolve/main/inswapper_128_fp16.onnx"],
+            )
+        except Exception as error:
+            update_status(f"Could not download inswapper_128_fp16.onnx: {error}", NAME)
+            return False
+        if not os.path.isfile(fp16_path) or os.path.getsize(fp16_path) < 1024 * 1024:
+            update_status(f"inswapper_128_fp16.onnx download is missing or incomplete: {fp16_path}", NAME)
+            return False
     return True
 
 
@@ -237,23 +287,21 @@ def pre_start() -> bool:
 
 
 def get_face_swapper() -> Any:
-    global FACE_SWAPPER
+    global FACE_SWAPPER, FACE_SWAPPER_LOADED_PRECISION, FACE_SWAPPER_LOADED_PATH
 
     with THREAD_LOCK:
         if FACE_SWAPPER is None:
-            # Prefer FP16 on GPUs with Tensor Cores (Turing+) — half the
-            # memory bandwidth, faster inference.  Fall back to FP32 for
-            # older GPUs (e.g. GTX 16xx) where FP16 can produce NaN.
             fp32_path = os.path.join(models_dir, "inswapper_128.onnx")
             fp16_path = os.path.join(models_dir, "inswapper_128_fp16.onnx")
-            use_fp16 = _HAS_TORCH_CUDA and os.path.exists(fp16_path)
-            if use_fp16:
+            requested_precision = FACE_SWAPPER_PRECISION
+            if requested_precision == "fp16":
                 model_path = fp16_path
-            elif os.path.exists(fp32_path):
-                model_path = fp32_path
             else:
-                update_status(f"No inswapper model found in {models_dir}.", NAME)
+                model_path = fp32_path
+            if not os.path.exists(model_path):
+                update_status(f"Requested {requested_precision} inswapper model not found: {model_path}", NAME)
                 return None
+            loaded_precision = requested_precision
             # On Apple Silicon, rewrite Pad(reflect) → Slice+Concat so
             # CoreML can run the entire model in a single partition on
             # the Neural Engine instead of bouncing between CPU and ANE.
@@ -261,7 +309,7 @@ def get_face_swapper() -> Any:
                 from modules.onnx_optimize import optimize_for_coreml
                 model_path = optimize_for_coreml(model_path)
 
-            update_status(f"Loading face swapper model from: {model_path}", NAME)
+            update_status(f"Loading {loaded_precision} face swapper model from: {model_path}", NAME)
             try:
                 providers_config = []
                 for p in modules.globals.execution_providers:
@@ -294,10 +342,14 @@ def get_face_swapper() -> Any:
                     for p in providers_config
                 ):
                     _init_cuda_graph_session(model_path, FACE_SWAPPER)
-                update_status("Face swapper model loaded successfully.", NAME)
+                FACE_SWAPPER_LOADED_PRECISION = loaded_precision
+                FACE_SWAPPER_LOADED_PATH = model_path
+                update_status(f"Face swapper model loaded successfully ({loaded_precision}).", NAME)
             except Exception as e:
                 update_status(f"Error loading face swapper model: {e}", NAME)
                 FACE_SWAPPER = None
+                FACE_SWAPPER_LOADED_PRECISION = ""
+                FACE_SWAPPER_LOADED_PATH = ""
                 return None
     return FACE_SWAPPER
 

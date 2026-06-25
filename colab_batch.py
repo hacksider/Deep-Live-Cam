@@ -62,6 +62,9 @@ class ProcessConfig:
     color_correction: bool = False
     interpolation_weight: float = 0.0
     enhancer: str = "none"
+    face_model_pack: str = "buffalo_l"
+    swapper_precision: str = "fp32"
+    cache_source_face: bool = True
 
 
 def run(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess:
@@ -219,9 +222,11 @@ def encoder_command(path: Path, output: Path, start: float, duration: float, fps
 class ModernEngine:
     def __init__(self, config: ProcessConfig):
         import modules.globals as globals_module
-        from modules.face_analyser import get_many_faces, get_one_face
+        from modules.face_analyser import get_many_faces, get_one_face, set_face_analyser_model_pack
         from modules.processors.frame import face_swapper
 
+        set_face_analyser_model_pack(config.face_model_pack)
+        face_swapper.set_face_swapper_precision(config.swapper_precision)
         self.globals = globals_module
         self.get_one_face = get_one_face
         self.get_many_faces = get_many_faces
@@ -246,6 +251,8 @@ class ModernEngine:
             raise RuntimeError("The face swapper model could not be loaded.")
 
         self.source_cache: dict[str, Any] = {}
+        self.source_face_path = config.source_face
+        self.cache_source_face = bool(config.cache_source_face)
         self.mapping = self._load_mapping(config.map_config)
         self.default_source = self._source(config.source_face) if config.source_face else None
         self.enhancer = self._load_enhancer(config.enhancer)
@@ -268,15 +275,24 @@ class ModernEngine:
         if path is None:
             return None
         key = str(path.resolve())
-        if key not in self.source_cache:
-            image = cv2.imread(str(path))
-            if image is None:
-                raise ValueError(f"Could not read source image: {path}")
-            face = self.get_one_face(image)
-            if face is None:
-                raise ValueError(f"No face detected in source image: {path}")
+        if self.cache_source_face and key in self.source_cache:
+            return self.source_cache[key]
+        image = cv2.imread(str(path))
+        if image is None:
+            raise ValueError(f"Could not read source image: {path}")
+        face = self.get_one_face(image)
+        if face is None:
+            raise ValueError(f"No face detected in source image: {path}")
+        if self.cache_source_face:
+            print(f"Cached source face embedding once: {path}")
             self.source_cache[key] = face
-        return self.source_cache[key]
+        return face
+
+    def refresh_default_source(self) -> Any:
+        if self.source_face_path is None:
+            return None
+        self.default_source = self._source(self.source_face_path)
+        return self.default_source
 
     def _load_mapping(self, path: Path | None) -> dict[str, list[dict[str, Any]]]:
         if path is None:

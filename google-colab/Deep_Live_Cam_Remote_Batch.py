@@ -115,7 +115,7 @@ import shutil
 
 REPO_OWNER = "djebaz"
 REPO_NAME = "Deep-Live-Cam-Remote"
-REPO_BRANCH = "main"
+REPO_BRANCH = "live-webcam-stability"
 WORK_DIR = Path("/content/Deep-Live-Cam-Remote")
 CRITICAL_FILES = ["colab_api.py", "colab_batch.py", "modules/__init__.py"]
 

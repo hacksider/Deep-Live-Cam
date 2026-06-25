@@ -315,6 +315,13 @@ def _build_outputs_tab(self: base.MainWindow) -> None:
     controls.addStretch(1)
     layout.addLayout(controls)
 
+    self.outputs_progress = base.QProgressBar()
+    self.outputs_progress.setMaximum(100)
+    self.outputs_progress.setFixedHeight(20)
+    self.outputs_progress.setTextVisible(True)
+    self.outputs_progress.hide()
+    layout.addWidget(self.outputs_progress)
+
     splitter = QSplitter(Qt.Horizontal)
     self.outputs_list = QListWidget()
     self.outputs_list.setMinimumWidth(180)
@@ -640,12 +647,15 @@ def update_live_preview(self: base.MainWindow, jpeg_bytes: bytes) -> None:
 def show_output_at(self: base.MainWindow, index: int) -> None:
     if index < 0 or index >= len(self.output_files):
         return
+    self.output_current_loaded = False
     _ensure_prefetch_state(self)
     item = dict(self.output_files[index])
     key = _cache_key(item)
     kind = self.outputs_kind.currentText()
+    file_size = int(item.get("size") or 0)
     if not key:
         self.output_status.setText("selected output has no download path")
+        self.output_current_loaded = True
         return
     self.stop_output_video()
 
@@ -655,27 +665,42 @@ def show_output_at(self: base.MainWindow, index: int) -> None:
         if isinstance(cached, (bytes, bytearray)):
             _display_photo(self, item, bytes(cached))
             _prefetch_neighbors(self, index)
+            self.output_current_loaded = True
             return
-        self.output_preview.setText("Loading photo preview...")
+        size_str = base.format_size(file_size) if file_size > 0 else ""
+        self.output_preview.setText(f"Loading photo preview... {size_str}")
+        # Show progress bar
+        if hasattr(self, "outputs_progress"):
+            self.outputs_progress.setMinimum(0)
+            self.outputs_progress.setMaximum(100)
+            self.outputs_progress.setValue(0)
+            self.outputs_progress.show()
 
-        def fetch_photo() -> bytes:
-            return self.client.download_bytes(key, timeout=20.0)
+        from typing import Callable
+        def fetch_photo(progress_cb: Callable[[int, int], None]) -> bytes:
+            return async_base._download_bytes_with_progress(self.client, key, timeout=20.0, progress_callback=progress_cb)
 
         def photo_ready(task_id: str, data: object) -> None:
             if task_id != self.output_preview_task_id:
                 return
+            if hasattr(self, "outputs_progress"):
+                self.outputs_progress.hide()
             if isinstance(data, (bytes, bytearray)):
                 self.output_prefetch_cache[key] = bytes(data)
                 _display_photo(self, item, bytes(data))
                 _prefetch_neighbors(self, index)
+            self.output_current_loaded = True
 
         def photo_failed(task_id: str, error: str) -> None:
             if task_id != self.output_preview_task_id:
                 return
+            if hasattr(self, "outputs_progress"):
+                self.outputs_progress.hide()
             self.output_status.setText(f"preview failed: {error}")
             self.log(f"output preview failed: {error}")
+            self.output_current_loaded = True
 
-        self.output_preview_task_id = async_base._start_output_task(
+        self.output_preview_task_id = async_base._start_output_task_with_progress(
             self, "Loading photo preview...", fetch_photo, photo_ready, photo_failed
         )
         return
@@ -683,6 +708,7 @@ def show_output_at(self: base.MainWindow, index: int) -> None:
     if isinstance(cached, Path) and cached.exists():
         _display_video(self, item, cached)
         _prefetch_neighbors(self, index)
+        self.output_current_loaded = True
         return
     self.show_video_output(item)
 
@@ -690,32 +716,47 @@ def show_output_at(self: base.MainWindow, index: int) -> None:
 def show_video_output(self: base.MainWindow, item: dict[str, Any]) -> None:
     _ensure_prefetch_state(self)
     key = _cache_key(item)
+    file_size = int(item.get("size") or 0)
     relative = str(item.get("relative_path") or item.get("name") or "output.mp4")
     local_path = _video_cache_path(self, item)
     self.output_preview.setPixmap(QPixmap())
-    self.output_preview.setText(f"Loading video preview:\n{relative}")
+    size_str = base.format_size(file_size) if file_size > 0 else ""
+    self.output_preview.setText(f"Loading video preview:\n{relative}\n{size_str}")
+    # Show progress bar
+    if hasattr(self, "outputs_progress"):
+        self.outputs_progress.setMinimum(0)
+        self.outputs_progress.setMaximum(100)
+        self.outputs_progress.setValue(0)
+        self.outputs_progress.show()
 
-    def fetch_video() -> dict[str, str]:
-        if not local_path.exists() or local_path.stat().st_size != int(item.get("size") or -1):
-            async_base._download_file_fast(self.client, key, local_path, timeout=900.0)
+    from typing import Callable
+    def fetch_video(progress_cb: Callable[[int, int], None]) -> dict[str, str]:
+        if not local_path.exists() or local_path.stat().st_size != file_size:
+            async_base._download_file_fast(self.client, key, local_path, timeout=900.0, progress_callback=progress_cb)
         return {"relative": relative, "local_path": str(local_path), "key": key}
 
     def video_ready(task_id: str, result: object) -> None:
         if task_id != self.output_preview_task_id:
             return
+        if hasattr(self, "outputs_progress"):
+            self.outputs_progress.hide()
         payload = result if isinstance(result, dict) else {}
         ready_path = Path(str(payload.get("local_path") or local_path))
         self.output_prefetch_cache[str(payload.get("key") or key)] = ready_path
         _display_video(self, item, ready_path)
         _prefetch_neighbors(self, self.outputs_list.currentRow())
+        self.output_current_loaded = True
 
     def video_failed(task_id: str, error: str) -> None:
         if task_id != self.output_preview_task_id:
             return
+        if hasattr(self, "outputs_progress"):
+            self.outputs_progress.hide()
         self.output_status.setText(f"preview failed: {error}")
         self.log(f"output preview failed: {error}")
+        self.output_current_loaded = True
 
-    self.output_preview_task_id = async_base._start_output_task(
+    self.output_preview_task_id = async_base._start_output_task_with_progress(
         self, f"Loading video preview: {relative}", fetch_video, video_ready, video_failed
     )
 
