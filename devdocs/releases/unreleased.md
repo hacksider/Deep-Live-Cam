@@ -26,10 +26,11 @@
   - Sample data cleanup and nvtop installation
 
 ## Changed
+- Consolidate the Windows remote app runtime patch layers into normal imported modules and a canonical launcher entrypoint.
 - Notebook now clones from GitHub instead of embedding Python source as a bundle
 - Setup cell is idempotent and pulls latest changes on re-run
 
 ## Release audit
 
 - PRs: #1, #2
-- Scope: PR #1 added Colab/remote/batch face-swap workflows; PR #2 adds standalone desktop app build scaffolding, versioned artifacts, Lite packaging, and manual build/release GitHub Actions.
+- Scope: PR #1 added Colab/remote/batch face-swap workflows; PR #2 adds standalone desktop app build scaffolding, versioned artifacts, Lite packaging, and manual build/release GitHub Actions; pending PR consolidates Windows app patch layers.

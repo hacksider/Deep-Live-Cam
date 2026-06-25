@@ -20,7 +20,7 @@ This variant keeps the upstream Deep-Live-Cam local pipeline, then adds:
 | `google-colab/Deep_Live_Cam_Remote_Batch.py` | Markerized source for the notebook. Edit this, then rebuild the `.ipynb`. |
 | `colab_batch.py` | Standalone batch processor for photos/videos. |
 | `colab_api.py` | FastAPI server used by the desktop remote app. |
-| `windows_app/` | Current desktop controller implementation. |
+| `windows_app/` | Current desktop controller implementation with the canonical app entrypoint plus focused helper modules for UI, outputs, options, and Live webcam. |
 | `run_windows_remote_app.py` / `.ps1` | Local launcher for the current desktop app. |
 | `scripts/` | Notebook round-trip helpers. |
 | `devdocs/` | Planning and release notes for this fork. |

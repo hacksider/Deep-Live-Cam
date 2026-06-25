@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from windows_app import async_outputs as async_base
-from windows_app import ui_patches as ui_base
-from windows_app import app as base
+from windows_app import output_tasks as async_base
+from windows_app import main_window_ui as ui_base
+from windows_app import app_base as base
 
 
 PROCESSING_OPTION_KEYS = (
@@ -241,29 +241,19 @@ def start_videos(self: base.MainWindow) -> None:
     _start_batch_with_status(self, "videos")
 
 
-_original_build_photos_tab = base.MainWindow._build_photos_tab
-_original_build_videos_tab = base.MainWindow._build_videos_tab
-
-
 def _build_photos_tab(self: base.MainWindow) -> None:
-    _original_build_photos_tab(self)
+    ui_base._build_photos_tab(self)
     _apply_processing_options_to_widgets(self, "photos")
 
 
 def _build_videos_tab(self: base.MainWindow) -> None:
-    _original_build_videos_tab(self)
+    ui_base._build_videos_tab(self)
     _apply_processing_options_to_widgets(self, "videos")
 
 
-def install() -> None:
-    base.load_settings = load_settings
-    base.save_settings = save_settings
-    base.MainWindow._build_photos_tab = _build_photos_tab
-    base.MainWindow._build_videos_tab = _build_videos_tab
-    base.MainWindow.sync_settings = sync_settings
-    base.MainWindow.start_photos = start_photos
-    base.MainWindow.start_videos = start_videos
-
-
-install()
-main = base.main
+class ProcessingOptionsMixin:
+    _build_photos_tab = _build_photos_tab
+    _build_videos_tab = _build_videos_tab
+    sync_settings = sync_settings
+    start_photos = start_photos
+    start_videos = start_videos

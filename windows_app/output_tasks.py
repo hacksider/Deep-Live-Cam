@@ -9,7 +9,7 @@ from PySide6.QtCore import Qt, QThread, QUrl, Signal
 from PySide6.QtGui import QImage, QImageReader, QPixmap
 from PySide6.QtWidgets import QFileDialog, QListWidgetItem
 
-from windows_app import app as base
+from windows_app import app_base as base
 
 DOWNLOAD_CHUNK_SIZE = 64 * 1024  # 64KB for smooth progress updates
 
@@ -337,7 +337,6 @@ def refresh_outputs(self: base.MainWindow) -> None:
 
 
 def show_output_at(self: base.MainWindow, index: int) -> None:
-    # Note: This function is overridden by ui_patches.py
     if index < 0 or index >= len(self.output_files):
         return
     self.output_current_loaded = False
@@ -537,16 +536,13 @@ def check_connection(self: base.MainWindow) -> None:
     self.output_health_task_id = _start_output_task(self, "Checking connection...", fetch_health, succeeded, failed)
 
 
-def install() -> None:
-    base.MainWindow.check_connection = check_connection
-    base.MainWindow.start_photos = start_photos
-    base.MainWindow.start_videos = start_videos
-    base.MainWindow.refresh_outputs = refresh_outputs
-    base.MainWindow.show_output_at = show_output_at
-    base.MainWindow.show_video_output = show_video_output
-    base.MainWindow.download_current_output = download_current_output
-    base.MainWindow.download_all_outputs = download_all_outputs
-
-
-install()
+class OutputTasksMixin:
+    check_connection = check_connection
+    start_photos = start_photos
+    start_videos = start_videos
+    refresh_outputs = refresh_outputs
+    show_output_at = show_output_at
+    show_video_output = show_video_output
+    download_current_output = download_current_output
+    download_all_outputs = download_all_outputs
 main = base.main

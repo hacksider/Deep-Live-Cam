@@ -9,10 +9,10 @@ from typing import Any
 
 from PySide6.QtWidgets import QScrollArea
 
-from windows_app import processing_options_patches as _processing_options_patches
-from windows_app import app as base
-from windows_app import async_outputs as async_base
-from windows_app import ui_patches as ui_base
+from windows_app import processing_options as processing_options_base
+from windows_app import app_base as base
+from windows_app import output_tasks as async_base
+from windows_app import main_window_ui as ui_base
 
 DEFAULT_LIVE_WIDTH = 1280
 DEFAULT_LIVE_HEIGHT = 720
@@ -53,11 +53,11 @@ LIVE_OPTION_KEYS = (
     "preview_scale",
 )
 
-_previous_load_settings = base.load_settings
-_previous_save_settings = base.save_settings
-_original_sync_settings = base.MainWindow.sync_settings
+_previous_load_settings = processing_options_base.load_settings
+_previous_save_settings = processing_options_base.save_settings
+_original_sync_settings = processing_options_base.sync_settings
 _original_close_event = base.MainWindow.closeEvent
-_original_stop_live = base.MainWindow.stop_live
+_original_stop_live = ui_base.stop_live
 
 
 def _live_setting(settings: base.AppSettings, name: str, default: int) -> int:
@@ -892,18 +892,12 @@ def update_live_preview(self: base.MainWindow, frame_bytes: bytes, remember: boo
         )
 
 
-def install() -> None:
-    base.load_settings = load_settings
-    base.save_settings = save_settings
-    base.MainWindow._build_live_tab = _build_live_tab
-    base.MainWindow.sync_settings = sync_settings
-    base.MainWindow.closeEvent = closeEvent
-    base.MainWindow.start_live = start_live
-    base.MainWindow.stop_live = stop_live
-    base.MainWindow.enqueue_live_preview_frame = enqueue_live_preview_frame
-    base.MainWindow.update_live_preview = update_live_preview
-    base.MainWindow.update_live_preview_from_last_frame = update_live_preview_from_last_frame
-
-
-install()
-main = base.main
+class LiveWebcamMixin:
+    _build_live_tab = _build_live_tab
+    sync_settings = sync_settings
+    closeEvent = closeEvent
+    start_live = start_live
+    stop_live = stop_live
+    enqueue_live_preview_frame = enqueue_live_preview_frame
+    update_live_preview = update_live_preview
+    update_live_preview_from_last_frame = update_live_preview_from_last_frame

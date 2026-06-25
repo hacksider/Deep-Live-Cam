@@ -8,8 +8,8 @@ from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import QListWidget, QSplitter
 
-from windows_app import app as base
-from windows_app import async_outputs as async_base
+from windows_app import app_base as base
+from windows_app import output_tasks as async_base
 
 
 def _link_source_fields(window: base.MainWindow) -> None:
@@ -826,23 +826,19 @@ def _sync_common_widgets(window: base.MainWindow) -> None:
         window.v_color_correction.setChecked(s.color_correction)
 
 
-def install() -> None:
-    base.MainWindow._build_setup_tab = _build_setup_tab
-    base.MainWindow._build_photos_tab = _build_photos_tab
-    base.MainWindow._build_videos_tab = _build_videos_tab
-    base.MainWindow._build_outputs_tab = _build_outputs_tab
-    base.MainWindow._build_live_tab = _build_live_tab
-    base.MainWindow.check_connection = check_connection
-    base.MainWindow.sync_settings = sync_settings
-    base.MainWindow.start_photos = start_photos
-    base.MainWindow.start_videos = start_videos
-    base.MainWindow.cancel_job = cancel_job
-    base.MainWindow.start_live = start_live
-    base.MainWindow.stop_live = stop_live
-    base.MainWindow.update_live_preview = update_live_preview
-    base.MainWindow.show_output_at = show_output_at
-    base.MainWindow.show_video_output = show_video_output
-
-
-install()
-main = base.main
+class MainWindowUiMixin:
+    _build_setup_tab = _build_setup_tab
+    _build_photos_tab = _build_photos_tab
+    _build_videos_tab = _build_videos_tab
+    _build_outputs_tab = _build_outputs_tab
+    _build_live_tab = _build_live_tab
+    check_connection = check_connection
+    sync_settings = sync_settings
+    start_photos = start_photos
+    start_videos = start_videos
+    cancel_job = cancel_job
+    start_live = start_live
+    stop_live = stop_live
+    update_live_preview = update_live_preview
+    show_output_at = show_output_at
+    show_video_output = show_video_output
