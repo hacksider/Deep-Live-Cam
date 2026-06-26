@@ -377,6 +377,16 @@ def _run_pipe_pipeline(
                 processed_count += 1
                 progress.update(1)
 
+                if processed_count % 50 == 0:
+                    import gc
+                    gc.collect()
+                    try:
+                        import torch
+                        if torch.cuda.is_available():
+                            torch.cuda.empty_cache()
+                    except ImportError:
+                        pass
+
             detect_executor.shutdown(wait=True)
 
         # Graceful shutdown

@@ -181,8 +181,12 @@ def limit_resources() -> None:
 
 
 def release_resources() -> None:
-    if 'CUDAExecutionProvider' in modules.globals.execution_providers and HAS_TORCH:
-        torch.cuda.empty_cache()
+    if 'CUDAExecutionProvider' in modules.globals.execution_providers:
+        try:
+            import torch
+            torch.cuda.empty_cache()
+        except ImportError:
+            pass
 
 
 def pre_check() -> bool:
