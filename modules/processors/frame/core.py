@@ -30,11 +30,6 @@ ALLOWED_PROCESSORS = {
     'face_enhancer_gpen512'
 }
 
-# How often (in frames) to flush Python GC and CUDA cache during
-# in-memory video processing. Prevents VRAM accumulation when both
-# ONNX Runtime and PyTorch share the same GPU device (issue #1868).
-CACHE_CLEAN_INTERVAL = 50
-
 def load_frame_processor_module(frame_processor: str) -> Any:
     if frame_processor not in ALLOWED_PROCESSORS:
         print(f"Frame processor {frame_processor} is not allowed")
@@ -395,7 +390,9 @@ def _run_pipe_pipeline(
                 # long videos. ONNX Runtime (insightface) and PyTorch share the
                 # same GPU device; without explicit cleanup, accumulated tensor
                 # allocations from both frameworks cause CUBLAS errors (issue #1868).
-                if processed_count % CACHE_CLEAN_INTERVAL == 0:
+                # Interval is configurable via --cache-clean-interval (0 = disabled).
+                interval = modules.globals.cache_clean_interval
+                if interval > 0 and processed_count % interval == 0:
                     gc.collect()
                     if _torch is not None and _torch.cuda.is_available():
                         _torch.cuda.empty_cache()
