@@ -206,6 +206,16 @@ def start() -> None:
     
     start_time = time.time()
     
+    # When no source is provided but an enhancer is active, automatically
+    # remove the face_swapper and run in face-restoration mode (#1867).
+    if modules.globals.source_path is None:
+        enhancers = {'face_enhancer', 'face_enhancer_gpen256', 'face_enhancer_gpen512'}
+        if enhancers & set(modules.globals.frame_processors):
+            modules.globals.frame_processors = [
+                p for p in modules.globals.frame_processors if p != 'face_swapper'
+            ]
+            update_status('No source face — running in face-restoration mode (enhancement only).')
+    
     for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
         if not frame_processor.pre_start():
             return
