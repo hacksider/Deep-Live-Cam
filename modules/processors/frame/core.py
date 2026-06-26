@@ -1,6 +1,7 @@
 import os
 import subprocess
 import sys
+import gc
 import importlib
 from concurrent.futures import ThreadPoolExecutor
 from types import ModuleType
@@ -28,6 +29,11 @@ ALLOWED_PROCESSORS = {
     'face_enhancer_gpen256',
     'face_enhancer_gpen512'
 }
+
+# How often (in frames) to flush Python GC and CUDA cache during
+# in-memory video processing. Prevents VRAM accumulation when both
+# ONNX Runtime and PyTorch share the same GPU device (issue #1868).
+CACHE_CLEAN_INTERVAL = 50
 
 def load_frame_processor_module(frame_processor: str) -> Any:
     if frame_processor not in ALLOWED_PROCESSORS:
@@ -332,6 +338,14 @@ def _run_pipe_pipeline(
                 'mode': 'in-memory',
             })
 
+            # Lazily import torch here (it may not be installed) so the
+            # periodic CUDA cache flush in the loop below can use it.
+            _torch = None
+            try:
+                import torch as _torch
+            except ImportError:
+                pass
+
             # Pipelined detection: while processing frame N (swap on
             # ANE), start detecting the face in the next frame
             # (detection on GPU).  They use different hardware units
@@ -381,15 +395,10 @@ def _run_pipe_pipeline(
                 # long videos. ONNX Runtime (insightface) and PyTorch share the
                 # same GPU device; without explicit cleanup, accumulated tensor
                 # allocations from both frameworks cause CUBLAS errors (issue #1868).
-                if processed_count % 50 == 0:
-                    import gc
+                if processed_count % CACHE_CLEAN_INTERVAL == 0:
                     gc.collect()
-                    try:
-                        import torch
-                        if torch.cuda.is_available():
-                            torch.cuda.empty_cache()
-                    except ImportError:
-                        pass
+                    if _torch is not None and _torch.cuda.is_available():
+                        _torch.cuda.empty_cache()
 
             detect_executor.shutdown(wait=True)
 

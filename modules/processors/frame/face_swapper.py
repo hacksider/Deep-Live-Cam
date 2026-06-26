@@ -490,7 +490,8 @@ def _fast_paste_back(target_img: Frame, bgr_fake: np.ndarray, aimg: np.ndarray, 
         # Explicitly release CUDA tensor references. Without this, tensors persist
         # until garbage collection, accumulating across frames and exhausting VRAM
         # when both ONNX Runtime and PyTorch share the same GPU (issue #1868).
-        del mask_t, fake_t, tgt_t, blended
+        # `blended` is a CPU numpy array and does not need explicit cleanup.
+        del mask_t, fake_t, tgt_t
     else:
         # Fused uint8 blend via cv2 SIMD — no float32 round-trip.
         # Measured ~7-8× faster than the old numpy float32 path on a 1000×1000 crop.

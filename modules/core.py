@@ -188,7 +188,8 @@ def release_resources() -> None:
         # that could prevent cleanup on shutdown (issue #1868).
         try:
             import torch
-            torch.cuda.empty_cache()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
         except ImportError:
             pass
 
