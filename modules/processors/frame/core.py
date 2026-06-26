@@ -377,6 +377,10 @@ def _run_pipe_pipeline(
                 processed_count += 1
                 progress.update(1)
 
+                # Periodically flush CUDA cache to prevent VRAM exhaustion over
+                # long videos. ONNX Runtime (insightface) and PyTorch share the
+                # same GPU device; without explicit cleanup, accumulated tensor
+                # allocations from both frameworks cause CUBLAS errors (issue #1868).
                 if processed_count % 50 == 0:
                     import gc
                     gc.collect()

@@ -182,6 +182,10 @@ def limit_resources() -> None:
 
 def release_resources() -> None:
     if 'CUDAExecutionProvider' in modules.globals.execution_providers:
+        # Import torch at runtime rather than relying on a module-level
+        # HAS_TORCH flag. This ensures the CUDA cache is flushed even when
+        # PyTorch is loaded after this module, and avoids import-order issues
+        # that could prevent cleanup on shutdown (issue #1868).
         try:
             import torch
             torch.cuda.empty_cache()

@@ -487,6 +487,9 @@ def _fast_paste_back(target_img: Frame, bgr_fake: np.ndarray, aimg: np.ndarray, 
         tgt_t = torch.from_numpy(target_crop).float().cuda()
         blended = (mask_t * fake_t + (1.0 - mask_t) * tgt_t).to(torch.uint8).cpu().numpy()
         target_img[y1p:y2p, x1p:x2p] = blended
+        # Explicitly release CUDA tensor references. Without this, tensors persist
+        # until garbage collection, accumulating across frames and exhausting VRAM
+        # when both ONNX Runtime and PyTorch share the same GPU (issue #1868).
         del mask_t, fake_t, tgt_t, blended
     else:
         # Fused uint8 blend via cv2 SIMD — no float32 round-trip.
