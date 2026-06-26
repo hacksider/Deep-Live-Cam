@@ -1,6 +1,7 @@
 import os
 import subprocess
 import sys
+import gc
 import importlib
 from concurrent.futures import ThreadPoolExecutor
 from types import ModuleType
@@ -332,6 +333,14 @@ def _run_pipe_pipeline(
                 'mode': 'in-memory',
             })
 
+            # Lazily import torch here (it may not be installed) so the
+            # periodic CUDA cache flush in the loop below can use it.
+            _torch = None
+            try:
+                import torch as _torch
+            except ImportError:
+                pass
+
             # Pipelined detection: while processing frame N (swap on
             # ANE), start detecting the face in the next frame
             # (detection on GPU).  They use different hardware units
@@ -376,6 +385,17 @@ def _run_pipe_pipeline(
                 writer.stdin.write(frame.tobytes())
                 processed_count += 1
                 progress.update(1)
+
+                # Periodically flush CUDA cache to prevent VRAM exhaustion over
+                # long videos. ONNX Runtime (insightface) and PyTorch share the
+                # same GPU device; without explicit cleanup, accumulated tensor
+                # allocations from both frameworks cause CUBLAS errors (issue #1868).
+                # Interval is configurable via --cache-clean-interval (0 = disabled).
+                interval = modules.globals.cache_clean_interval
+                if interval > 0 and processed_count % interval == 0:
+                    gc.collect()
+                    if _torch is not None and _torch.cuda.is_available():
+                        _torch.cuda.empty_cache()
 
             detect_executor.shutdown(wait=True)
 
