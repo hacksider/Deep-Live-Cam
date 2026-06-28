@@ -132,9 +132,9 @@ def suggest_max_memory() -> int:
 
 
 def suggest_default_execution_provider() -> str:
-    """Pick the best available provider: cuda > rocm > coreml > dml > cpu."""
+    """Pick the best available provider: cuda > rocm > coreml > openvino > dml > cpu."""
     available = encode_execution_providers(onnxruntime.get_available_providers())
-    for pref in ('cuda', 'rocm', 'coreml', 'dml'):
+    for pref in ('cuda', 'rocm', 'coreml', 'openvino', 'dml'):
         if pref in available:
             return pref
     return 'cpu'
@@ -157,6 +157,8 @@ def suggest_execution_threads() -> int:
         return 1
     if 'CUDAExecutionProvider' in modules.globals.execution_providers:
         return 2
+    if 'OpenVINOExecutionProvider' in modules.globals.execution_providers:
+        return 1
     
     # For CPU execution, use most cores but leave some for system
     return max(4, min(cpu_count - 2, 16))

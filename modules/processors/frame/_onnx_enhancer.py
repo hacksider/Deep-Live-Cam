@@ -50,6 +50,14 @@ def build_provider_config(providers=None):
                     "AllowLowPrecisionAccumulationOnGPU": 1,
                 },
             ))
+        elif p == "OpenVINOExecutionProvider":
+            # Prefer Intel GPU with FP16 precision when available.
+            # NB: GPU_FP16 is deprecated since OpenVINO 2025.4 — use
+            # device_type="GPU" + precision="FP16" instead.
+            config.append((
+                "OpenVINOExecutionProvider",
+                {"device_type": "GPU", "precision": "FP16"},
+            ))
         else:
             config.append(p)
     return config
