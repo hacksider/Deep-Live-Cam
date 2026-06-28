@@ -40,6 +40,7 @@ ONNX_PROVIDERS: List[str] = _detect_onnx_providers()
 HAS_CUDA_PROVIDER: bool = "CUDAExecutionProvider" in ONNX_PROVIDERS
 HAS_COREML_PROVIDER: bool = "CoreMLExecutionProvider" in ONNX_PROVIDERS
 HAS_DML_PROVIDER: bool = "DmlExecutionProvider" in ONNX_PROVIDERS
+HAS_OPENVINO_PROVIDER: bool = "OpenVINOExecutionProvider" in ONNX_PROVIDERS
 
 
 def camera_backends() -> List[Tuple[int, int]]:
@@ -65,6 +66,8 @@ def accelerator_label() -> str:
         return "CoreML (Apple Neural Engine)"
     if HAS_COREML_PROVIDER:
         return "CoreML"
+    if HAS_OPENVINO_PROVIDER:
+        return "OpenVINO (Intel)"
     if HAS_DML_PROVIDER:
         return "DirectML"
     return "CPU"

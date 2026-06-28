@@ -270,6 +270,11 @@ def get_face_swapper() -> Any:
                         # Use bare provider — ONNX Runtime defaults are
                         # fastest on modern GPUs (Blackwell/sm_120).
                         providers_config.append(p)
+                    elif p == "OpenVINOExecutionProvider":
+                        providers_config.append((
+                            "OpenVINOExecutionProvider",
+                            {"device_type": "GPU", "precision": "FP16"},
+                        ))
                     else:
                         providers_config.append(p)
                 FACE_SWAPPER = insightface.model_zoo.get_model(
