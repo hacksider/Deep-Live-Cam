@@ -150,7 +150,7 @@ pip install -r requirements.txt
 
 **For macOS:**
 
-Apple Silicon (M1/M2/M3) requires specific setup:
+Apple Silicon (M1/M2/M3/M4/M5) requires specific setup:
 
 ```bash
 # Install Python 3.11 (specific version is important)
