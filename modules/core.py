@@ -268,10 +268,9 @@ def start() -> None:
             update_status('Falling back to disk-based processing...')
 
         extraction_start = time.time()
-        if not modules.globals.map_faces:
-            create_temp(modules.globals.target_path)
-            update_status('Extracting frames...')
-            extract_frames(modules.globals.target_path)
+        create_temp(modules.globals.target_path)
+        update_status('Extracting frames...')
+        extract_frames(modules.globals.target_path)
         extraction_time = time.time() - extraction_start
 
         temp_frame_paths = get_temp_frame_paths(modules.globals.target_path)
