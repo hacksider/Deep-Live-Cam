@@ -230,16 +230,30 @@ def get_face_swapper() -> Any:
 
     with THREAD_LOCK:
         if FACE_SWAPPER is None:
-            # Prefer FP16 on GPUs with Tensor Cores (Turing+) — half the
-            # memory bandwidth, faster inference.  Fall back to FP32 for
-            # older GPUs (e.g. GTX 16xx) where FP16 can produce NaN.
+            # Prefer the official FP32 model (the one pre_check downloads).
+            # Community FP16 conversions of inswapper vary in quality: some
+            # reorder or absorb the identity-projection matrix (emap), which
+            # insightface reads as the LAST graph initializer — a mismatched
+            # emap yields a garbage latent and the model then outputs a
+            # near-reconstruction of the target face (i.e. "no swap").
+            # Set DLC_USE_FP16=1 to opt into a local fp16 file for speed.
             fp32_path = os.path.join(models_dir, "inswapper_128.onnx")
             fp16_path = os.path.join(models_dir, "inswapper_128_fp16.onnx")
-            use_fp16 = _HAS_TORCH_CUDA and os.path.exists(fp16_path)
-            if use_fp16:
+            want_fp16 = (
+                _HAS_TORCH_CUDA
+                and os.path.exists(fp16_path)
+                and os.environ.get("DLC_USE_FP16", "0") == "1"
+            )
+            if want_fp16:
                 model_path = fp16_path
             elif os.path.exists(fp32_path):
                 model_path = fp32_path
+            elif os.path.exists(fp16_path):
+                update_status(
+                    "FP32 inswapper_128.onnx not found — falling back to the "
+                    "fp16 variant. If faces do not get swapped, download the "
+                    "official FP32 model.", NAME)
+                model_path = fp16_path
             else:
                 update_status(f"No inswapper model found in {models_dir}.", NAME)
                 return None
@@ -276,8 +290,21 @@ def get_face_swapper() -> Any:
                     model_path,
                     providers=providers_config,
                 )
+                # insightface takes emap from the model's last initializer;
+                # if this file stores it differently the latent is garbage
+                # and every swap silently degrades to "no identity change".
+                emap = getattr(FACE_SWAPPER, "emap", None)
+                if emap is None or getattr(emap, "shape", None) != (512, 512):
+                    update_status(
+                        f"WARNING: unexpected emap in {os.path.basename(model_path)} "
+                        f"(shape={getattr(emap, 'shape', None)}, expected (512, 512)). "
+                        "Identity transfer will likely fail — use the official "
+                        "FP32 inswapper_128.onnx.", NAME)
                 # Set up CUDA graph session for faster inference
-                if _HAS_TORCH_CUDA and any(
+                # (DLC_DISABLE_CUDA_GRAPH=1 skips it, for A/B debugging)
+                if _HAS_TORCH_CUDA and os.environ.get(
+                    "DLC_DISABLE_CUDA_GRAPH", "0"
+                ) != "1" and any(
                     p == "CUDAExecutionProvider" or
                     (isinstance(p, tuple) and p[0] == "CUDAExecutionProvider")
                     for p in providers_config
@@ -499,6 +526,71 @@ def _fast_paste_back(target_img: Frame, bgr_fake: np.ndarray, aimg: np.ndarray, 
     return target_img
 
 
+PIXEL_BOOST = 2  # 1 = off, 2 = 256x256, 4 = 512x512
+
+
+def _pixel_boost_swap(face_swapper, temp_frame, target_face, source_face):
+    """Swap at higher resolution via pixel-interleaved sub-frames.
+
+    Warps the target face at (model_size * PIXEL_BOOST), then deinterleaves
+    the crop into boost^2 sub-frames by strided sampling — sub-frame (a, b)
+    is crop[a::boost, b::boost], i.e. a COMPLETE aligned face at model
+    resolution, just offset by sub-pixel. Each sub-frame goes through the
+    swap model, and the outputs are re-interleaved into the full-res crop.
+
+    Spatial tiling (quadrants) must NOT be used here: inswapper was trained
+    on whole aligned faces, so a quarter-face tile makes it hallucinate an
+    entire face inside the tile — ghost faces and hard seams at tile
+    boundaries. Interleaving keeps every model input a valid full face.
+
+    Returns (bgr_fake_hires, M_hires) where bgr_fake_hires is
+    (model_size*boost x model_size*boost).
+    """
+    from insightface.utils import face_align
+
+    model_size = face_swapper.input_size[0]  # 128
+    boost = PIXEL_BOOST
+    crop_size = model_size * boost  # 256
+
+    # Warp target face at the larger crop size
+    aimg_big, M_big = face_align.norm_crop2(temp_frame, target_face.kps, crop_size)
+
+    # Prepare the source latent (same for every sub-frame)
+    latent = source_face.normed_embedding.reshape((1, -1))
+    latent = np.dot(latent, face_swapper.emap)
+    latent /= np.linalg.norm(latent)
+
+    # Deinterleave into boost^2 full-face sub-frames, swap each
+    sub_frames = (
+        aimg_big.reshape(model_size, boost, model_size, boost, 3)
+        .transpose(1, 3, 0, 2, 4)
+        .reshape(boost * boost, model_size, model_size, 3)
+    )
+    swapped = np.empty_like(sub_frames)
+    for i in range(boost * boost):
+        blob = cv2.dnn.blobFromImage(
+            np.ascontiguousarray(sub_frames[i]),
+            1.0 / face_swapper.input_std, face_swapper.input_size,
+            (face_swapper.input_mean, face_swapper.input_mean, face_swapper.input_mean),
+            swapRB=True
+        )
+        pred = face_swapper.session.run(
+            face_swapper.output_names,
+            {face_swapper.input_names[0]: blob, face_swapper.input_names[1]: latent}
+        )[0]
+        img_fake = pred.transpose((0, 2, 3, 1))[0]
+        swapped[i] = np.clip(255 * img_fake, 0, 255).astype(np.uint8)[:, :, ::-1]
+
+    # Re-interleave the swapped sub-frames into the full-res crop
+    bgr_fake_big = (
+        swapped.reshape(boost, boost, model_size, model_size, 3)
+        .transpose(2, 0, 3, 1, 4)
+        .reshape(crop_size, crop_size, 3)
+    )
+
+    return np.ascontiguousarray(bgr_fake_big), M_big
+
+
 def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
     """Optimized face swapping with better memory management and performance."""
     face_swapper = get_face_swapper()
@@ -518,10 +610,6 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
     opacity = max(0.0, min(1.0, opacity))
     mouth_mask_enabled = getattr(modules.globals, "mouth_mask", False)
     poisson_blend_enabled = getattr(modules.globals, "poisson_blend", False)
-    # Poisson blend's seamlessClone needs the genuine pre-swap frame as its
-    # destination. Without this, original_frame aliases temp_frame, which
-    # _fast_paste_back mutates in place — so seamlessClone would blend the
-    # swapped face onto the already-swapped frame (no visible effect).
     needs_original = opacity < 1.0 or mouth_mask_enabled or poisson_blend_enabled
     if needs_original:
         original_frame = temp_frame.copy()
@@ -535,28 +623,34 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
         if not temp_frame.flags['C_CONTIGUOUS']:
             temp_frame = np.ascontiguousarray(temp_frame)
 
-        # Use paste_back=False and our optimized paste-back
-        if any("DmlExecutionProvider" in p for p in modules.globals.execution_providers):
-            with modules.globals.dml_lock:
+        if PIXEL_BOOST > 1:
+            # Pixel-boosted swap: warp at larger size, tile, swap each tile
+            if any("DmlExecutionProvider" in p for p in modules.globals.execution_providers):
+                with modules.globals.dml_lock:
+                    bgr_fake, M = _pixel_boost_swap(
+                        face_swapper, temp_frame, target_face, source_face
+                    )
+            else:
+                bgr_fake, M = _pixel_boost_swap(
+                    face_swapper, temp_frame, target_face, source_face
+                )
+        else:
+            # Standard swap at native 128x128
+            if any("DmlExecutionProvider" in p for p in modules.globals.execution_providers):
+                with modules.globals.dml_lock:
+                    bgr_fake, M = face_swapper.get(
+                        temp_frame, target_face, source_face, paste_back=False
+                    )
+            else:
                 bgr_fake, M = face_swapper.get(
                     temp_frame, target_face, source_face, paste_back=False
                 )
-        else:
-            bgr_fake, M = face_swapper.get(
-                temp_frame, target_face, source_face, paste_back=False
-            )
 
-        if bgr_fake is None:
+        if bgr_fake is None or not isinstance(bgr_fake, np.ndarray):
             return original_frame
 
-        if not isinstance(bgr_fake, np.ndarray):
-            return original_frame
-
-        # Pass a dummy aimg with correct shape — _fast_paste_back only uses aimg.shape
-        # to create the white mask. Avoids redundant norm_crop2 (~0.6ms).
-        _face_size = face_swapper.input_size[0]
-        _aimg_dummy = np.empty((_face_size, _face_size, 3), dtype=np.uint8)
-
+        # _fast_paste_back uses aimg.shape to size the alpha mask
+        _aimg_dummy = np.empty((bgr_fake.shape[0], bgr_fake.shape[1], 3), dtype=np.uint8)
         swapped_frame = _fast_paste_back(temp_frame, bgr_fake, _aimg_dummy, M)
 
     except Exception as e:
