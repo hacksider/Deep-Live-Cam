@@ -229,16 +229,30 @@ def get_face_swapper() -> Any:
 
     with THREAD_LOCK:
         if FACE_SWAPPER is None:
-            # Prefer FP16 on GPUs with Tensor Cores (Turing+) — half the
-            # memory bandwidth, faster inference.  Fall back to FP32 for
-            # older GPUs (e.g. GTX 16xx) where FP16 can produce NaN.
+            # Prefer the official FP32 model (the one pre_check downloads).
+            # Community FP16 conversions of inswapper vary in quality: some
+            # reorder or absorb the identity-projection matrix (emap), which
+            # insightface reads as the LAST graph initializer — a mismatched
+            # emap yields a garbage latent and the model then outputs a
+            # near-reconstruction of the target face (i.e. "no swap").
+            # Set DLC_USE_FP16=1 to opt into a local fp16 file for speed.
             fp32_path = os.path.join(models_dir, "inswapper_128.onnx")
             fp16_path = os.path.join(models_dir, "inswapper_128_fp16.onnx")
-            use_fp16 = _HAS_TORCH_CUDA and os.path.exists(fp16_path)
-            if use_fp16:
+            want_fp16 = (
+                _HAS_TORCH_CUDA
+                and os.path.exists(fp16_path)
+                and os.environ.get("DLC_USE_FP16", "0") == "1"
+            )
+            if want_fp16:
                 model_path = fp16_path
             elif os.path.exists(fp32_path):
                 model_path = fp32_path
+            elif os.path.exists(fp16_path):
+                update_status(
+                    "FP32 inswapper_128.onnx not found — falling back to the "
+                    "fp16 variant. If faces do not get swapped, download the "
+                    "official FP32 model.", NAME)
+                model_path = fp16_path
             else:
                 update_status(f"No inswapper model found in {models_dir}.", NAME)
                 return None
@@ -275,8 +289,21 @@ def get_face_swapper() -> Any:
                     model_path,
                     providers=providers_config,
                 )
+                # insightface takes emap from the model's last initializer;
+                # if this file stores it differently the latent is garbage
+                # and every swap silently degrades to "no identity change".
+                emap = getattr(FACE_SWAPPER, "emap", None)
+                if emap is None or getattr(emap, "shape", None) != (512, 512):
+                    update_status(
+                        f"WARNING: unexpected emap in {os.path.basename(model_path)} "
+                        f"(shape={getattr(emap, 'shape', None)}, expected (512, 512)). "
+                        "Identity transfer will likely fail — use the official "
+                        "FP32 inswapper_128.onnx.", NAME)
                 # Set up CUDA graph session for faster inference
-                if _HAS_TORCH_CUDA and any(
+                # (DLC_DISABLE_CUDA_GRAPH=1 skips it, for A/B debugging)
+                if _HAS_TORCH_CUDA and os.environ.get(
+                    "DLC_DISABLE_CUDA_GRAPH", "0"
+                ) != "1" and any(
                     p == "CUDAExecutionProvider" or
                     (isinstance(p, tuple) and p[0] == "CUDAExecutionProvider")
                     for p in providers_config
