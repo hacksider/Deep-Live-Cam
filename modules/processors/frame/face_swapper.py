@@ -498,6 +498,65 @@ def _fast_paste_back(target_img: Frame, bgr_fake: np.ndarray, aimg: np.ndarray, 
     return target_img
 
 
+PIXEL_BOOST = 2  # 1 = off, 2 = 256x256, 4 = 512x512
+
+
+def _pixel_boost_swap(face_swapper, temp_frame, target_face, source_face):
+    """Swap at higher resolution by tiling the face crop.
+
+    Warps the target face at (model_size * PIXEL_BOOST), splits into a grid
+    of model-sized tiles, runs each through the swap model, reassembles.
+    Returns (bgr_fake_hires, M_hires) where bgr_fake_hires is
+    (model_size*boost x model_size*boost).
+    """
+    from insightface.utils import face_align
+
+    model_size = face_swapper.input_size[0]  # 128
+    boost = PIXEL_BOOST
+    crop_size = model_size * boost  # 256
+
+    # Warp target face at the larger crop size
+    aimg_big, M_big = face_align.norm_crop2(temp_frame, target_face.kps, crop_size)
+
+    # Prepare the source latent (same for every tile)
+    latent = source_face.normed_embedding.reshape((1, -1))
+    latent = np.dot(latent, face_swapper.emap)
+    latent /= np.linalg.norm(latent)
+
+    # Split into tiles, swap each, reassemble
+    tiles = []
+    for row in range(boost):
+        for col in range(boost):
+            y1 = row * model_size
+            x1 = col * model_size
+            tile = aimg_big[y1:y1 + model_size, x1:x1 + model_size]
+            # Run swap on this tile
+            blob = cv2.dnn.blobFromImage(
+                tile, 1.0 / face_swapper.input_std, face_swapper.input_size,
+                (face_swapper.input_mean, face_swapper.input_mean, face_swapper.input_mean),
+                swapRB=True
+            )
+            pred = face_swapper.session.run(
+                face_swapper.output_names,
+                {face_swapper.input_names[0]: blob, face_swapper.input_names[1]: latent}
+            )[0]
+            img_fake = pred.transpose((0, 2, 3, 1))[0]
+            tile_fake = np.clip(255 * img_fake, 0, 255).astype(np.uint8)[:, :, ::-1]
+            tiles.append(tile_fake)
+
+    # Reassemble tiles into the big crop
+    bgr_fake_big = np.zeros((crop_size, crop_size, 3), dtype=np.uint8)
+    idx = 0
+    for row in range(boost):
+        for col in range(boost):
+            y1 = row * model_size
+            x1 = col * model_size
+            bgr_fake_big[y1:y1 + model_size, x1:x1 + model_size] = tiles[idx]
+            idx += 1
+
+    return bgr_fake_big, M_big
+
+
 def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
     """Optimized face swapping with better memory management and performance."""
     face_swapper = get_face_swapper()
@@ -517,10 +576,6 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
     opacity = max(0.0, min(1.0, opacity))
     mouth_mask_enabled = getattr(modules.globals, "mouth_mask", False)
     poisson_blend_enabled = getattr(modules.globals, "poisson_blend", False)
-    # Poisson blend's seamlessClone needs the genuine pre-swap frame as its
-    # destination. Without this, original_frame aliases temp_frame, which
-    # _fast_paste_back mutates in place — so seamlessClone would blend the
-    # swapped face onto the already-swapped frame (no visible effect).
     needs_original = opacity < 1.0 or mouth_mask_enabled or poisson_blend_enabled
     if needs_original:
         original_frame = temp_frame.copy()
@@ -534,28 +589,34 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
         if not temp_frame.flags['C_CONTIGUOUS']:
             temp_frame = np.ascontiguousarray(temp_frame)
 
-        # Use paste_back=False and our optimized paste-back
-        if any("DmlExecutionProvider" in p for p in modules.globals.execution_providers):
-            with modules.globals.dml_lock:
+        if PIXEL_BOOST > 1:
+            # Pixel-boosted swap: warp at larger size, tile, swap each tile
+            if any("DmlExecutionProvider" in p for p in modules.globals.execution_providers):
+                with modules.globals.dml_lock:
+                    bgr_fake, M = _pixel_boost_swap(
+                        face_swapper, temp_frame, target_face, source_face
+                    )
+            else:
+                bgr_fake, M = _pixel_boost_swap(
+                    face_swapper, temp_frame, target_face, source_face
+                )
+        else:
+            # Standard swap at native 128x128
+            if any("DmlExecutionProvider" in p for p in modules.globals.execution_providers):
+                with modules.globals.dml_lock:
+                    bgr_fake, M = face_swapper.get(
+                        temp_frame, target_face, source_face, paste_back=False
+                    )
+            else:
                 bgr_fake, M = face_swapper.get(
                     temp_frame, target_face, source_face, paste_back=False
                 )
-        else:
-            bgr_fake, M = face_swapper.get(
-                temp_frame, target_face, source_face, paste_back=False
-            )
 
-        if bgr_fake is None:
+        if bgr_fake is None or not isinstance(bgr_fake, np.ndarray):
             return original_frame
 
-        if not isinstance(bgr_fake, np.ndarray):
-            return original_frame
-
-        # Pass a dummy aimg with correct shape — _fast_paste_back only uses aimg.shape
-        # to create the white mask. Avoids redundant norm_crop2 (~0.6ms).
-        _face_size = face_swapper.input_size[0]
-        _aimg_dummy = np.empty((_face_size, _face_size, 3), dtype=np.uint8)
-
+        # _fast_paste_back uses aimg.shape to size the alpha mask
+        _aimg_dummy = np.empty((bgr_fake.shape[0], bgr_fake.shape[1], 3), dtype=np.uint8)
         swapped_frame = _fast_paste_back(temp_frame, bgr_fake, _aimg_dummy, M)
 
     except Exception as e:
