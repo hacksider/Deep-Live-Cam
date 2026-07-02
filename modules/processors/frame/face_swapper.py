@@ -502,10 +502,19 @@ PIXEL_BOOST = 2  # 1 = off, 2 = 256x256, 4 = 512x512
 
 
 def _pixel_boost_swap(face_swapper, temp_frame, target_face, source_face):
-    """Swap at higher resolution by tiling the face crop.
+    """Swap at higher resolution via pixel-interleaved sub-frames.
 
-    Warps the target face at (model_size * PIXEL_BOOST), splits into a grid
-    of model-sized tiles, runs each through the swap model, reassembles.
+    Warps the target face at (model_size * PIXEL_BOOST), then deinterleaves
+    the crop into boost^2 sub-frames by strided sampling — sub-frame (a, b)
+    is crop[a::boost, b::boost], i.e. a COMPLETE aligned face at model
+    resolution, just offset by sub-pixel. Each sub-frame goes through the
+    swap model, and the outputs are re-interleaved into the full-res crop.
+
+    Spatial tiling (quadrants) must NOT be used here: inswapper was trained
+    on whole aligned faces, so a quarter-face tile makes it hallucinate an
+    entire face inside the tile — ghost faces and hard seams at tile
+    boundaries. Interleaving keeps every model input a valid full face.
+
     Returns (bgr_fake_hires, M_hires) where bgr_fake_hires is
     (model_size*boost x model_size*boost).
     """
@@ -518,43 +527,40 @@ def _pixel_boost_swap(face_swapper, temp_frame, target_face, source_face):
     # Warp target face at the larger crop size
     aimg_big, M_big = face_align.norm_crop2(temp_frame, target_face.kps, crop_size)
 
-    # Prepare the source latent (same for every tile)
+    # Prepare the source latent (same for every sub-frame)
     latent = source_face.normed_embedding.reshape((1, -1))
     latent = np.dot(latent, face_swapper.emap)
     latent /= np.linalg.norm(latent)
 
-    # Split into tiles, swap each, reassemble
-    tiles = []
-    for row in range(boost):
-        for col in range(boost):
-            y1 = row * model_size
-            x1 = col * model_size
-            tile = aimg_big[y1:y1 + model_size, x1:x1 + model_size]
-            # Run swap on this tile
-            blob = cv2.dnn.blobFromImage(
-                tile, 1.0 / face_swapper.input_std, face_swapper.input_size,
-                (face_swapper.input_mean, face_swapper.input_mean, face_swapper.input_mean),
-                swapRB=True
-            )
-            pred = face_swapper.session.run(
-                face_swapper.output_names,
-                {face_swapper.input_names[0]: blob, face_swapper.input_names[1]: latent}
-            )[0]
-            img_fake = pred.transpose((0, 2, 3, 1))[0]
-            tile_fake = np.clip(255 * img_fake, 0, 255).astype(np.uint8)[:, :, ::-1]
-            tiles.append(tile_fake)
+    # Deinterleave into boost^2 full-face sub-frames, swap each
+    sub_frames = (
+        aimg_big.reshape(model_size, boost, model_size, boost, 3)
+        .transpose(1, 3, 0, 2, 4)
+        .reshape(boost * boost, model_size, model_size, 3)
+    )
+    swapped = np.empty_like(sub_frames)
+    for i in range(boost * boost):
+        blob = cv2.dnn.blobFromImage(
+            np.ascontiguousarray(sub_frames[i]),
+            1.0 / face_swapper.input_std, face_swapper.input_size,
+            (face_swapper.input_mean, face_swapper.input_mean, face_swapper.input_mean),
+            swapRB=True
+        )
+        pred = face_swapper.session.run(
+            face_swapper.output_names,
+            {face_swapper.input_names[0]: blob, face_swapper.input_names[1]: latent}
+        )[0]
+        img_fake = pred.transpose((0, 2, 3, 1))[0]
+        swapped[i] = np.clip(255 * img_fake, 0, 255).astype(np.uint8)[:, :, ::-1]
 
-    # Reassemble tiles into the big crop
-    bgr_fake_big = np.zeros((crop_size, crop_size, 3), dtype=np.uint8)
-    idx = 0
-    for row in range(boost):
-        for col in range(boost):
-            y1 = row * model_size
-            x1 = col * model_size
-            bgr_fake_big[y1:y1 + model_size, x1:x1 + model_size] = tiles[idx]
-            idx += 1
+    # Re-interleave the swapped sub-frames into the full-res crop
+    bgr_fake_big = (
+        swapped.reshape(boost, boost, model_size, model_size, 3)
+        .transpose(2, 0, 3, 1, 4)
+        .reshape(crop_size, crop_size, 3)
+    )
 
-    return bgr_fake_big, M_big
+    return np.ascontiguousarray(bgr_fake_big), M_big
 
 
 def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
