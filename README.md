@@ -118,7 +118,7 @@ This is more likely to work on your computer but will be slower as it utilizes t
 **2. Clone the Repository**
 
 ```bash
-git clone https://github.com/hacksider/Deep-Live-Cam.git
+git clone --depth 1 https://github.com/hacksider/Deep-Live-Cam.git
 cd Deep-Live-Cam
 ```
 
