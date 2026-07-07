@@ -28,7 +28,7 @@ def run_ffmpeg(args: List[str]) -> bool:
     ]
     commands.extend(args)
     try:
-        subprocess.check_output(commands, stderr=subprocess.STDOUT)
+        subprocess.check_output(commands, stderr=subprocess.STDOUT, shell=False)
         return True
     except subprocess.CalledProcessError as error:
         output = error.output.decode(errors="ignore").strip()
@@ -52,7 +52,7 @@ def detect_fps(target_path: str) -> float:
         "default=noprint_wrappers=1:nokey=1",
         target_path,
     ]
-    output = subprocess.check_output(command).decode().strip().split("/")
+    output = subprocess.check_output(command, shell=False).decode().strip().split("/")
     try:
         numerator, denominator = map(int, output)
         return numerator / denominator
