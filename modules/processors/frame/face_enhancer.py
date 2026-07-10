@@ -430,11 +430,21 @@ def enhance_face(temp_frame: Frame, detected_faces=None) -> Frame:
                         interpolation=cv2.INTER_LANCZOS4,
                     )
 
-                # Cache for reuse on next frame
+                # Cache for reuse on next frame — commit under THREAD_LOCK and
+                # only if our session is still the active one. A concurrent
+                # reset_face_enhancer() (model hot-swap) nulls FACE_ENHANCER and
+                # clears this cache under the same lock; without the guard, a
+                # frame whose inference ran on the now-replaced session could
+                # resurrect the old model's output into the just-cleared cache
+                # for the next frame to reuse. `FACE_ENHANCER is session` acts
+                # as a model-generation tag: if a reset swapped the session out
+                # from under us, drop the stale result instead of caching it.
                 if use_cache:
-                    _enh_live_cache['enhanced_bgr'] = enhanced_bgr
-                    _enh_live_cache['affine_matrix'] = affine_matrix
-                    _enh_live_cache['align_size'] = align_size
+                    with THREAD_LOCK:
+                        if FACE_ENHANCER is session:
+                            _enh_live_cache['enhanced_bgr'] = enhanced_bgr
+                            _enh_live_cache['affine_matrix'] = affine_matrix
+                            _enh_live_cache['align_size'] = align_size
 
                 _paste_back(
                     temp_frame, enhanced_bgr, affine_matrix, output_size=align_size
