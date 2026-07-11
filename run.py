@@ -39,7 +39,7 @@ if sys.platform == "win32":
             add_openvino_libs_to_path,
         )
         add_openvino_libs_to_path()
-    except (ImportError, FileNotFoundError):
+    except (ImportError, FileNotFoundError, SystemExit):
         pass  # OpenVINO not installed — no-op
 
 # On Linux, pre-load NVIDIA shared libraries (cuDNN, cuBLAS, nvrtc...) shipped
