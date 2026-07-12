@@ -14,16 +14,12 @@ import numpy as np
 import onnxruntime
 
 import modules.globals
+from modules.platform_info import OPENVINO_PROVIDER_CONFIG
 
 IS_APPLE_SILICON = platform.system() == "Darwin" and platform.machine() == "arm64"
 
 # Limit concurrent ONNX calls to avoid VRAM exhaustion on multi-face frames
 THREAD_SEMAPHORE = threading.Semaphore(min(max(1, (os.cpu_count() or 1)), 8))
-
-# OpenVINO provider configuration.
-# AUTO:GPU,NPU,CPU lets OpenVINO try the best available device in priority
-# order (Intel GPU → NPU → CPU). 
-OPENVINO_PROVIDER_CONFIG = ("OpenVINOExecutionProvider", {"device_type": "AUTO:GPU,NPU,CPU"})
 
 
 def build_provider_config(providers=None):

@@ -18,6 +18,7 @@ from modules.utilities import (
 )
 from modules.cluster_analysis import find_closest_centroid
 from modules.gpu_processing import gpu_gaussian_blur, gpu_sharpen, gpu_add_weighted, gpu_resize
+from modules.platform_info import OPENVINO_PROVIDER_CONFIG
 import os
 from collections import deque
 import time
@@ -271,9 +272,6 @@ def get_face_swapper() -> Any:
                         # fastest on modern GPUs (Blackwell/sm_120).
                         providers_config.append(p)
                     elif p == "OpenVINOExecutionProvider":
-                        from modules.processors.frame._onnx_enhancer import (
-                            OPENVINO_PROVIDER_CONFIG,
-                        )
                         providers_config.append(OPENVINO_PROVIDER_CONFIG)
                     else:
                         providers_config.append(p)

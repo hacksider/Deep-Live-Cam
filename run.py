@@ -33,14 +33,27 @@ if sys.platform == "win32":
 
     # On Windows, register OpenVINO DLL directories so onnxruntime's
     # OpenVINOExecutionProvider can find openvino.dll.  This must happen
-    # before any ONNX InferenceSession is created.
+    # before any ONNX InferenceSession is created.  Failure is non-fatal:
+    # OpenVINO simply isn't installed, and onnxruntime will fall back to CPU.
     try:
         from onnxruntime.tools.add_openvino_win_libs import (  # type: ignore[import-untyped]  # noqa: E501
             add_openvino_libs_to_path,
         )
         add_openvino_libs_to_path()
-    except (ImportError, FileNotFoundError, SystemExit):
-        pass  # OpenVINO not installed — no-op
+    except ImportError:
+        # onnxruntime build without the OpenVINO tooling module — no-op.
+        pass
+    except FileNotFoundError:
+        # OpenVINO site-packages dir absent — no-op.
+        pass
+    except SystemExit as exc:
+        # add_openvino_libs_to_path() calls sys.exit() when OpenVINO libs
+        # can't be located (e.g. OPENVINO_LIB_PATHS unset).  Log the message
+        # it raised with so the failure is visible, but keep startup alive.
+        print(
+            f"[startup] OpenVINO DLL registration skipped: {exc}",
+            flush=True,
+        )
 
 # On Linux, pre-load NVIDIA shared libraries (cuDNN, cuBLAS, nvrtc...) shipped
 # inside the venv via pip wheels (nvidia-cudnn-cu12, etc.). LD_LIBRARY_PATH
