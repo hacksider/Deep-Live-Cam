@@ -30,13 +30,13 @@ By using this software, you agree to these terms and commit to using it in a man
 
 Users are expected to use this software responsibly and legally. If using a real person's face, obtain their consent and clearly label any output as a deepfake when sharing online. We are not responsible for end-user actions.
 
-## Exclusive v2.7 RC2 Quick Start - Pre-built (Windows/Mac Silicon/CPU)
+## Exclusive v2.7 RC6 Quick Start - Pre-built (Windows/Mac Silicon/CPU)
 
   <a href="https://deeplivecam.net/index.php/quickstart"> <img src="media/Download.png" width="285" height="77" />
 
 ##### This is the fastest build you can get if you have a discrete NVIDIA or AMD GPU, CPU or Mac Silicon, And you'll receive special priority support. 2.7 beta is the best you can have with 30+ extra features than the open source version.
  
-###### These Pre-builts are perfect for non-technical users or those who don't have time to, or can't manually install all the requirements. Just a heads-up: this is an open-source project, so you can also install it manually. 
+###### These Pre-builts are perfect for non-technical users or those who don't have time to, or can't manually install all the requirements with all the optimizations needed. Fully optimized to any hardware you use.
 
 ## TLDR; Live Deepfake in just 3 Clicks
 ![easysteps](https://github.com/user-attachments/assets/af825228-852c-411b-b787-ffd9aac72fc6)
@@ -118,7 +118,7 @@ This is more likely to work on your computer but will be slower as it utilizes t
 **2. Clone the Repository**
 
 ```bash
-git clone https://github.com/hacksider/Deep-Live-Cam.git
+git clone --depth 1 https://github.com/hacksider/Deep-Live-Cam.git
 cd Deep-Live-Cam
 ```
 

@@ -4,10 +4,9 @@ from typing import Any, List
 import os
 import threading
 
-import cv2
-
 import modules.globals
 import modules.processors.frame.core
+from modules import imread_unicode, imwrite_unicode
 from modules.core import update_status
 from modules.face_analyser import get_one_face
 from modules.typing import Frame, Face
@@ -102,24 +101,24 @@ def process_frames(
     source_path: str | None, temp_frame_paths: List[str], progress: Any = None
 ) -> None:
     for temp_frame_path in temp_frame_paths:
-        temp_frame = cv2.imread(temp_frame_path)
+        temp_frame = imread_unicode(temp_frame_path)
         if temp_frame is None:
             if progress:
                 progress.update(1)
             continue
         result = process_frame(None, temp_frame)
-        cv2.imwrite(temp_frame_path, result)
+        imwrite_unicode(temp_frame_path, result)
         if progress:
             progress.update(1)
 
 
 def process_image(source_path: str | None, target_path: str, output_path: str) -> None:
-    target_frame = cv2.imread(target_path)
+    target_frame = imread_unicode(target_path)
     if target_frame is None:
         print(f"{NAME}: Error: Failed to read target image {target_path}")
         return
     result_frame = process_frame(None, target_frame)
-    cv2.imwrite(output_path, result_frame)
+    imwrite_unicode(output_path, result_frame)
     print(f"{NAME}: Enhanced image saved to {output_path}")
 
 
