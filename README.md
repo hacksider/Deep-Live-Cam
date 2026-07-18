@@ -30,13 +30,39 @@ By using this software, you agree to these terms and commit to using it in a man
 
 Users are expected to use this software responsibly and legally. If using a real person's face, obtain their consent and clearly label any output as a deepfake when sharing online. We are not responsible for end-user actions.
 
-## Exclusive v2.7 RC6 Quick Start - Pre-built (Windows/Mac Silicon/CPU)
+## Pre-built Quickstart
 
-  <a href="https://deeplivecam.net/index.php/quickstart"> <img src="media/Download.png" width="285" height="77" />
+<p align="center">
+  <a href="https://deeplivecam.net/index.php/quickstart">
+    <img src="https://github.com/user-attachments/assets/fa2cdf79-c933-4b93-844a-b087192261ed" width="100%" alt="Lite / Ultimate Download Banner">
+  </a>
+</p>
 
-##### This is the fastest build you can get if you have a discrete NVIDIA or AMD GPU, CPU or Mac Silicon, And you'll receive special priority support. 2.7 beta is the best you can have with 30+ extra features than the open source version.
- 
-###### These Pre-builts are perfect for non-technical users or those who don't have time to, or can't manually install all the requirements with all the optimizations needed. Fully optimized to any hardware you use.
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/56b61811-3a1e-4672-9b50-cf7f6e8e6852" width="40" alt="Windows">
+  &nbsp;&nbsp;&nbsp;
+  <img src="https://github.com/user-attachments/assets/6538e3a6-c957-431a-b586-2d6abcf534dc" width="34" alt="Mac Silicon">
+  &nbsp;&nbsp;&nbsp;
+  <img src="https://github.com/user-attachments/assets/ad45142e-426c-4364-a2a9-a512670cc62c" width="40" alt="CPU">
+</p>
+
+<p align="center">
+  <strong>Windows • Mac Silicon • CPU • NVIDIA • AMD</strong>
+</p>
+
+<p align="center">
+  Builds optimized for your hardware.
+</p>
+
+<p align="center">
+  <a href="https://deeplivecam.net/index.php/quickstart">
+    <img src="media/Download.png" width="280" alt="Download">
+  </a>
+</p>
+
+> **Ultimate** includes **30+ exclusive features**, performance optimizations, and **priority support**.
+
+Perfect if you want the fastest setup with **zero manual installation**, pre-configured dependencies, and optimized builds for every supported platform.
 
 ## TLDR; Live Deepfake in just 3 Clicks
 ![easysteps](https://github.com/user-attachments/assets/af825228-852c-411b-b787-ffd9aac72fc6)
