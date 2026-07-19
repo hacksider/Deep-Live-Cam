@@ -44,7 +44,7 @@ HAS_OPENVINO_PROVIDER: bool = "OpenVINOExecutionProvider" in ONNX_PROVIDERS
 
 # OpenVINO execution-provider config shared by every ONNX session builder.
 # AUTO:GPU,NPU,CPU lets OpenVINO pick the best available device in priority
-# order (Intel GPU → NPU → CPU). 
+# order (Intel GPU → NPU → CPU).
 OPENVINO_PROVIDER_CONFIG = (
     "OpenVINOExecutionProvider",
     {"device_type": "AUTO:GPU,NPU,CPU"},
