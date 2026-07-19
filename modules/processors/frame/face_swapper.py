@@ -18,6 +18,7 @@ from modules.utilities import (
 )
 from modules.cluster_analysis import find_closest_centroid
 from modules.gpu_processing import gpu_gaussian_blur, gpu_sharpen, gpu_add_weighted, gpu_resize
+from modules.platform_info import OPENVINO_PROVIDER_CONFIG
 import os
 from collections import deque
 import time
@@ -270,6 +271,8 @@ def get_face_swapper() -> Any:
                         # Use bare provider — ONNX Runtime defaults are
                         # fastest on modern GPUs (Blackwell/sm_120).
                         providers_config.append(p)
+                    elif p == "OpenVINOExecutionProvider":
+                        providers_config.append(OPENVINO_PROVIDER_CONFIG)
                     else:
                         providers_config.append(p)
                 FACE_SWAPPER = insightface.model_zoo.get_model(
