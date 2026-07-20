@@ -14,6 +14,7 @@ import numpy as np
 import onnxruntime
 
 import modules.globals
+from modules.platform_info import OPENVINO_PROVIDER_CONFIG
 
 IS_APPLE_SILICON = platform.system() == "Darwin" and platform.machine() == "arm64"
 
@@ -50,6 +51,9 @@ def build_provider_config(providers=None):
                     "AllowLowPrecisionAccumulationOnGPU": 1,
                 },
             ))
+        elif p == "OpenVINOExecutionProvider":
+            # AUTO lets OpenVINO select the best device
+            config.append(OPENVINO_PROVIDER_CONFIG)
         else:
             config.append(p)
     return config
