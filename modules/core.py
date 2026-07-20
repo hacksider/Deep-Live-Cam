@@ -132,8 +132,9 @@ def decode_execution_providers(execution_providers: List[str]) -> List[str]:
 
 
 def suggest_max_memory() -> int:
+    # macOS RLIMIT_DATA cannot be lowered to a finite value; skip by default.
     if platform.system().lower() == 'darwin':
-        return 4
+        return 0
     return 16
 
 
