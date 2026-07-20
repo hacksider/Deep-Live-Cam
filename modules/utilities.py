@@ -28,7 +28,7 @@ def run_ffmpeg(args: List[str]) -> bool:
     ]
     commands.extend(args)
     try:
-        subprocess.check_output(commands, stderr=subprocess.STDOUT)
+        subprocess.check_output(commands, stderr=subprocess.STDOUT, shell=False)
         return True
     except subprocess.CalledProcessError as error:
         output = error.output.decode(errors="ignore").strip()
@@ -290,10 +290,7 @@ def conditional_download(download_directory_path: str, urls: List[str]) -> None:
             request = urllib.request.Request(url)
             
             # Create a specific SSL context for macOS to avoid globally disabling verification
-            ctx = None
-            if platform.system().lower() == "darwin":
-                ctx = ssl._create_unverified_context()
-                
+            ctx = ssl.create_default_context()
             response = urllib.request.urlopen(request, context=ctx)
             total = int(response.headers.get("Content-Length", 0))
             with tqdm(
