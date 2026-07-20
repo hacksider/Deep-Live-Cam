@@ -288,10 +288,9 @@ def conditional_download(download_directory_path: str, urls: List[str]) -> None:
         )
         if not os.path.exists(download_file_path):
             request = urllib.request.Request(url)
-            
-            # Create a specific SSL context for macOS to avoid globally disabling verification
-            ctx = ssl.create_default_context()
-            response = urllib.request.urlopen(request, context=ctx)
+
+            # Use default SSL context for secure certificate verification
+            response = urllib.request.urlopen(request, context=ssl.create_default_context())
             total = int(response.headers.get("Content-Length", 0))
             with tqdm(
                 total=total,
