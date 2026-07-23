@@ -71,8 +71,26 @@ class VideoCapturer:
                         self.cap.release()
                     except Exception:
                         continue
+            elif platform.system() == "Darwin":
+                # Prefer AVFoundation on macOS. CAP_ANY can pick OBSENSOR and fail.
+                backend_attempts = []
+                for backend in (cv2.CAP_AVFOUNDATION, cv2.CAP_ANY):
+                    backend_name = "AVFoundation" if backend == cv2.CAP_AVFOUNDATION else "Any"
+                    try:
+                        self.cap = cv2.VideoCapture(self.device_index, backend)
+                        if self.cap.isOpened():
+                            backend_attempts.append(f"{backend_name}: success")
+                            break
+                        self.cap.release()
+                        self.cap = None
+                        backend_attempts.append(f"{backend_name}: opened=False")
+                    except Exception as exc:
+                        self.cap = None
+                        backend_attempts.append(f"{backend_name}: {exc}")
+                if backend_attempts:
+                    print(f"[VideoCapturer] Darwin backend attempts: {'; '.join(backend_attempts)}", flush=True)
             else:
-                # Unix-like systems (Linux/Mac) capture method
+                # Linux / other Unix-like systems
                 self.cap = cv2.VideoCapture(self.device_index)
 
             if not self.cap or not self.cap.isOpened():

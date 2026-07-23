@@ -132,8 +132,9 @@ def decode_execution_providers(execution_providers: List[str]) -> List[str]:
 
 
 def suggest_max_memory() -> int:
-    if platform.system().lower() == 'darwin':
-        return 4
+    # macOS RLIMIT_DATA cannot be lowered to a finite value; skip by default.
+    if platform.system() == 'Darwin':
+        return 0
     return 16
 
 
@@ -177,9 +178,9 @@ def limit_resources() -> None:
         for gpu in gpus:
             tensorflow.config.experimental.set_memory_growth(gpu, True)
     # limit memory usage
-    if modules.globals.max_memory:
+    if modules.globals.max_memory is not None and modules.globals.max_memory > 0:
         memory = modules.globals.max_memory * 1024 ** 3
-        if platform.system().lower() == 'windows':
+        if platform.system() == 'Windows':
             import ctypes
             kernel32 = ctypes.windll.kernel32
             kernel32.SetProcessWorkingSetSize(-1, ctypes.c_size_t(memory), ctypes.c_size_t(memory))
