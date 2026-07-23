@@ -26,7 +26,7 @@ except ImportError:
 import modules.globals
 import modules.metadata
 import modules.ui as ui
-from modules.processors.frame.core import get_frame_processors_modules, process_video_in_memory
+from modules.processors.frame.core import CUDA_EXECUTION_PROVIDER, get_frame_processors_modules, process_video_in_memory
 from modules.utilities import has_image_extension, is_image, is_video, detect_fps, create_video, extract_frames, get_temp_frame_paths, restore_audio, create_temp, move_temp, clean_temp, normalize_output_path
 
 if HAS_TORCH and 'ROCMExecutionProvider' in modules.globals.execution_providers:
@@ -189,8 +189,16 @@ def limit_resources() -> None:
 
 
 def release_resources() -> None:
-    if 'CUDAExecutionProvider' in modules.globals.execution_providers and HAS_TORCH:
-        torch.cuda.empty_cache()
+    if CUDA_EXECUTION_PROVIDER in modules.globals.execution_providers:
+        # Avoid the module-level availability snapshot: PyTorch may be loaded
+        # after this module and still have CUDA cache blocks to release.
+        try:
+            import torch
+        except ImportError:
+            return
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
 
 def pre_check() -> bool:

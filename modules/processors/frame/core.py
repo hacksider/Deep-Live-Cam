@@ -1,6 +1,7 @@
 import os
 import subprocess
 import sys
+import gc
 import importlib
 from concurrent.futures import ThreadPoolExecutor
 from types import ModuleType
@@ -28,6 +29,72 @@ ALLOWED_PROCESSORS = {
     'face_enhancer_gpen256',
     'face_enhancer_gpen512'
 }
+
+CUDA_EXECUTION_PROVIDER = 'CUDAExecutionProvider'
+CUDA_CACHE_CLEAN_INTERVAL = 50
+_CUDA_GC_COLLECT_INTERVAL = CUDA_CACHE_CLEAN_INTERVAL * 10
+_BYTES_PER_MEBIBYTE = 1024 * 1024
+
+
+def _get_cuda_torch() -> ModuleType | None:
+    """Return PyTorch only when this pipeline is using CUDA."""
+    if CUDA_EXECUTION_PROVIDER not in modules.globals.execution_providers:
+        return None
+
+    try:
+        import torch
+        return torch if torch.cuda.is_available() else None
+    except (ImportError, RuntimeError):
+        return None
+
+
+def _format_cuda_memory(memory_bytes: int) -> str:
+    return f'{memory_bytes / _BYTES_PER_MEBIBYTE:.1f} MiB'
+
+
+def _get_cuda_memory_stats(torch_module: ModuleType) -> tuple[int, int] | None:
+    try:
+        return (
+            torch_module.cuda.memory_allocated(),
+            torch_module.cuda.memory_reserved(),
+        )
+    except RuntimeError:
+        return None
+
+
+def _report_cuda_cache_cleanup(message: str) -> None:
+    # Import lazily to avoid the core -> frame core circular import at module load.
+    from modules.core import update_status
+    update_status(message)
+
+
+def _clear_cuda_cache(torch_module: ModuleType, frame_number: int) -> None:
+    """Release unused PyTorch cache blocks and report the observed change."""
+    memory_before = _get_cuda_memory_stats(torch_module)
+
+    # Reference-counted tensor temporaries are released at function return, so
+    # a full cyclic-GC sweep is only needed occasionally.
+    if frame_number % _CUDA_GC_COLLECT_INTERVAL == 0:
+        gc.collect()
+
+    try:
+        torch_module.cuda.empty_cache()
+    except RuntimeError:
+        return
+
+    memory_after = _get_cuda_memory_stats(torch_module)
+    if memory_before is None or memory_after is None:
+        return
+
+    allocated_before, reserved_before = memory_before
+    allocated_after, reserved_after = memory_after
+    _report_cuda_cache_cleanup(
+        f'CUDA cache cleanup at frame {frame_number}: '
+        f'allocated {_format_cuda_memory(allocated_before)} -> '
+        f'{_format_cuda_memory(allocated_after)}, reserved '
+        f'{_format_cuda_memory(reserved_before)} -> '
+        f'{_format_cuda_memory(reserved_after)}'
+    )
 
 def load_frame_processor_module(frame_processor: str) -> Any:
     if frame_processor not in ALLOWED_PROCESSORS:
@@ -320,6 +387,7 @@ def _run_pipe_pipeline(
         return False
 
     processed_count = 0
+    cuda_torch = _get_cuda_torch()
     bar_fmt = ('{l_bar}{bar}| {n_fmt}/{total_fmt} '
                '[{elapsed}<{remaining}, {rate_fmt}{postfix}]')
 
@@ -376,6 +444,15 @@ def _run_pipe_pipeline(
                 writer.stdin.write(frame.tobytes())
                 processed_count += 1
                 progress.update(1)
+
+                # PyTorch releases tensors when their references disappear, but
+                # retains reusable blocks in its CUDA cache. Periodically return
+                # unused blocks to the driver so ONNX Runtime can allocate them.
+                if (
+                    cuda_torch is not None
+                    and processed_count % CUDA_CACHE_CLEAN_INTERVAL == 0
+                ):
+                    _clear_cuda_cache(cuda_torch, processed_count)
 
             detect_executor.shutdown(wait=True)
 
