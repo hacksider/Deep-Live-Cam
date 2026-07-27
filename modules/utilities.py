@@ -1,7 +1,6 @@
 import glob
 import mimetypes
 import os
-import platform
 import shutil
 import ssl
 import subprocess
