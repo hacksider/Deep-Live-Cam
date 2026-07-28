@@ -1,4 +1,17 @@
+import importlib.util
+import os
+
 import numpy
+
+# Keras 3 defaults to the TensorFlow backend, which has no Python 3.14 wheels.
+# opennsfw2 only runs inference, so any installed backend works; pick one that
+# is actually present before opennsfw2 imports keras.
+if "KERAS_BACKEND" not in os.environ:
+    for _backend in ("torch", "tensorflow", "jax"):
+        if importlib.util.find_spec(_backend) is not None:
+            os.environ["KERAS_BACKEND"] = _backend
+            break
+
 import opennsfw2
 from PIL import Image
 import cv2  # Add OpenCV import

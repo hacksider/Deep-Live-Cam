@@ -135,7 +135,7 @@ This is more likely to work on your computer but will be slower as it utilizes t
 
 **1. Set up Your Platform**
 
--   Python (3.11 recommended)
+-   Python (3.14 recommended; 3.11-3.14 supported)
 -   pip
 -   git
 -   [ffmpeg](https://www.youtube.com/watch?v=OlNWCpFdVMA) - ```iex (irm ffmpeg.tc.ht)```
@@ -168,7 +168,7 @@ pip install -r requirements.txt
 ```
 For Linux:
 ```bash
-# Ensure you use the installed Python 3.11
+# Ensure you use the installed Python 3.14
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -176,17 +176,17 @@ pip install -r requirements.txt
 
 **For macOS:**
 
-Apple Silicon (M1/M2/M3) requires specific setup:
+Apple Silicon (M1 through M5) requires specific setup:
 
 ```bash
-# Install Python 3.11 (specific version is important)
-brew install python@3.11
+# Install Python 3.14
+brew install python@3.14
 
 # Install tkinter package (required for the GUI)
-brew install python-tk@3.11
+brew install python-tk@3.14
 
-# Create and activate virtual environment with Python 3.11
-python3.11 -m venv venv
+# Create and activate virtual environment with Python 3.14
+python3.14 -m venv venv
 source venv/bin/activate
 
 # Install dependencies
@@ -238,26 +238,29 @@ python run.py --execution-provider cuda
 
 **CoreML Execution Provider (Apple Silicon)**
 
-Apple Silicon (M1/M2/M3) specific installation:
+Apple Silicon (M1 through M5) specific installation:
 
-1. Make sure you've completed the macOS setup above using Python 3.11.
-2. Install dependencies:
+1. Make sure you've completed the macOS setup above using Python 3.14.
+2. No extra install step is needed — `requirements.txt` pulls the official
+   `onnxruntime` build, whose macOS wheels ship the CoreML execution provider.
+   If you previously installed the unmaintained `onnxruntime-silicon` fork,
+   remove it first, as it shadows the real package:
 
 ```bash
-pip uninstall onnxruntime onnxruntime-silicon
-pip install onnxruntime-silicon==1.13.1
+pip uninstall onnxruntime-silicon
+pip install -r requirements.txt
 ```
 
 3. Usage:
 
 ```bash
-python3.11 run.py --execution-provider coreml
+python3.14 run.py --execution-provider coreml
 ```
 
 **Important Notes for macOS:**
-- You **must** use Python 3.11, not newer versions like 3.13
-- Always run with `python3.11` command not just `python` if you have multiple Python versions installed
-- If you get error about `_tkinter` missing, reinstall the tkinter package: `brew reinstall python-tk@3.11`
+- Python 3.11 is the minimum (onnxruntime dropped 3.10); 3.14 is recommended
+- Always run with `python3.14` command not just `python` if you have multiple Python versions installed
+- If you get error about `_tkinter` missing, reinstall the tkinter package: `brew reinstall python-tk@3.14`
 - If you get model loading errors, check that your models are in the correct folder
 - If you encounter conflicts with other Python versions, consider uninstalling them:
   ```bash
@@ -265,9 +268,9 @@ python3.11 run.py --execution-provider coreml
   brew list | grep python
 
   # Uninstall conflicting versions if needed
-  brew uninstall --ignore-dependencies python@3.13
+  brew uninstall --ignore-dependencies python@3.11
 
-  # Keep only Python 3.11
+  # Keep only Python 3.14
   brew cleanup
   ```
 
