@@ -313,6 +313,22 @@ pip uninstall onnxruntime onnxruntime-openvino
 pip install onnxruntime-openvino==1.21.0
 ```
 
+**Note:** `onnxruntime-openvino` newer than 1.21.0 must be installed together with `openvino`, and the two versions must correspond one-to-one. The supported pairings are:
+
+| onnxruntime-openvino | OpenVINO |
+| --- | --- |
+| 1.24.1 | 2025.4.1 |
+| 1.23.0 | 2025.3 |
+| 1.22.0 | 2025.1 |
+
+```bash
+# Example: onnxruntime-openvino 1.24.1 pairs with OpenVINO 2025.4.1
+pip install openvino==2025.4.1
+pip install onnxruntime-openvino==1.24.1
+```
+
+See the [OpenVINO Execution Provider requirements](https://onnxruntime.ai/docs/execution-providers/OpenVINO-ExecutionProvider.html#requirements) for the full version-mapping details.
+
 2. Usage:
 
 ```bash
