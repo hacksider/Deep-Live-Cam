@@ -26,7 +26,14 @@ ALLOWED_PROCESSORS = {
     'face_swapper',
     'face_enhancer',
     'face_enhancer_gpen256',
-    'face_enhancer_gpen512'
+    'face_enhancer_gpen512',
+}
+
+_PROCESSOR_MODULES = {
+    'face_swapper': 'modules.processors.frame.face_swapper',
+    'face_enhancer': 'modules.processors.frame.face_enhancer',
+    'face_enhancer_gpen256': 'modules.processors.frame.face_enhancer_gpen256',
+    'face_enhancer_gpen512': 'modules.processors.frame.face_enhancer_gpen512',
 }
 
 def load_frame_processor_module(frame_processor: str) -> Any:
@@ -34,7 +41,17 @@ def load_frame_processor_module(frame_processor: str) -> Any:
         print(f"Frame processor {frame_processor} is not allowed")
         sys.exit()
     try:
-        frame_processor_module = importlib.import_module(f'modules.processors.frame.{frame_processor}')
+        if frame_processor == 'face_swapper':
+            import modules.processors.frame.face_swapper as frame_processor_module
+        elif frame_processor == 'face_enhancer':
+            import modules.processors.frame.face_enhancer as frame_processor_module
+        elif frame_processor == 'face_enhancer_gpen256':
+            import modules.processors.frame.face_enhancer_gpen256 as frame_processor_module
+        elif frame_processor == 'face_enhancer_gpen512':
+            import modules.processors.frame.face_enhancer_gpen512 as frame_processor_module
+        else:
+            print(f"Frame processor {frame_processor} not found")
+            sys.exit()
         for method_name in FRAME_PROCESSORS_INTERFACE:
             if not hasattr(frame_processor_module, method_name):
                 print(f"Frame processor {frame_processor} is missing required method {method_name}")
@@ -381,8 +398,12 @@ def _run_pipe_pipeline(
 
         # Graceful shutdown
         writer.stdin.close()
-        writer.wait()
-        reader.wait()
+        try:
+            writer.wait(timeout=3600)
+            reader.wait(timeout=3600)
+        except subprocess.TimeoutExpired:
+            print("[DLC.CORE] FFmpeg process timed out, terminating.")
+            return False
 
         if writer.returncode != 0:
             stderr_out = writer.stderr.read().decode(errors='ignore').strip()
