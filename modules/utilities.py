@@ -26,7 +26,12 @@ def run_ffmpeg(args: List[str]) -> bool:
         "-threads", str(modules.globals.execution_threads or 0),  # 0 = auto-detect optimal thread count
         "-loglevel", modules.globals.log_level,
     ]
-    commands.extend(args)
+    # Sanitize args: file paths starting with '-' would be misinterpreted as FFmpeg options.
+    # Converting such paths to absolute form ensures they never begin with '-'.
+    commands.extend(
+        os.path.abspath(a) if a.startswith("-") and os.path.splitext(a)[1] else a
+        for a in args
+    )
     try:
         subprocess.check_output(commands, stderr=subprocess.STDOUT)
         return True
