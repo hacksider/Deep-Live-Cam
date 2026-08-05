@@ -24,7 +24,8 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.x"
+          # Pin to a specific minor version to avoid silent CI changes when new Python 3.x releases appear
+          python-version: "3.11"
 
       - name: Build release distributions
         run: |
