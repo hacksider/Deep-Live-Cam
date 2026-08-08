@@ -262,11 +262,16 @@ def clean_temp(target_path: str) -> None:
 
 
 def has_image_extension(image_path: str) -> bool:
-    return image_path.lower().endswith(("png", "jpg", "jpeg"))
+    # splitext so only the real extension counts (e.g. "photo.png.bak" is not
+    # an image); the set is centralized in globals to stay in sync with dialogs.
+    return os.path.splitext(image_path)[1].lower() in modules.globals.IMAGE_EXTENSIONS
 
 
 def is_image(image_path: str) -> bool:
     if image_path and os.path.isfile(image_path):
+        # Extension check first — Windows mimetypes doesn't always register webp
+        if has_image_extension(image_path):
+            return True
         mimetype, _ = mimetypes.guess_type(image_path)
         return bool(mimetype and mimetype.startswith("image/"))
     return False

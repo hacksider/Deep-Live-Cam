@@ -6,10 +6,13 @@ from typing import List, Dict, Any
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 WORKFLOW_DIR = os.path.join(ROOT_DIR, "workflow")
 
-file_types = [
-    ("Image", ("*.png", "*.jpg", "*.jpeg", "*.gif", "*.bmp")),
-    ("Video", ("*.mp4", "*.mkv")),
-]
+# Canonical media extensions, defined once so the file dialogs and
+# has_image_extension never drift. GIF is intentionally excluded: OpenCV's
+# cv2.imread/imwrite (the only image I/O this app uses) cannot decode or
+# encode GIF on 4.10 or 4.11, so offering it would silently fail. WEBP works
+# via the libwebp bundled with opencv-python.
+IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".bmp", ".webp")
+VIDEO_EXTENSIONS = (".mp4", ".mkv")
 
 # Face Mapping Data
 source_target_map: List[Dict[str, Any]] = [] # Stores detailed map for image/video processing
