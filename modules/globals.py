@@ -70,6 +70,13 @@ enable_interpolation: bool = True # Toggle temporal smoothing
 interpolation_weight: float = 0  # Blend weight for current frame (0.0-1.0). Lower=smoother.
 # --- END: Added for Frame Interpolation ---
 
+# GFPGAN model filename. Currently shipped variants:
+#   gfpgan-1024.onnx  — 512 in, 1024 out (super-res head). Highest quality.
+#   GFPGANv1.4.onnx   — 512 in, 512 out. Lighter, faster.
+# Both files are hosted on the hacksider/deep-live-cam HF model repo.
+# Hot-swap supported via reset_face_enhancer() (called from UI on change).
+gfpgan_model_filename: str = "gfpgan-1024.onnx"
+
 # --- END OF FILE globals.py ---
 
 import threading
