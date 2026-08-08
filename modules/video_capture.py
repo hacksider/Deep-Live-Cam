@@ -22,6 +22,10 @@ class VideoCapturer:
         self.actual_width: int = 0
         self.actual_height: int = 0
         self.actual_fps: float = 0.0
+        self._fps_sample_target: int = 30
+        self._fps_sample_count: int = 0
+        self._fps_sample_started_at: Optional[float] = None
+        self._fps_sample_done: bool = False
 
         # Initialize Windows-specific components if on Windows
         if platform.system() == "Windows":
@@ -92,11 +96,14 @@ class VideoCapturer:
             self.actual_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
             # CAP_PROP_FPS is unreliable on DirectShow — often reports 30
-            # even when the camera delivers 60.  Measure empirically by
-            # timing a burst of frames.
+            # even when the camera delivers 60.  Use it as an immediate
+            # startup value, then refine actual_fps from frames that callers
+            # already read.  Avoid doing a warmup+sample read burst here: that
+            # discards the first camera frames before live preview can consume
+            # them.
             reported_fps = self.cap.get(cv2.CAP_PROP_FPS)
-            self.actual_fps = self._measure_fps(warmup=10, sample=30,
-                                                fallback=reported_fps or fps)
+            self.actual_fps = reported_fps or fps
+            self._reset_fps_measurement(sample=30)
 
             print(f"[VideoCapturer] {self.actual_width}x{self.actual_height} "
                   f"@ {self.actual_fps:.1f}fps (reported={reported_fps:.0f})",
@@ -118,6 +125,7 @@ class VideoCapturer:
 
         ret, frame = self.cap.read()
         if ret:
+            self._record_fps_sample()
             self._current_frame = frame
             if self.frame_callback:
                 self.frame_callback(frame)
@@ -131,28 +139,42 @@ class VideoCapturer:
             self.is_running = False
             self.cap = None
 
-    def _measure_fps(self, warmup: int = 10, sample: int = 30,
-                     fallback: float = 30.0) -> float:
-        """Read warmup+sample frames and return measured FPS.
+    def _reset_fps_measurement(self, sample: int = 30) -> None:
+        """Prepare opportunistic FPS measurement without consuming frames."""
+        self._fps_sample_target = max(2, sample)
+        self._fps_sample_count = 0
+        self._fps_sample_started_at = None
+        self._fps_sample_done = False
 
-        This is more reliable than CAP_PROP_FPS which often lies on
-        DirectShow.  Takes ~0.5-1s at startup but gives a ground-truth
-        number for adaptive polling/detection intervals.
+    def _record_fps_sample(self) -> None:
+        """Update actual_fps from frames already delivered to callers.
+
+        Measuring in read() preserves the first live-preview frames while still
+        correcting backends whose CAP_PROP_FPS value is inaccurate.
         """
+        if self._fps_sample_done:
+            return
         try:
-            for _ in range(warmup):
-                self.cap.read()
-            t0 = time.perf_counter()
-            for _ in range(sample):
-                ret, _ = self.cap.read()
-                if not ret:
-                    return fallback
-            elapsed = time.perf_counter() - t0
+            now = time.perf_counter()
+            if self._fps_sample_started_at is None:
+                self._fps_sample_started_at = now
+                self._fps_sample_count = 1
+                return
+
+            self._fps_sample_count += 1
+            if self._fps_sample_count < self._fps_sample_target:
+                return
+
+            elapsed = now - self._fps_sample_started_at
             if elapsed <= 0:
-                return fallback
-            return sample / elapsed
-        except Exception:
-            return fallback
+                return
+
+            # N frames contain N-1 frame intervals from the first timestamp
+            # to the current one.
+            self.actual_fps = (self._fps_sample_count - 1) / elapsed
+            self._fps_sample_done = True
+        except (OSError, RuntimeError, ValueError):
+            self._fps_sample_done = True
 
     def set_frame_callback(self, callback: Callable[[np.ndarray], None]) -> None:
         """Set callback for frame processing"""
