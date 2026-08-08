@@ -1226,6 +1226,9 @@ class WebcamPreviewWindow(QWidget):
         self._image_label.setPixmap(_bgr_to_qpixmap(bgr_frame))
 
     def closeEvent(self, event) -> None:
+        if not hasattr(self, '_stop_event'):
+            event.accept()
+            return
         self._stop_event.set()
         try:
             self._timer.stop()
