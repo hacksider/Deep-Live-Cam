@@ -3,6 +3,8 @@ import shutil
 from typing import Any
 import insightface
 import threading
+import logging
+import cv2
 
 import modules.globals
 from modules import imread_unicode, imwrite_unicode
@@ -11,6 +13,8 @@ from modules.typing import Frame
 from modules.cluster_analysis import find_cluster_centroids, find_closest_centroid
 from modules.utilities import get_temp_directory_path, create_temp, extract_frames, clean_temp, get_temp_frame_paths
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 FACE_ANALYSER = None
 FACE_ANALYSER_LOCK = threading.Lock()
@@ -252,14 +256,38 @@ def add_blank_map() -> Any:
         return None
     
 def get_unique_faces_from_target_image() -> Any:
+    """
+    Extract unique faces from target image for mapping.
+    
+    Returns:
+        None on success (populates modules.globals.source_target_map)
+        None on error or no faces detected
+    """
     try:
         modules.globals.source_target_map = []
-        target_frame = imread_unicode(modules.globals.target_path)
+        target_frame = cv2.imread(modules.globals.target_path)
+        
+        # Fix #1640: Validate image was loaded successfully
+        if target_frame is None:
+            logger.warning(f"Could not read image from {modules.globals.target_path}. "
+                          f"Ensure the file exists and is a valid image format.")
+            return None
+            
         many_faces = get_many_faces(target_frame)
+        
+        # Handle case where no faces detected (empty list)
+        if not many_faces:  # Works for both None and empty list
+            logger.warning(
+                f"No faces detected in target image {modules.globals.target_path}. "
+                f"Ensure the image contains at least one detectable face."
+            )
+            return None
+            logger.warning("No faces detected in target image.")
+            return None
+            
         if many_faces is None:
             return None
         i = 0
-
         for face in many_faces:
             x_min, y_min, x_max, y_max = face['bbox']
             modules.globals.source_target_map.append({
@@ -270,11 +298,19 @@ def get_unique_faces_from_target_image() -> Any:
                             }
                 })
             i = i + 1
+            
     except ValueError:
+        logger.error("Error processing target image", exc_info=True)
         return None
-    
-    
+
 def get_unique_faces_from_target_video() -> Any:
+    """
+    Extract unique faces from target video for mapping using clustering.
+    
+    Returns:
+        None on success (populates modules.globals.source_target_map)
+        None on error or no faces detected
+    """
     try:
         modules.globals.source_target_map = []
         frame_face_embeddings = []
@@ -290,8 +326,17 @@ def get_unique_faces_from_target_video() -> Any:
 
         i = 0
         for temp_frame_path in tqdm(temp_frame_paths, desc="Extracting face embeddings from frames"):
-            temp_frame = imread_unicode(temp_frame_path)
+            temp_frame = cv2.imread(temp_frame_path)
+            
+            # Fix #1640: Skip frames that couldn't be read
+            if temp_frame is None:
+                logger.debug(f"Could not read frame from {temp_frame_path}, skipping.")
+                continue
+                
             many_faces = get_many_faces(temp_frame)
+            
+            # Skip frames with no faces detected (handles empty list)
+            if not many_faces:
             if many_faces is None:
                 continue
 
@@ -300,6 +345,11 @@ def get_unique_faces_from_target_video() -> Any:
             
             frame_face_embeddings.append({'frame': i, 'faces': many_faces, 'location': temp_frame_path})
             i += 1
+
+        # Check if any faces were found across all frames
+        if not frame_face_embeddings:
+            logger.warning("No faces detected across any frame in target video.")
+            return None
 
         centroids = find_cluster_centroids(face_embeddings)
 
@@ -321,9 +371,10 @@ def get_unique_faces_from_target_video() -> Any:
 
         # dump_faces(centroids, frame_face_embeddings)
         default_target_face()
+        
     except ValueError:
+        logger.error("Error processing target video", exc_info=True)
         return None
-    
 
 def default_target_face():
     for map in modules.globals.source_target_map:
