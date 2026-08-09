@@ -75,6 +75,7 @@ from modules.utilities import (
 )
 from modules import imread_unicode
 from modules.video_capture import VideoCapturer
+from modules.virtual_camera import VirtualCameraSink
 
 if platform.system() == "Windows":
     from pygrabber.dshow_graph import FilterGraph
@@ -311,6 +312,7 @@ def save_switch_states():
         "live_resizable": modules.globals.live_resizable,
         "fp_ui": modules.globals.fp_ui,
         "show_fps": modules.globals.show_fps,
+        "virtual_camera_enabled": modules.globals.virtual_camera_enabled,
         "mouth_mask": modules.globals.mouth_mask,
         "show_mouth_mask_box": modules.globals.show_mouth_mask_box,
         "mouth_mask_size": modules.globals.mouth_mask_size,
@@ -338,6 +340,9 @@ def load_switch_states():
         modules.globals.live_resizable = state.get("live_resizable", False)
         modules.globals.fp_ui = state.get("fp_ui", {"face_enhancer": False})
         modules.globals.show_fps = state.get("show_fps", False)
+        modules.globals.virtual_camera_enabled = state.get(
+            "virtual_camera_enabled", False
+        )
         # Mouth mask always starts disabled (slider at 0) on launch,
         # regardless of the persisted value — enable it explicitly each session.
         modules.globals.mouth_mask_size = 0.0
@@ -714,6 +719,15 @@ class MainWindow(QMainWindow):
         self.cb_camera.setToolTip(_("Select which camera to use for live mode"))
         layout.addWidget(self.cb_camera, 1)
 
+        if platform.system() == "Linux":
+            self.sw_virtual_camera = _Switch(
+                _("Virtual camera"),
+                modules.globals.virtual_camera_enabled,
+                _("Publish the processed Live output directly as a Linux webcam"),
+            )
+            self.sw_virtual_camera.toggled.connect(self._on_virtual_camera_toggled)
+            layout.addWidget(self.sw_virtual_camera)
+
         self.btn_live = QPushButton(_("Live"))
         self.btn_live.setEnabled(cam_ok)
         self.btn_live.setToolTip(_("Start real-time face swap using webcam"))
@@ -934,6 +948,12 @@ class MainWindow(QMainWindow):
             modules.globals.source_target_map = []
             _open_live_mapper_dialog(camera_index, modules.globals.source_target_map)
 
+    def _on_virtual_camera_toggled(self, value: bool) -> None:
+        modules.globals.virtual_camera_enabled = value
+        save_switch_states()
+        if _WEBCAM_PREVIEW is not None and _WEBCAM_PREVIEW.isVisible():
+            _WEBCAM_PREVIEW.set_virtual_camera_enabled(value)
+
     def closeEvent(self, event):
         # Treat OS-level close as Destroy click
         self._destroy_cb()
@@ -1033,15 +1053,83 @@ class _CaptureWorker(QThread):
                     pass
 
 
+def _put_latest(target_queue: queue.Queue, frame: np.ndarray) -> None:
+    try:
+        target_queue.put_nowait(frame)
+        return
+    except queue.Full:
+        pass
+    try:
+        target_queue.get_nowait()
+    except queue.Empty:
+        pass
+    try:
+        target_queue.put_nowait(frame)
+    except queue.Full:
+        pass
+
+
+class _VirtualCameraWorker(QThread):
+    status = Signal(str)
+
+    def __init__(
+        self,
+        frame_queue: queue.Queue,
+        width: int,
+        height: int,
+        fps: float,
+    ) -> None:
+        super().__init__()
+        self._queue = frame_queue
+        self._width = width
+        self._height = height
+        self._fps = fps
+        self._stop = threading.Event()
+
+    def stop(self) -> None:
+        self._stop.set()
+
+    def run(self) -> None:
+        try:
+            with VirtualCameraSink(
+                self._width, self._height, self._fps
+            ) as camera:
+                self.status.emit(
+                    f"Virtual camera active: {camera.device} ({camera.backend})"
+                )
+                while not self._stop.is_set():
+                    try:
+                        frame = self._queue.get(timeout=0.05)
+                    except queue.Empty:
+                        continue
+
+                    while True:
+                        try:
+                            frame = self._queue.get_nowait()
+                        except queue.Empty:
+                            break
+                    camera.send(frame)
+        except Exception as exc:
+            self.status.emit(f"Virtual camera unavailable: {exc}")
+
+
 class _ProcessingWorker(QThread):
     """Pulls raw frames, runs detect/swap/enhance, pushes processed frames."""
 
-    def __init__(self, capture_queue, processed_queue, stop_event, camera_fps: float):
+    def __init__(
+        self,
+        capture_queue,
+        processed_queue,
+        stop_event,
+        camera_fps: float,
+        virtual_queue=None,
+    ):
         super().__init__()
         self._cq = capture_queue
         self._pq = processed_queue
         self._stop = stop_event
         self._fps = camera_fps
+        self._vq = virtual_queue
 
     def run(self) -> None:
         frame_processors = get_frame_processors_modules(modules.globals.frame_processors)
@@ -1158,17 +1246,9 @@ class _ProcessingWorker(QThread):
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2,
                 )
 
-            try:
-                self._pq.put_nowait(temp_frame)
-            except queue.Full:
-                try:
-                    self._pq.get_nowait()
-                except queue.Empty:
-                    pass
-                try:
-                    self._pq.put_nowait(temp_frame)
-                except queue.Full:
-                    pass
+            _put_latest(self._pq, temp_frame)
+            if self._vq is not None:
+                _put_latest(self._vq, temp_frame)
 
 
 class WebcamPreviewWindow(QWidget):
@@ -1183,6 +1263,15 @@ class WebcamPreviewWindow(QWidget):
         self._image_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         layout.addWidget(self._image_label, 1)
 
+        self._capture_queue: queue.Queue = queue.Queue(maxsize=2)
+        self._processed_queue: queue.Queue = queue.Queue(maxsize=2)
+        self._virtual_queue: queue.Queue = queue.Queue(maxsize=1)
+        self._stop_event = threading.Event()
+        self._capture_worker: Optional[_CaptureWorker] = None
+        self._processing_worker: Optional[_ProcessingWorker] = None
+        self._virtual_worker: Optional[_VirtualCameraWorker] = None
+        self._timer: Optional[QTimer] = None
+
         self._cap = VideoCapturer(camera_index)
         if not self._cap.start(PREVIEW_DEFAULT_WIDTH, PREVIEW_DEFAULT_HEIGHT, 60):
             update_status("Failed to start camera")
@@ -1195,18 +1284,24 @@ class WebcamPreviewWindow(QWidget):
             f"{self._cap.actual_height}@{camera_fps:.0f}fps"
         )
 
-        self._capture_queue: queue.Queue = queue.Queue(maxsize=2)
-        self._processed_queue: queue.Queue = queue.Queue(maxsize=2)
-        self._stop_event = threading.Event()
-
         self._capture_worker = _CaptureWorker(
             self._cap, self._capture_queue, self._stop_event
         )
         self._processing_worker = _ProcessingWorker(
-            self._capture_queue, self._processed_queue, self._stop_event, camera_fps
+            self._capture_queue,
+            self._processed_queue,
+            self._stop_event,
+            camera_fps,
+            self._virtual_queue,
         )
         self._capture_worker.start()
         self._processing_worker.start()
+
+        if (
+            platform.system() == "Linux"
+            and modules.globals.virtual_camera_enabled
+        ):
+            self.set_virtual_camera_enabled(True)
 
         # Poll at ~2x camera fps so we never block but also don't burn CPU.
         poll_ms = max(1, min(16, int(500 / max(camera_fps, 1))))
@@ -1225,13 +1320,46 @@ class WebcamPreviewWindow(QWidget):
         bgr_frame = fit_image_to_size(bgr_frame, self.width(), self.height())
         self._image_label.setPixmap(_bgr_to_qpixmap(bgr_frame))
 
+    def set_virtual_camera_enabled(self, enabled: bool) -> None:
+        if enabled:
+            if self._virtual_worker is not None and self._virtual_worker.isRunning():
+                return
+            self._virtual_worker = _VirtualCameraWorker(
+                self._virtual_queue,
+                self._cap.actual_width or PREVIEW_DEFAULT_WIDTH,
+                self._cap.actual_height or PREVIEW_DEFAULT_HEIGHT,
+                self._cap.actual_fps or 30.0,
+            )
+            self._virtual_worker.status.connect(update_status)
+            self._virtual_worker.start()
+            return
+
+        self._stop_virtual_camera()
+        update_status("Virtual camera stopped")
+
+    def _stop_virtual_camera(self) -> None:
+        worker = self._virtual_worker
+        self._virtual_worker = None
+        if worker is None:
+            return
+        worker.stop()
+        worker.wait(2000)
+        while True:
+            try:
+                self._virtual_queue.get_nowait()
+            except queue.Empty:
+                break
+
     def closeEvent(self, event) -> None:
+        self._stop_virtual_camera()
         self._stop_event.set()
         try:
             self._timer.stop()
         except Exception:
             pass
         for worker in (self._capture_worker, self._processing_worker):
+            if worker is None:
+                continue
             try:
                 worker.wait(2000)
             except Exception:

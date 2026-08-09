@@ -354,6 +354,18 @@ python run.py --execution-provider openvino
 -   Use a screen capture tool like OBS to stream.
 -   To change the face, select a new source image.
 
+### Direct Virtual Camera on Linux
+
+Install and configure `v4l2loopback`:
+
+```bash
+./setup-virtual-camera-linux.sh
+```
+
+Enable **Virtual camera**, select the input camera, and click **Live**. Select
+**Deep Live Cam** in the receiving application. The virtual camera is available
+while the Live Preview is running.
+
 ## Download all models in this huggingface link
 - [**Download models here**](https://huggingface.co/hacksider/deep-live-cam/tree/main)
 

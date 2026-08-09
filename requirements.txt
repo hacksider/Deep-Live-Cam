@@ -16,3 +16,4 @@ opennsfw2==0.18.0
 keras>=3.0.0
 protobuf>=6.33.5,<8
 pygrabber; sys_platform == 'win32'
+pyvirtualcam>=0.15,<0.16; sys_platform == 'linux'
