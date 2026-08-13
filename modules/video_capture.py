@@ -71,8 +71,9 @@ class VideoCapturer:
                         self.cap.release()
                     except Exception:
                         continue
+            elif platform.system() == "Linux":
+                self.cap = cv2.VideoCapture(f"/dev/video{self.device_index}")
             else:
-                # Unix-like systems (Linux/Mac) capture method
                 self.cap = cv2.VideoCapture(self.device_index)
 
             if not self.cap or not self.cap.isOpened():
