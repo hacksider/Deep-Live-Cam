@@ -3,11 +3,13 @@ import sys
 import tempfile
 import types
 import unittest
+from queue import Queue
 from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
 
+from modules import ui
 from modules.virtual_camera import VirtualCameraSink, find_virtual_camera_device
 
 
@@ -58,6 +60,67 @@ class VirtualCameraTests(unittest.TestCase):
         self.assertEqual(sent[0].dtype, np.uint8)
         self.assertTrue(sent[0].flags.c_contiguous)
         self.assertEqual(tuple(sent[0][0, 0]), (235, 128))
+
+    def test_worker_reports_startup_failure(self):
+        messages = []
+        worker = ui._VirtualCameraWorker(Queue(), 640, 360, 30)
+        worker.failed.connect(messages.append)
+
+        with patch.object(
+            ui,
+            "VirtualCameraSink",
+            side_effect=RuntimeError("device unavailable"),
+        ):
+            worker.run()
+
+        self.assertEqual(
+            messages,
+            ["Virtual camera unavailable: device unavailable"],
+        )
+
+    def test_worker_failure_resets_ui_and_saved_state(self):
+        failed_worker = object()
+
+        class Preview:
+            _virtual_worker = failed_worker
+
+            def sender(self):
+                return failed_worker
+
+            def _stop_virtual_camera(self):
+                self._virtual_worker = None
+
+        class Switch:
+            checked = True
+
+            def setChecked(self, value):
+                self.checked = value
+
+        switch = Switch()
+        main = types.SimpleNamespace(sw_virtual_camera=switch)
+        preview = Preview()
+
+        with patch.object(ui, "_MAIN", main), patch.object(
+            ui.modules.globals,
+            "virtual_camera_enabled",
+            True,
+        ), patch.object(ui, "save_switch_states") as save_states, patch.object(
+            ui,
+            "update_status",
+        ) as update_status:
+            ui.WebcamPreviewWindow._on_virtual_camera_failed(
+                preview,
+                "Virtual camera unavailable: device unavailable",
+            )
+
+            self.assertFalse(ui.modules.globals.virtual_camera_enabled)
+
+        self.assertIsNone(preview._virtual_worker)
+        self.assertFalse(switch.checked)
+        save_states.assert_called_once_with()
+        update_status.assert_called_once_with(
+            "Virtual camera unavailable: device unavailable"
+        )
 
 
 if __name__ == "__main__":

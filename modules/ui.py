@@ -1071,6 +1071,7 @@ def _put_latest(target_queue: queue.Queue, frame: np.ndarray) -> None:
 
 class _VirtualCameraWorker(QThread):
     status = Signal(str)
+    failed = Signal(str)
 
     def __init__(
         self,
@@ -1110,7 +1111,7 @@ class _VirtualCameraWorker(QThread):
                             break
                     camera.send(frame)
         except Exception as exc:
-            self.status.emit(f"Virtual camera unavailable: {exc}")
+            self.failed.emit(f"Virtual camera unavailable: {exc}")
 
 
 class _ProcessingWorker(QThread):
@@ -1324,18 +1325,31 @@ class WebcamPreviewWindow(QWidget):
         if enabled:
             if self._virtual_worker is not None and self._virtual_worker.isRunning():
                 return
-            self._virtual_worker = _VirtualCameraWorker(
+            worker = _VirtualCameraWorker(
                 self._virtual_queue,
                 self._cap.actual_width or PREVIEW_DEFAULT_WIDTH,
                 self._cap.actual_height or PREVIEW_DEFAULT_HEIGHT,
                 self._cap.actual_fps or 30.0,
             )
-            self._virtual_worker.status.connect(update_status)
-            self._virtual_worker.start()
+            worker.status.connect(update_status)
+            worker.failed.connect(self._on_virtual_camera_failed)
+            self._virtual_worker = worker
+            worker.start()
             return
 
         self._stop_virtual_camera()
         update_status("Virtual camera stopped")
+
+    def _on_virtual_camera_failed(self, message: str) -> None:
+        if self.sender() is not self._virtual_worker:
+            return
+
+        self._stop_virtual_camera()
+        modules.globals.virtual_camera_enabled = False
+        save_switch_states()
+        if _MAIN is not None:
+            _MAIN.sw_virtual_camera.setChecked(False)
+        update_status(message)
 
     def _stop_virtual_camera(self) -> None:
         worker = self._virtual_worker
