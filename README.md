@@ -139,7 +139,7 @@ This is more likely to work on your computer but will be slower as it utilizes t
 -   pip
 -   git
 -   [ffmpeg](https://www.youtube.com/watch?v=OlNWCpFdVMA) - ```iex (irm ffmpeg.tc.ht)```
--   [Visual Studio 2022 Runtimes (Windows)](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
+-   [Visual Studio 2022 Build Tools (Windows)](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with the **Desktop development with C++** workload (InsightFace may need to compile native extensions; the runtime alone is not enough)
 
 **2. Clone the Repository**
 
@@ -192,6 +192,15 @@ source venv/bin/activate
 # Install dependencies
 pip install -r requirements.txt
 ```
+
+If installing `insightface` on macOS fails with `fatal error: 'cmath' file not found` or another missing C++ standard-library header, repair or install the Xcode Command Line Tools before retrying:
+
+```bash
+xcode-select --install
+xcode-select -p
+```
+
+If the tools are already installed, select the active developer directory with `sudo xcode-select --switch /Library/Developer/CommandLineTools` (or the path to your full Xcode installation), then recreate the virtual environment and run `pip install -r requirements.txt` again. See [issue #1765](https://github.com/hacksider/Deep-Live-Cam/issues/1765) for the original `cmath` failure.
 
 ** In case something goes wrong and you need to reinstall the virtual environment **
 
