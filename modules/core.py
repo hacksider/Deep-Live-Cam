@@ -185,7 +185,20 @@ def limit_resources() -> None:
             kernel32.SetProcessWorkingSetSize(-1, ctypes.c_size_t(memory), ctypes.c_size_t(memory))
         else:
             import resource
-            resource.setrlimit(resource.RLIMIT_DATA, (memory, memory))
+            _, hard_limit = resource.getrlimit(resource.RLIMIT_DATA)
+            soft_limit = memory
+            if hard_limit != resource.RLIM_INFINITY:
+                soft_limit = min(soft_limit, hard_limit)
+            try:
+                resource.setrlimit(
+                    resource.RLIMIT_DATA, (soft_limit, hard_limit)
+                )
+            except (OSError, ValueError) as exc:
+                # Some macOS/Python combinations report RLIM_INFINITY but
+                # reject any finite RLIMIT_DATA value. Resource limiting is
+                # a best-effort guard and must not prevent the UI from
+                # starting.
+                print(f'[startup] Memory limit not applied: {exc}')
 
 
 def release_resources() -> None:
