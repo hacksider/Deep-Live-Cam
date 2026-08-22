@@ -23,6 +23,7 @@ FACE_ENHANCER = None
 THREAD_SEMAPHORE = threading.Semaphore()
 THREAD_LOCK = threading.Lock()
 NAME = "DLC.FACE-ENHANCER"
+MODEL_FILE = "gfpgan-1024.onnx"
 
 abs_dir = os.path.dirname(os.path.abspath(__file__))
 models_dir = os.path.join(
@@ -44,11 +45,12 @@ FFHQ_TEMPLATE_512 = np.array(
 
 
 def pre_check() -> bool:
-    model_path = os.path.join(models_dir, "gfpgan-1024.onnx")
-    if not os.path.exists(model_path):
+    from modules.model_downloader import ensure_model
+
+    if ensure_model(MODEL_FILE) is None:
         update_status(
-            f"GFPGAN ONNX model not found at {model_path}. "
-            "Please place gfpgan-1024.onnx in the models folder.",
+            f"Could not obtain {MODEL_FILE}. Place it in the models folder "
+            "manually or check your internet connection.",
             NAME,
         )
         return False
@@ -73,11 +75,15 @@ def get_face_enhancer() -> onnxruntime.InferenceSession:
 
     with THREAD_LOCK:
         if FACE_ENHANCER is None:
-            model_path = os.path.join(models_dir, "gfpgan-1024.onnx")
+            from modules.model_downloader import ensure_model
 
-            if not os.path.exists(model_path):
+            model_path = ensure_model(MODEL_FILE)
+
+            if model_path is None:
                 raise FileNotFoundError(
-                    f"{NAME}: Model not found at {model_path}"
+                    f"{NAME}: Model not found at "
+                    f"{os.path.join(models_dir, MODEL_FILE)} and could not be "
+                    "downloaded"
                 )
 
             try:

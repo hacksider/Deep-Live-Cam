@@ -29,6 +29,9 @@ def get_face_analyser() -> Any:
                 from modules.processors.frame._onnx_enhancer import (
                     build_provider_config,
                 )
+                from modules.model_downloader import ensure_insightface_pack
+
+                ensure_insightface_pack('buffalo_l')
                 providers = build_provider_config()
                 FACE_ANALYSER = insightface.app.FaceAnalysis(
                     name='buffalo_l',

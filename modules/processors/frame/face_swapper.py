@@ -12,7 +12,6 @@ from modules.core import update_status
 from modules.face_analyser import get_one_face, get_many_faces, default_source_face
 from modules.typing import Face, Frame
 from modules.utilities import (
-    conditional_download,
     is_image,
     is_video,
 )
@@ -192,21 +191,26 @@ models_dir = os.path.join(
 def pre_check() -> bool:
     # Use models_dir instead of abs_dir to save to the correct location
     download_directory_path = models_dir
-    
+
     # Make sure the models directory exists, catch permission errors if they occur
     try:
         os.makedirs(download_directory_path, exist_ok=True)
     except OSError as e:
         logging.error(f"Failed to create directory {download_directory_path} due to permission error: {e}")
         return False
-    
-    # Use the direct download URL from Hugging Face (FP32 model for broad GPU compatibility)
-    conditional_download(
-        download_directory_path,
-        [
-            "https://huggingface.co/hacksider/deep-live-cam/resolve/main/inswapper_128.onnx"
-        ],
-    )
+
+    from modules.model_downloader import ensure_any
+
+    variants = ["inswapper_128.onnx", "inswapper_128_fp16.onnx"]
+    if _HAS_TORCH_CUDA:
+        variants.reverse()
+    if ensure_any(variants) is None:
+        update_status(
+            "Could not obtain the inswapper model. Place inswapper_128.onnx in "
+            "the models folder manually or check your internet connection.",
+            NAME,
+        )
+        return False
     return True
 
 
@@ -242,8 +246,12 @@ def get_face_swapper() -> Any:
             elif os.path.exists(fp32_path):
                 model_path = fp32_path
             else:
-                update_status(f"No inswapper model found in {models_dir}.", NAME)
-                return None
+                if not pre_check():
+                    return None
+                model_path = fp16_path if os.path.exists(fp16_path) else fp32_path
+                if not os.path.exists(model_path):
+                    update_status(f"No inswapper model found in {models_dir}.", NAME)
+                    return None
             # On Apple Silicon, rewrite Pad(reflect) → Slice+Concat so
             # CoreML can run the entire model in a single partition on
             # the Neural Engine instead of bouncing between CPU and ANE.
