@@ -30,7 +30,7 @@ By using this software, you agree to these terms and commit to using it in a man
 
 Users are expected to use this software responsibly and legally. If using a real person's face, obtain their consent and clearly label any output as a deepfake when sharing online. We are not responsible for end-user actions.
 
-## Pre-built Quickstart
+## Pre-built Deep-Live-Cam 2.7 Ultimate!
 
 <p align="center">
   <a href="https://deeplivecam.net/index.php/quickstart">
@@ -39,11 +39,17 @@ Users are expected to use this software responsibly and legally. If using a real
 </p>
 
 <p align="center">
+<a href="https://deeplivecam.net/index.php/plans/nvidia-gpu?plan_id=0&group_id=1">
   <img src="https://github.com/user-attachments/assets/56b61811-3a1e-4672-9b50-cf7f6e8e6852" width="40" alt="Windows">
+</a>
   &nbsp;&nbsp;&nbsp;
+<a href="https://deeplivecam.net/index.php/plans/nvidia-gpu?plan_id=0&group_id=2">
   <img src="https://github.com/user-attachments/assets/6538e3a6-c957-431a-b586-2d6abcf534dc" width="34" alt="Mac Silicon">
+</a>
   &nbsp;&nbsp;&nbsp;
+<a href="https://deeplivecam.net/index.php/plans/nvidia-gpu?plan_id=0&group_id=3">
   <img src="https://github.com/user-attachments/assets/ad45142e-426c-4364-a2a9-a512670cc62c" width="40" alt="CPU">
+</a>
 </p>
 
 <p align="center">
@@ -60,7 +66,7 @@ Users are expected to use this software responsibly and legally. If using a real
   </a>
 </p>
 
-> **Ultimate** includes **30+ exclusive features**, performance optimizations, and **priority support**.
+> **Ultimate** includes **30+ exclusive features**, performance optimizations, and **priority support** We only have a single official website which is https://deeplivecam.net . Please be careful on where you download other versions of this application aside from that website and this github repo.
 
 Perfect if you want the fastest setup with **zero manual installation**, pre-configured dependencies, and optimized builds for every supported platform.
 
