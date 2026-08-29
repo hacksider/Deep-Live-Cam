@@ -178,6 +178,10 @@ def limit_resources() -> None:
             tensorflow.config.experimental.set_memory_growth(gpu, True)
     # limit memory usage
     if modules.globals.max_memory:
+        # setrlimit(RLIMIT_DATA) fails with EINVAL on macOS, crashing on launch.
+        # See https://github.com/hacksider/Deep-Live-Cam/issues/1848
+        if platform.system().lower() == 'darwin':
+            return
         memory = modules.globals.max_memory * 1024 ** 3
         if platform.system().lower() == 'windows':
             import ctypes
