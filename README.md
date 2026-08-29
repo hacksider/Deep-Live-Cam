@@ -233,7 +233,7 @@ pip install git+https://github.com/TencentARC/GFPGAN.git@master
 ```bash
 pip install -U torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
 pip uninstall onnxruntime onnxruntime-gpu
-pip install onnxruntime-gpu==1.21.0
+pip install onnxruntime-gpu==1.26.0
 ```
 
 3. Usage:
