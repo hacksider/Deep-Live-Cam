@@ -360,6 +360,10 @@ python run.py --execution-provider openvino
 -   Use a screen capture tool like OBS to stream.
 -   To change the face, select a new source image.
 
+### Troubleshooting: `Camera index out of range`
+
+If OpenCV logs `cv::obsensor::getStreamChannelGroup Camera index out of range`, it is reporting that a camera index could not be opened while probing for a webcam. A webcam is not required for **Image/Video Mode**: select a source face image and a target image or video, then click **Start** or **Preview**. Connect or select an available webcam only when using **Webcam Mode** and **Live**.
+
 ## Download all models in this huggingface link
 - [**Download models here**](https://huggingface.co/hacksider/deep-live-cam/tree/main)
 
