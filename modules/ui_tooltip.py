@@ -1,5 +1,7 @@
 """Lightweight hover tooltip for CustomTkinter widgets."""
 
+from tkinter import TclError
+
 import customtkinter as ctk
 
 
@@ -19,6 +21,7 @@ class ToolTip:
 
         widget.bind("<Enter>", self._schedule_show, add="+")
         widget.bind("<Leave>", self._hide, add="+")
+        widget.bind("<Destroy>", self._on_destroy, add="+")
 
     def _schedule_show(self, event=None):
         self._cancel()
@@ -65,10 +68,21 @@ class ToolTip:
     def _hide(self, event=None):
         self._cancel()
         if self._tooltip_window is not None:
-            self._tooltip_window.destroy()
+            try:
+                self._tooltip_window.destroy()
+            except TclError:
+                pass
             self._tooltip_window = None
+
+    def _on_destroy(self, event=None):
+        """Release callbacks and windows when the owner widget is destroyed."""
+        self._hide()
 
     def _cancel(self):
         if self._after_id is not None:
-            self._widget.after_cancel(self._after_id)
-            self._after_id = None
+            try:
+                self._widget.after_cancel(self._after_id)
+            except TclError:
+                pass
+            finally:
+                self._after_id = None
