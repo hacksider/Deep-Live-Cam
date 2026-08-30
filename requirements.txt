@@ -9,6 +9,8 @@ psutil==7.2.2
 PySide6>=6.7,<7
 pillow==12.3.0
 tqdm>=4.66.3
+# arm64 needs onnxruntime >= 1.27, whose CoreML MLProgram backend natively
+# supports reflect Pad, Split and scalar Gather. Pinned to the newest 1.28.x.
 onnxruntime==1.28.0; sys_platform == 'darwin' and platform_machine == 'arm64'
 onnxruntime==1.23.0; sys_platform == 'darwin' and platform_machine != 'arm64'
 onnxruntime-gpu==1.26.0; sys_platform != 'darwin'
