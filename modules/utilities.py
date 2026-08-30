@@ -52,11 +52,17 @@ def detect_fps(target_path: str) -> float:
         "default=noprint_wrappers=1:nokey=1",
         target_path,
     ]
-    output = subprocess.check_output(command).decode().strip().split("/")
     try:
+        output = subprocess.check_output(command, encoding="utf-8").strip().split("/")
         numerator, denominator = map(int, output)
         return numerator / denominator
-    except Exception:
+    except (
+        subprocess.CalledProcessError,
+        OSError,
+        UnicodeDecodeError,
+        ValueError,
+        ZeroDivisionError,
+    ):
         pass
     return 30.0
 
