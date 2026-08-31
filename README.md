@@ -307,7 +307,7 @@ pip install onnxruntime-directml==1.21.0
 2. Usage:
 
 ```bash
-python run.py --execution-provider directml
+python run.py --execution-provider dml
 ```
 
 **OpenVINO™ Execution Provider (Intel)**
