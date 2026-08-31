@@ -377,7 +377,7 @@ options:
   -o OUTPUT_PATH, --output OUTPUT_PATH                     select output file or directory
   --frame-processor FRAME_PROCESSOR [FRAME_PROCESSOR ...]  frame processors (choices: face_swapper, face_enhancer, ...)
   --keep-fps                                               keep original fps
-  --keep-audio                                             keep original audio
+  --keep-audio, --no-keep-audio                             keep or omit original audio
   --keep-frames                                            keep temporary frames
   --many-faces                                             process every face
   --map-faces                                              map source target faces
