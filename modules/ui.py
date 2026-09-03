@@ -318,6 +318,7 @@ def save_switch_states():
         "map_faces": modules.globals.map_faces,
         "poisson_blend": modules.globals.poisson_blend,
         "color_correction": modules.globals.color_correction,
+        "color_match": modules.globals.color_match,
         "nsfw_filter": modules.globals.nsfw_filter,
         "live_mirror": modules.globals.live_mirror,
         "live_resizable": modules.globals.live_resizable,
@@ -345,6 +346,7 @@ def load_switch_states():
         modules.globals.map_faces = state.get("map_faces", False)
         modules.globals.poisson_blend = state.get("poisson_blend", False)
         modules.globals.color_correction = state.get("color_correction", False)
+        modules.globals.color_match = state.get("color_match", False)
         modules.globals.nsfw_filter = state.get("nsfw_filter", False)
         modules.globals.live_mirror = state.get("live_mirror", False)
         modules.globals.live_resizable = state.get("live_resizable", False)
@@ -604,6 +606,8 @@ class MainWindow(QMainWindow):
                                "Blend face edges smoothly using Poisson blending")
         self.sw_color_fix = make("color_correction", "Fix Blueish Cam",
                                  "Fix blue/green color cast from some webcams")
+        self.sw_color_match = make("color_match", "Color Match",
+                                   "Match the swapped face's skin tone/lighting to the target scene")
         self.sw_show_fps = make("show_fps", "Show FPS",
                                 "Display frames-per-second counter on the live preview")
 
@@ -618,13 +622,15 @@ class MainWindow(QMainWindow):
             self.sw_keep_frames, self.sw_many_faces,
             self.sw_map_faces, self.sw_show_fps,
             self.sw_poisson, self.sw_color_fix,
+            self.sw_color_match,
         ]
         for i, w in enumerate(items):
             grid.addWidget(w, i // 2, i % 2)
 
         # Face enhancer dropdown
+        enhancer_row = (len(items) + 1) // 2
         enhancer_label = QLabel(_("Face Enhancer:"))
-        grid.addWidget(enhancer_label, len(items) // 2, 0)
+        grid.addWidget(enhancer_label, enhancer_row, 0)
 
         self.cb_enhancer = QComboBox()
         self.cb_enhancer.addItems(["None", "GFPGAN", "GPEN-512", "GPEN-256"])
@@ -638,7 +644,7 @@ class MainWindow(QMainWindow):
         self.cb_enhancer.setCurrentText(initial)
         self.cb_enhancer.currentTextChanged.connect(self._on_enhancer_change)
         self.cb_enhancer.setToolTip(_("Select a face enhancement model (None = no enhancement)"))
-        grid.addWidget(self.cb_enhancer, len(items) // 2, 1)
+        grid.addWidget(self.cb_enhancer, enhancer_row, 1)
 
         return card
 
@@ -681,6 +687,17 @@ class MainWindow(QMainWindow):
             _("0 = use swapped mouth, 100 = expose original mouth to chin area")
         )
         grid.addWidget(self.s_mouth, 2, 1)
+
+        # Smoothing — blends with the previous frame to reduce flicker/jitter
+        # in video/live mode. Always starts at 0 (off) on launch, like the
+        # other sliders on this card.
+        grid.addWidget(QLabel(_("Smoothing")), 3, 0)
+        self.s_smoothing = slider(0.0, 0.9, 0.0, 100, self._on_smoothing_change)
+        self.s_smoothing.setToolTip(
+            _("Blend with the previous frame to reduce flicker/jitter in video "
+              "(0 = off, higher = smoother but more motion lag)")
+        )
+        grid.addWidget(self.s_smoothing, 3, 1)
         return card
 
     # ── action row ───────────────────────────────────────────────────────
@@ -859,6 +876,13 @@ class MainWindow(QMainWindow):
     def _on_sharpness_change(self, value: float) -> None:
         modules.globals.sharpness = value
         update_status(f"Sharpness set to {value:.1f}")
+
+    def _on_smoothing_change(self, value: float) -> None:
+        # Slider is "smoothing amount"; interpolation_weight is the current
+        # frame's blend weight, so invert (0 smoothing = weight 1 = off).
+        modules.globals.interpolation_weight = 1.0 - value
+        pct = int(round(value / 0.9 * 100)) if value > 0 else 0
+        update_status(f"Smoothing set to {pct}%")
 
     def _on_mouth_mask_change(self, value: float) -> None:
         modules.globals.mouth_mask_size = value
