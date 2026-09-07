@@ -1,11 +1,11 @@
 import os
-import platform
 import ssl
 import threading
 import urllib.error
 import urllib.request
 from typing import Dict, List, Optional
 
+import certifi
 from tqdm import tqdm
 
 from modules.paths import MODELS_DIR
@@ -32,10 +32,14 @@ _LOCKS_GUARD = threading.Lock()
 CHUNK_SIZE = 1024 * 256
 
 
-def _ssl_context():
-    if platform.system().lower() == "darwin":
-        return ssl._create_unverified_context()
-    return None
+def _ssl_context() -> ssl.SSLContext:
+    """TLS context for model downloads.
+
+    Always verifies certificates against the certifi CA bundle, on every
+    platform. Previously macOS used an unverified context, which let a
+    network-position attacker substitute model files in transit (#1890).
+    """
+    return ssl.create_default_context(cafile=certifi.where())
 
 
 def _lock_for(key: str) -> threading.Lock:
