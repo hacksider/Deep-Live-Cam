@@ -19,6 +19,7 @@ from modules.cluster_analysis import find_closest_centroid
 from modules.gpu_processing import gpu_gaussian_blur, gpu_sharpen, gpu_add_weighted, gpu_resize
 from modules.platform_info import OPENVINO_PROVIDER_CONFIG
 import os
+from modules.paths import MODELS_DIR
 from collections import deque
 import time
 
@@ -184,9 +185,7 @@ ADAPTIVE_QUALITY = True
 # --- END: Mac M1-M5 Optimizations ---
 
 abs_dir = os.path.dirname(os.path.abspath(__file__))
-models_dir = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(abs_dir))), "models"
-)
+models_dir = MODELS_DIR  # overridable via DLC_MODELS_DIR (see modules/paths.py)
 
 def pre_check() -> bool:
     # Use models_dir instead of abs_dir to save to the correct location

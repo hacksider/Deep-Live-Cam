@@ -49,11 +49,13 @@ def get_face_analyser() -> Any:
                     build_provider_config,
                 )
                 from modules.model_downloader import ensure_insightface_pack
+                from modules.paths import INSIGHTFACE_ROOT
 
                 ensure_insightface_pack('buffalo_l')
                 providers = build_provider_config()
                 analyser = insightface.app.FaceAnalysis(
                     name='buffalo_l',
+                    root=INSIGHTFACE_ROOT,
                     providers=providers,
                     allowed_modules=['detection', 'recognition', 'landmark_2d_106']
                 )

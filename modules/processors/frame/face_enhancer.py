@@ -5,6 +5,7 @@ import cv2
 import threading
 import numpy as np
 import os
+from modules.paths import MODELS_DIR
 
 import onnxruntime
 
@@ -26,9 +27,7 @@ NAME = "DLC.FACE-ENHANCER"
 MODEL_FILE = "gfpgan-1024.onnx"
 
 abs_dir = os.path.dirname(os.path.abspath(__file__))
-models_dir = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(abs_dir))), "models"
-)
+models_dir = MODELS_DIR  # overridable via DLC_MODELS_DIR (see modules/paths.py)
 
 # Standard FFHQ 5-point face template for 512x512 resolution
 # Points: left_eye, right_eye, nose, left_mouth, right_mouth

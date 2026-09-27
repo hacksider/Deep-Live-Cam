@@ -25,7 +25,6 @@ except ImportError:
 
 import modules.globals
 import modules.metadata
-import modules.ui as ui
 from modules.processors.frame.core import get_frame_processors_modules, process_video_in_memory
 from modules.utilities import has_image_extension, is_image, is_video, detect_fps, create_video, extract_frames, get_temp_frame_paths, restore_audio, create_temp, move_temp, clean_temp, normalize_output_path
 
@@ -212,7 +211,22 @@ def pre_check() -> bool:
 def update_status(message: str, scope: str = 'DLC.CORE') -> None:
     print(f'[{scope}] {message}')
     if not modules.globals.headless:
+        # Imported lazily so headless/cloud runs never need Qt or a display.
+        import modules.ui as ui
         ui.update_status(message)
+
+
+def check_and_ignore_nsfw(target: str) -> bool:
+    if not modules.globals.headless:
+        import modules.ui as ui
+        return ui.check_and_ignore_nsfw(target, destroy)
+    from modules.predicter import predict_image, predict_video
+    check_nsfw = predict_image if has_image_extension(target) else predict_video
+    if check_nsfw(target):
+        destroy(to_quit=False)
+        update_status('Processing ignored!')
+        return True
+    return False
 
 def start() -> None:
     """Start processing with performance monitoring."""
@@ -227,7 +241,7 @@ def start() -> None:
     
     # process image to image
     if has_image_extension(modules.globals.target_path):
-        if modules.globals.nsfw_filter and ui.check_and_ignore_nsfw(modules.globals.target_path, destroy):
+        if modules.globals.nsfw_filter and check_and_ignore_nsfw(modules.globals.target_path):
             return
         try:
             shutil.copy2(modules.globals.target_path, modules.globals.output_path)
@@ -245,7 +259,7 @@ def start() -> None:
         return
     
     # process image to videos
-    if modules.globals.nsfw_filter and ui.check_and_ignore_nsfw(modules.globals.target_path, destroy):
+    if modules.globals.nsfw_filter and check_and_ignore_nsfw(modules.globals.target_path):
         return
 
     # Detect FPS early (needed by both pipelines)
@@ -353,5 +367,6 @@ def run() -> None:
     if modules.globals.headless:
         start()
     else:
+        import modules.ui as ui
         window = ui.init(start, destroy, modules.globals.lang)
         window.mainloop()

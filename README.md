@@ -360,6 +360,61 @@ python run.py --execution-provider openvino
 -   Use a screen capture tool like OBS to stream.
 -   To change the face, select a new source image.
 
+## Cloud GPUs (Modal, RunPod, Vast.ai, Lambda, any NVIDIA Docker host)
+
+The desktop app needs a display and webcam. Cloud GPUs have neither, so they run the **headless pipeline**: you upload a source face and a target image or video, and you get the swapped file back. Live webcam mode is not available in the cloud.
+
+Everything cloud-specific lives in [`cloud/`](cloud), [`requirements-cloud.txt`](requirements-cloud.txt) and the [`Dockerfile`](Dockerfile). The Qt UI is never imported in headless runs.
+
+**Model storage.** Point these environment variables at a persistent volume so containers don't download ~2 GB of models on every cold start:
+
+| Variable | Default | Holds |
+| --- | --- | --- |
+| `DLC_MODELS_DIR` | `<repo>/models` | inswapper, GFPGAN and GPEN models |
+| `DLC_INSIGHTFACE_ROOT` | `~/.insightface` | insightface `buffalo_l` detector/recognizer |
+
+### Modal
+
+```bash
+pip install modal && modal setup
+modal run cloud/modal_app.py::download_models           # one time: fills a Modal Volume with the models
+
+# one-off job: uploads the files, runs on a GPU, saves clip_swapped.mp4 next to the target
+modal run cloud/modal_app.py --source face.jpg --target clip.mp4
+modal run cloud/modal_app.py --source face.jpg --target clip.mp4 --processors face_swapper,face_enhancer --many-faces
+
+# persistent HTTPS API (scales to zero when idle)
+modal deploy cloud/modal_app.py
+curl -F source=@face.jpg -F target=@clip.mp4 https://<workspace>--deep-live-cam-deeplivecam-web.modal.run/swap -o out.mp4
+```
+
+Pick the GPU with `DLC_MODAL_GPU=A10G modal run ...` (the default is `L4`).
+
+### Docker (RunPod, Vast.ai, Lambda, Paperspace, EC2/GCP/Azure, Kubernetes)
+
+```bash
+docker build -t deep-live-cam .                         # add --build-arg PREFETCH_MODELS=1 to bake the models in
+docker run --gpus all -p 8000:8000 -v dlc-models:/models deep-live-cam
+
+curl -F source=@face.jpg -F target=@clip.mp4 http://localhost:8000/swap -o out.mp4
+curl http://localhost:8000/health                        # should list CUDAExecutionProvider
+```
+
+On RunPod or Vast.ai, use the built image as the template/container image, expose port 8000 over HTTP, and mount a volume at `/models`.
+
+`POST /swap` form fields: `source`, `target` (files); `frame_processors` (comma-separated, e.g. `face_swapper,face_enhancer`); `many_faces`, `mouth_mask`, `keep_fps`, `keep_audio` (true/false); `video_encoder` (`libx264`/`libx265`/`libvpx-vp9`); `video_quality` (0–51); `det_size` (160/320/640). Each container runs one job at a time, so add containers to handle more jobs at once.
+
+### Without Docker (any Linux GPU VM or notebook, e.g. Colab)
+
+```bash
+sudo apt install ffmpeg
+pip install -r requirements-cloud.txt                   # needs Python 3.11+ and CUDA 12 + cuDNN 9
+python -m modules.headless --download-models
+python -m modules.headless -s face.jpg -t clip.mp4 -o out.mp4 --frame-processor face_swapper face_enhancer
+```
+
+From Python: `from modules.headless import process; process("face.jpg", "clip.mp4", "out.mp4")`.
+
 ## Download all models in this huggingface link
 - [**Download models here**](https://huggingface.co/hacksider/deep-live-cam/tree/main)
 

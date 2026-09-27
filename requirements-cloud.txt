@@ -1,0 +1,18 @@
+# Headless dependencies for Linux cloud GPUs (Modal, RunPod, Vast.ai, Lambda,
+# any NVIDIA Docker host). No Qt, no webcam/camera enumeration, headless OpenCV.
+# CUDA 12 + cuDNN 9 come from the base image (nvidia/cuda:12.x-cudnn-runtime).
+numpy>=2.0,<3
+typing-extensions>=4.15.0
+opencv-python-headless==4.14.0.94
+onnx==1.22.0
+insightface==0.7.3
+psutil==7.2.2
+pillow==12.3.0
+tqdm>=4.66.3
+onnxruntime-gpu==1.26.0
+protobuf>=6.33.5,<8
+
+# HTTP API (cloud/server.py)
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9

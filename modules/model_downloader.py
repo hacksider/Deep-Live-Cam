@@ -8,7 +8,7 @@ from typing import Dict, List, Optional
 
 from tqdm import tqdm
 
-from modules.paths import MODELS_DIR
+from modules.paths import INSIGHTFACE_ROOT, MODELS_DIR
 
 HF_REPO_ID = "hacksider/deep-live-cam"
 HF_RESOLVE_BASE = f"https://huggingface.co/{HF_REPO_ID}/resolve/main/"
@@ -164,7 +164,7 @@ def ensure_insightface_pack(name: str = "buffalo_l") -> bool:
     if not members:
         return False
 
-    dest_dir = os.path.join(os.path.expanduser("~"), ".insightface", "models", name)
+    dest_dir = os.path.join(INSIGHTFACE_ROOT, "models", name)
     if all(is_present(member, dest_dir) for member in members):
         return True
 

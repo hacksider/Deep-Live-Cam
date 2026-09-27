@@ -1,0 +1,15 @@
+.git
+.github
+.venv
+venv
+env
+__pycache__
+*.pyc
+*.onnx
+*.pth
+*.mp4
+*.mkv
+temp
+.tmp
+media
+tests
