@@ -13,12 +13,25 @@ Swap a face from the command line (files are uploaded, the result is saved local
 
 Deploy a persistent HTTPS API (same routes as cloud/server.py):
 
-    modal deploy cloud/modal_app.py
-    curl -F source=@face.jpg -F target=@clip.mp4 https://<workspace>--deep-live-cam-deeplivecam-web.modal.run/swap -o out.mp4
+    DLC_API_TOKEN=<pick-a-secret> modal deploy cloud/modal_app.py
+    curl -H "Authorization: Bearer <secret>" -F source=@face.jpg -F target=@clip.mp4 \
+        https://<workspace>--deep-live-cam-deeplivecam-web.modal.run/swap -o out.mp4
 
-Environment knobs (read when the app is defined):
-    DLC_MODAL_GPU     GPU type, default "L4" (e.g. T4, A10G, L40S, A100, H100)
-    DLC_MODAL_VOLUME  model volume name, default "deep-live-cam-models"
+Live webcam from your computer (each connection gets its own GPU container):
+
+    python cloud/live_client.py --token <secret> --source face.jpg \
+        --server wss://<workspace>--deep-live-cam-deeplivecam-web.modal.run
+
+Environment knobs (read on your machine when you run/deploy):
+    DLC_API_TOKEN              require this token on /swap and /live (strongly
+                               recommended: the URL is public and GPU time is yours)
+    DLC_MODAL_GPU              GPU type, default "L4" (e.g. T4, A10G, L40S, A100, H100)
+    DLC_MODAL_REGION           pin containers near you for lower live latency,
+                               e.g. "us-east", "us-west", "eu-west" (see Modal's
+                               region docs; pinning may cost more)
+    DLC_MODAL_MIN_CONTAINERS   keep N GPUs warm to skip cold starts (billed while idle)
+    DLC_MODAL_TIMEOUT          longest job / live session in seconds, default 14400 (4h)
+    DLC_MODAL_VOLUME           model volume name, default "deep-live-cam-models"
 """
 
 from __future__ import annotations
@@ -34,6 +47,10 @@ MODELS_MOUNT = "/models"
 
 GPU = os.environ.get("DLC_MODAL_GPU", "L4")
 VOLUME_NAME = os.environ.get("DLC_MODAL_VOLUME", "deep-live-cam-models")
+REGION = os.environ.get("DLC_MODAL_REGION") or None
+MIN_CONTAINERS = int(os.environ.get("DLC_MODAL_MIN_CONTAINERS", "0"))
+TIMEOUT = int(os.environ.get("DLC_MODAL_TIMEOUT", str(4 * 60 * 60)))
+API_TOKEN = os.environ.get("DLC_API_TOKEN")
 
 app = modal.App("deep-live-cam")
 models_volume = modal.Volume.from_name(VOLUME_NAME, create_if_missing=True)
@@ -77,12 +94,18 @@ def download_models() -> None:
     print("Models are in the volume; GPU containers will start without downloading.")
 
 
+# A live WebSocket session is a single long-running input, so the timeout
+# caps session length. Containers take one input at a time (Modal's default),
+# which gives every live session its own GPU.
 @app.cls(
     image=image,
     gpu=GPU,
     volumes={MODELS_MOUNT: models_volume},
-    timeout=60 * 60,
+    timeout=TIMEOUT,
     scaledown_window=5 * 60,
+    min_containers=MIN_CONTAINERS,
+    secrets=[modal.Secret.from_dict({"DLC_API_TOKEN": API_TOKEN})] if API_TOKEN else [],
+    **({"region": REGION} if REGION else {}),
 )
 class DeepLiveCam:
     @modal.enter()

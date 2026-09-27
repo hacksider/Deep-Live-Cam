@@ -86,6 +86,69 @@ def _reset_per_job_state(previous_det_size: int) -> None:
         reset_face_analyser()
 
 
+def _validate_processors(frame_processors: Iterable[str]) -> list:
+    frame_processors = list(frame_processors)
+    if not frame_processors:
+        raise ValueError(f"At least one frame processor is required: {FRAME_PROCESSORS}")
+    unknown = [name for name in frame_processors if name not in FRAME_PROCESSORS]
+    if unknown:
+        raise ValueError(f"Unknown frame processor(s): {unknown}. Choose from {FRAME_PROCESSORS}.")
+    return frame_processors
+
+
+def apply_settings(
+    frame_processors: Iterable[str],
+    *,
+    many_faces: bool = False,
+    mouth_mask: bool = False,
+    det_size: Optional[int] = None,
+    execution_provider: Optional[str] = None,
+    execution_threads: Optional[int] = None,
+    opacity: float = 1.0,
+) -> list:
+    """Set the pipeline-wide globals shared by file jobs and live sessions.
+
+    Resets per-job state, makes sure the processors' models are present and
+    returns the loaded frame-processor modules in pipeline order.
+    """
+    frame_processors = _validate_processors(frame_processors)
+    if det_size is not None and det_size not in DET_SIZES:
+        raise ValueError(f"det_size must be one of {DET_SIZES}")
+
+    preload_cuda_libraries()
+
+    import modules.globals
+    from modules import core
+    from modules.processors.frame.core import get_frame_processors_modules
+
+    g = modules.globals
+    previous_det_size = g.det_size
+    g.headless = True
+    g.frame_processors = frame_processors
+    g.many_faces = many_faces
+    g.mouth_mask = mouth_mask
+    g.map_faces = False
+    g.opacity = opacity
+    g.det_size = det_size or g.DEFAULT_DET_SIZE
+    g.execution_providers = core.decode_execution_providers(
+        [execution_provider or core.suggest_default_execution_provider()]
+    )
+    if not g.execution_providers:
+        print(f"[DLC.HEADLESS] Execution provider {execution_provider!r} unavailable; using CPU.")
+        g.execution_providers = ["CPUExecutionProvider"]
+    g.execution_threads = execution_threads or core.suggest_execution_threads()
+    for enhancer in ENHANCERS:
+        g.fp_ui[enhancer] = enhancer in frame_processors
+
+    _reset_per_job_state(previous_det_size)
+
+    processors = get_frame_processors_modules(frame_processors)
+    for frame_processor in processors:
+        if not frame_processor.pre_check():
+            raise RuntimeError(f"{frame_processor.NAME} pre-check failed (model download?)")
+    return processors
+
+
 def process(
     source_path: str,
     target_path: str,
@@ -111,12 +174,7 @@ def process(
     ``max_memory`` (GB) is off by default: cloud containers enforce their own
     limits and a process-wide RLIMIT_DATA can starve the CUDA runtime.
     """
-    frame_processors = list(frame_processors)
-    if not frame_processors:
-        raise ValueError(f"At least one frame processor is required: {FRAME_PROCESSORS}")
-    unknown = [name for name in frame_processors if name not in FRAME_PROCESSORS]
-    if unknown:
-        raise ValueError(f"Unknown frame processor(s): {unknown}. Choose from {FRAME_PROCESSORS}.")
+    frame_processors = _validate_processors(frame_processors)
     if video_encoder not in VIDEO_ENCODERS:
         raise ValueError(f"video_encoder must be one of {VIDEO_ENCODERS}")
     if not 0 <= video_quality <= 51:
@@ -127,51 +185,36 @@ def process(
         if not os.path.isfile(path):
             raise FileNotFoundError(f"{label} file not found: {path}")
 
-    preload_cuda_libraries()
-
     import modules.globals
     from modules import core
-    from modules.processors.frame.core import get_frame_processors_modules
+
+    if not core.pre_check():
+        raise RuntimeError("Pre-check failed (is ffmpeg installed and on PATH?)")
+    apply_settings(
+        frame_processors,
+        many_faces=many_faces,
+        mouth_mask=mouth_mask,
+        det_size=det_size,
+        execution_provider=execution_provider,
+        execution_threads=execution_threads,
+    )
 
     g = modules.globals
-    previous_det_size = g.det_size
-    g.headless = True
     g.source_path = source_path
     g.target_path = target_path
     g.output_path = output_path
-    g.frame_processors = frame_processors
-    g.many_faces = many_faces
-    g.mouth_mask = mouth_mask
-    g.map_faces = False
     g.keep_fps = keep_fps
     g.keep_audio = keep_audio
     g.keep_frames = keep_frames
     g.nsfw_filter = nsfw_filter
     g.video_encoder = video_encoder
     g.video_quality = video_quality
-    g.det_size = det_size or g.DEFAULT_DET_SIZE
     g.max_memory = max_memory
-    g.execution_providers = core.decode_execution_providers(
-        [execution_provider or core.suggest_default_execution_provider()]
-    )
-    if not g.execution_providers:
-        print(f"[DLC.HEADLESS] Execution provider {execution_provider!r} unavailable; using CPU.")
-        g.execution_providers = ["CPUExecutionProvider"]
-    g.execution_threads = execution_threads or core.suggest_execution_threads()
-    for enhancer in ENHANCERS:
-        g.fp_ui[enhancer] = enhancer in frame_processors
 
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
     if os.path.exists(output_path):
         os.remove(output_path)
 
-    _reset_per_job_state(previous_det_size)
-
-    if not core.pre_check():
-        raise RuntimeError("Pre-check failed (is ffmpeg installed and on PATH?)")
-    for frame_processor in get_frame_processors_modules(frame_processors):
-        if not frame_processor.pre_check():
-            raise RuntimeError(f"{frame_processor.NAME} pre-check failed (model download?)")
     core.limit_resources()
     core.start()
 

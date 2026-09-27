@@ -362,9 +362,14 @@ python run.py --execution-provider openvino
 
 ## Cloud GPUs (Modal, RunPod, Vast.ai, Lambda, any NVIDIA Docker host)
 
-The desktop app needs a display and webcam. Cloud GPUs have neither, so they run the **headless pipeline**: you upload a source face and a target image or video, and you get the swapped file back. Live webcam mode is not available in the cloud.
+The desktop app needs a display and webcam. Cloud GPUs have neither, so the cloud setup works two ways:
+
+- **Files:** upload a source face and a target image or video, and get the swapped file back.
+- **Live webcam:** a small client on your computer streams your webcam to the GPU and shows the swapped video. It can also expose that video as a virtual camera for Zoom, Discord, OBS and similar apps. See [Live webcam on a cloud GPU](#live-webcam-on-a-cloud-gpu).
 
 Everything cloud-specific lives in [`cloud/`](cloud), [`requirements-cloud.txt`](requirements-cloud.txt) and the [`Dockerfile`](Dockerfile). The Qt UI is never imported in headless runs.
+
+**Protect your endpoint.** Set `DLC_API_TOKEN` on the server. Requests must then send `Authorization: Bearer <token>`, and the live client takes `--token`. Anyone who finds an open endpoint can run up your GPU bill.
 
 **Model storage.** Point these environment variables at a persistent volume so containers don't download ~2 GB of models on every cold start:
 
@@ -383,24 +388,29 @@ modal run cloud/modal_app.py::download_models           # one time: fills a Moda
 modal run cloud/modal_app.py --source face.jpg --target clip.mp4
 modal run cloud/modal_app.py --source face.jpg --target clip.mp4 --processors face_swapper,face_enhancer --many-faces
 
-# persistent HTTPS API (scales to zero when idle)
-modal deploy cloud/modal_app.py
-curl -F source=@face.jpg -F target=@clip.mp4 https://<workspace>--deep-live-cam-deeplivecam-web.modal.run/swap -o out.mp4
+# persistent HTTPS API + live endpoint (scales to zero when idle)
+DLC_API_TOKEN=<pick-a-secret> modal deploy cloud/modal_app.py
+curl -H "Authorization: Bearer <pick-a-secret>" -F source=@face.jpg -F target=@clip.mp4 \
+     https://<workspace>--deep-live-cam-deeplivecam-web.modal.run/swap -o out.mp4
 ```
 
-Pick the GPU with `DLC_MODAL_GPU=A10G modal run ...` (the default is `L4`).
+Settings are read from your shell when you run `modal run` or `modal deploy`:
+- `DLC_MODAL_GPU` picks the GPU (default `L4`).
+- `DLC_MODAL_REGION` pins a region near you for lower live latency, e.g. `us-east` or `eu-west`.
+- `DLC_MODAL_MIN_CONTAINERS=1` keeps one GPU warm, which skips cold starts but is billed while idle.
+- `DLC_MODAL_TIMEOUT` sets the longest job or live session in seconds (default 4 hours).
 
 ### Docker (RunPod, Vast.ai, Lambda, Paperspace, EC2/GCP/Azure, Kubernetes)
 
 ```bash
 docker build -t deep-live-cam .                         # add --build-arg PREFETCH_MODELS=1 to bake the models in
-docker run --gpus all -p 8000:8000 -v dlc-models:/models deep-live-cam
+docker run --gpus all -p 8000:8000 -v dlc-models:/models -e DLC_API_TOKEN=<pick-a-secret> deep-live-cam
 
-curl -F source=@face.jpg -F target=@clip.mp4 http://localhost:8000/swap -o out.mp4
+curl -H "Authorization: Bearer <pick-a-secret>" -F source=@face.jpg -F target=@clip.mp4 http://localhost:8000/swap -o out.mp4
 curl http://localhost:8000/health                        # should list CUDAExecutionProvider
 ```
 
-On RunPod or Vast.ai, use the built image as the template/container image, expose port 8000 over HTTP, and mount a volume at `/models`.
+On RunPod or Vast.ai, use the built image as the template/container image, expose port 8000 over HTTP, and mount a volume at `/models`. Both platforms' HTTP proxies support WebSockets, so the live client works through them.
 
 `POST /swap` form fields: `source`, `target` (files); `frame_processors` (comma-separated, e.g. `face_swapper,face_enhancer`); `many_faces`, `mouth_mask`, `keep_fps`, `keep_audio` (true/false); `video_encoder` (`libx264`/`libx265`/`libvpx-vp9`); `video_quality` (0–51); `det_size` (160/320/640). Each container runs one job at a time, so add containers to handle more jobs at once.
 
@@ -414,6 +424,26 @@ python -m modules.headless -s face.jpg -t clip.mp4 -o out.mp4 --frame-processor 
 ```
 
 From Python: `from modules.headless import process; process("face.jpg", "clip.mp4", "out.mp4")`.
+
+### Live webcam on a cloud GPU
+
+Run this **on your own computer** (Windows, macOS or Linux), pointed at any server above:
+
+```bash
+pip install -r requirements-live-client.txt
+python cloud/live_client.py --server wss://<workspace>--deep-live-cam-deeplivecam-web.modal.run --token <secret> --source face.jpg
+python cloud/live_client.py --server ws://<runpod-or-vm-address>:8000 --token <secret> --source face.jpg --virtual-cam --mirror
+```
+
+- **In the preview window:** `q` quits, `m` mirrors, `e` cycles the face enhancer, `f` toggles many faces.
+- **Virtual camera (`--virtual-cam`):** on Windows and macOS, install [OBS Studio](https://obsproject.com/) and start its virtual camera once. On Linux, run `sudo modprobe v4l2loopback exclusive_caps=1`. Then pick "OBS Virtual Camera" (or the loopback device) as your webcam in Zoom, Discord, Meet and similar apps. It shows black until the first swapped frame arrives, never your real face.
+- **Latency:** the GPU swaps a frame in about 10–30 ms, so network round trip dominates. Use a server region near you.
+  - `--width 480 --height 360` or `--jpeg-quality 70` saves bandwidth; 640×480 at 30 fps is about 1–1.5 MB/s each way.
+  - `--max-in-flight 3` smooths frame rate on jittery connections, at the cost of more delay.
+  - The client shows fps and round-trip time in the corner of the preview.
+- **Cost:** a GPU is dedicated to you for the whole session. The server closes a session after 60 s without frames (`DLC_LIVE_IDLE_TIMEOUT`). The first connection to a cold Modal app waits about 20–60 s for the GPU to start, and the client keeps retrying until then.
+- **One session per GPU:** a Docker/VM server serves one live session at a time and refuses others as busy. Modal starts a separate container for each session.
+- **For testing without a webcam,** `--camera clip.mp4` loops a video file instead.
 
 ## Download all models in this huggingface link
 - [**Download models here**](https://huggingface.co/hacksider/deep-live-cam/tree/main)

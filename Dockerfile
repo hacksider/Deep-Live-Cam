@@ -5,6 +5,10 @@
 #   docker run --gpus all -p 8000:8000 -v dlc-models:/models deep-live-cam
 #   curl -F source=@face.jpg -F target=@clip.mp4 http://localhost:8000/swap -o out.mp4
 #
+# Live webcam, from your own computer (see README "Live webcam on a cloud GPU"):
+#   python cloud/live_client.py --server ws://HOST:8000 --source face.jpg
+# Add -e DLC_API_TOKEN=<secret> to `docker run` on any publicly reachable host.
+#
 # One-off CLI job instead of the HTTP API:
 #   docker run --gpus all -v dlc-models:/models -v "$PWD:/data" deep-live-cam \
 #       python -m modules.headless -s /data/face.jpg -t /data/clip.mp4 -o /data/out.mp4

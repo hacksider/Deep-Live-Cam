@@ -1,0 +1,6 @@
+# Runs on YOUR computer (Windows/macOS/Linux), not on the GPU server:
+#   python cloud/live_client.py --server wss://... --source face.jpg
+opencv-python>=4.10
+numpy>=1.24
+websockets>=13
+pyvirtualcam>=0.12  # only needed for --virtual-cam
