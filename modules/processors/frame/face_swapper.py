@@ -17,7 +17,6 @@ from modules.utilities import (
 )
 from modules.cluster_analysis import find_closest_centroid
 from modules.gpu_processing import gpu_gaussian_blur, gpu_sharpen, gpu_add_weighted, gpu_resize
-from modules.platform_info import OPENVINO_PROVIDER_CONFIG
 import os
 from collections import deque
 import time
@@ -261,28 +260,17 @@ def get_face_swapper() -> Any:
 
             update_status(f"Loading face swapper model from: {model_path}", NAME)
             try:
-                providers_config = []
-                for p in modules.globals.execution_providers:
-                    if p == "CoreMLExecutionProvider" and IS_APPLE_SILICON:
-                        # Enhanced CoreML configuration for M1-M5
-                        providers_config.append((
-                            "CoreMLExecutionProvider",
-                            {
-                                "ModelFormat": "MLProgram",
-                                "MLComputeUnits": "ALL",  # Use Neural Engine + GPU + CPU
-                                "SpecializationStrategy": "FastPrediction",
-                                "AllowLowPrecisionAccumulationOnGPU": 1,
-                                "EnableOnSubgraphs": 1,
-                            }
-                        ))
-                    elif p == "CUDAExecutionProvider":
-                        # Use bare provider — ONNX Runtime defaults are
-                        # fastest on modern GPUs (Blackwell/sm_120).
-                        providers_config.append(p)
-                    elif p == "OpenVINOExecutionProvider":
-                        providers_config.append(OPENVINO_PROVIDER_CONFIG)
-                    else:
-                        providers_config.append(p)
+                from modules.processors.frame._onnx_enhancer import (
+                    build_provider_config,
+                )
+
+                providers_config = build_provider_config(
+                    model_paths=[model_path],
+                    coreml_options={
+                        "SpecializationStrategy": "FastPrediction",
+                        "EnableOnSubgraphs": "1",
+                    },
+                )
                 FACE_SWAPPER = insightface.model_zoo.get_model(
                     model_path,
                     providers=providers_config,

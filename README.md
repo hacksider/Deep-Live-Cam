@@ -342,6 +342,37 @@ python run.py --execution-provider openvino
 ```
 </details>
 
+## Local models and CoreML cache
+
+InsightFace uses the installation's `models/buffalo_l` directory. Only the
+modules used by the application are downloaded: `det_10g.onnx` (detection),
+`w600k_r50.onnx` (recognition), and `2d106det.onnx` (face landmarks). Existing
+models in your home directory are left untouched. If local model preparation
+fails, startup reports an error before InsightFace can attempt its own download.
+
+On Apple Silicon, rewritten ONNX models are stored in `.cache/onnx` outside the
+InsightFace pack. This prevents InsightFace from loading newly generated files
+as duplicate models. Cache keys include source contents, input shape, and the
+rewrite revision; completed files are published atomically.
+
+Compiled CoreML models are stored in `.cache/coreml`. Their cache directories
+include model contents, ONNX Runtime and macOS versions, architecture, and
+provider options. Replacing model weights at the same path invalidates the
+cache even if file size and timestamps are unchanged. Existing provider options
+are preserved, and detection receives its own cache identity when its compute
+units differ. The first use may compile a model; matching later sessions can
+reuse it. These caches do not change inference quality or guarantee an FPS gain.
+
+To rebuild generated caches, close the application and remove only
+`.cache/onnx` and `.cache/coreml`; keep the original files in `models/`. For
+offline cache/model-setup regressions on macOS, install pytest and run:
+
+```bash
+NO_ALBUMENTATIONS_UPDATE=1 KERAS_BACKEND=torch \
+  MPLCONFIGDIR="$PWD/.cache/matplotlib" \
+  python -m pytest -W error tests/test_coreml_cache.py tests/test_local_model_setup.py
+```
+
 ## Usage
 
 **1. Image/Video Mode**
