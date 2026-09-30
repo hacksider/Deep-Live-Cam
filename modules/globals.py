@@ -12,7 +12,7 @@ WORKFLOW_DIR = os.path.join(ROOT_DIR, "workflow")
 # encode GIF on 4.10 or 4.11, so offering it would silently fail. WEBP works
 # via the libwebp bundled with opencv-python.
 IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".bmp", ".webp")
-VIDEO_EXTENSIONS = (".mp4", ".mkv")
+VIDEO_EXTENSIONS = (".mp4", ".mkv", ".mov")
 
 # Face Mapping Data
 source_target_map: List[Dict[str, Any]] = [] # Stores detailed map for image/video processing

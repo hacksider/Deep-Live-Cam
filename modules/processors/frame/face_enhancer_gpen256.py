@@ -87,27 +87,40 @@ def get_enhancer() -> Any:
     return ENHANCER
 
 
-def enhance_face(temp_frame: Frame, face: Face) -> Frame:
+def enhance_face(temp_frame: Frame, face: Face, *, strict: bool = False) -> Frame:
     try:
         session = get_enhancer()
     except Exception as e:
         print(f"{NAME}: {e}")
+        if strict:
+            raise
         return temp_frame
     try:
-        return enhance_face_onnx(temp_frame, face, session, INPUT_SIZE)
+        return enhance_face_onnx(temp_frame, face, session, INPUT_SIZE, strict=strict)
     except Exception as e:
         print(f"{NAME}: Error during face enhancement: {e}")
+        if strict:
+            raise
         return temp_frame
 
 
-def process_frame(source_face: Face | None, temp_frame: Frame, detected_faces=None) -> Frame:
-    if detected_faces:
+def process_frame(
+    source_face: Face | None, temp_frame: Frame, detected_faces=None,
+    *, strict: bool = False,
+) -> Frame:
+    if detected_faces is not None:
+        if not detected_faces:
+            if strict:
+                raise ValueError("No face found in target image.")
+            return temp_frame
         target_face = detected_faces[0]
     else:
         target_face = get_one_face(temp_frame)
     if target_face is None:
+        if strict:
+            raise ValueError("No face found in target image.")
         return temp_frame
-    return enhance_face(temp_frame, target_face)
+    return enhance_face(temp_frame, target_face, strict=strict)
 
 
 def process_frame_v2(temp_frame: Frame) -> Frame:
@@ -132,14 +145,25 @@ def process_frames(
             progress.update(1)
 
 
-def process_image(source_path: str | None, target_path: str, output_path: str) -> None:
-    target_frame = imread_unicode(target_path)
-    if target_frame is None:
-        print(f"{NAME}: Error: Failed to read target image {target_path}")
-        return
-    result_frame = process_frame(None, target_frame)
-    imwrite_unicode(output_path, result_frame)
-    print(f"{NAME}: Enhanced image saved to {output_path}")
+def process_image(source_path: str | None, target_path: str, output_path: str) -> bool:
+    """Return True only after enhancement and writing succeeded."""
+    try:
+        target_frame = imread_unicode(target_path)
+        if target_frame is None:
+            print(f"{NAME}: Error: Failed to read target image {target_path}")
+            return False
+        result_frame = process_frame(None, target_frame, strict=True)
+        if result_frame is None:
+            print(f"{NAME}: Error: Enhancement returned no image")
+            return False
+        if not imwrite_unicode(output_path, result_frame):
+            print(f"{NAME}: Error: Failed to write output image {output_path}")
+            return False
+        print(f"{NAME}: Enhanced image saved to {output_path}")
+        return True
+    except Exception as error:
+        print(f"{NAME}: Error processing image: {error}")
+        return False
 
 
 def process_video(source_path: str | None, temp_frame_paths: List[str]) -> None:
