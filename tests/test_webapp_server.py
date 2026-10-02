@@ -39,10 +39,51 @@ def _engine():
 
 
 class LoginClientKeyTests(unittest.TestCase):
-    def test_forwarded_first_hop_from_localhost_peer(self):
+    def test_forwarded_last_hop_ignores_visitor_prefix(self):
+        self.assertEqual(
+            login_client_key("127.0.0.1", "spoofed, 203.0.113.5"),
+            "203.0.113.5",
+        )
+
+    def test_forwarded_last_hop_of_many(self):
+        self.assertEqual(
+            login_client_key("127.0.0.1", "a, b, 203.0.113.5"),
+            "203.0.113.5",
+        )
+
+    def test_forwarded_single_value(self):
+        self.assertEqual(
+            login_client_key("127.0.0.1", "203.0.113.5"), "203.0.113.5"
+        )
+
+    def test_forwarded_last_hop_is_what_proxy_saw(self):
         self.assertEqual(
             login_client_key("127.0.0.1", "203.0.113.5, 127.0.0.1"),
-            "203.0.113.5",
+            "127.0.0.1",
+        )
+
+    def test_forwarded_ipv6_loopback_peer(self):
+        self.assertEqual(
+            login_client_key("::1", "spoofed, 203.0.113.5"), "203.0.113.5"
+        )
+
+    def test_forwarded_empty_last_entry_falls_back_to_peer(self):
+        self.assertEqual(
+            login_client_key("127.0.0.1", "203.0.113.5, "), "127.0.0.1"
+        )
+
+    def test_forwarded_empty_header_falls_back_to_peer(self):
+        self.assertEqual(login_client_key("127.0.0.1", ""), "127.0.0.1")
+
+    def test_different_prefixes_same_last_hop_same_key(self):
+        self.assertEqual(
+            login_client_key("127.0.0.1", "rand1, 203.0.113.5"),
+            login_client_key("127.0.0.1", "rand2, rand3, 203.0.113.5"),
+        )
+
+    def test_missing_peer_ignores_forwarded(self):
+        self.assertEqual(
+            login_client_key(None, "spoofed, 203.0.113.5"), "unknown"
         )
 
     def test_localhost_peer_without_forwarded(self):
@@ -50,7 +91,7 @@ class LoginClientKeyTests(unittest.TestCase):
 
     def test_non_localhost_peer_ignores_forwarded(self):
         self.assertEqual(
-            login_client_key("testclient", "203.0.113.5, 127.0.0.1"),
+            login_client_key("testclient", "spoofed, 203.0.113.5"),
             "testclient",
         )
 

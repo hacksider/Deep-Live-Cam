@@ -55,9 +55,11 @@ def _password_ok(given: str, password: str) -> bool:
 def login_client_key(peer: str | None, forwarded_for: str | None) -> str:
     fallback = peer if peer else "unknown"
     if peer in ("127.0.0.1", "::1") and forwarded_for:
-        first = forwarded_for.split(",", 1)[0].strip()
-        if first:
-            return first
+        # Behind one trusted proxy the last hop is the address the proxy saw;
+        # earlier entries are visitor-supplied and must not be trusted.
+        last = forwarded_for.rsplit(",", 1)[-1].strip()
+        if last:
+            return last
         return fallback
     return fallback
 
