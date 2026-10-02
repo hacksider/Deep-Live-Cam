@@ -52,6 +52,16 @@ def _password_ok(given: str, password: str) -> bool:
     )
 
 
+def login_client_key(peer: str | None, forwarded_for: str | None) -> str:
+    fallback = peer if peer else "unknown"
+    if peer in ("127.0.0.1", "::1") and forwarded_for:
+        first = forwarded_for.split(",", 1)[0].strip()
+        if first:
+            return first
+        return fallback
+    return fallback
+
+
 class _LoginLimiter:
     def __init__(self, limit: int, window: float) -> None:
         self._limit = limit
@@ -112,7 +122,9 @@ def create_app(engine: LiveEngine, password: str, secure_cookie: bool = False) -
 
     @app.post("/login")
     async def login(request: Request):
-        client = request.client.host if request.client else "unknown"
+        peer = request.client.host if request.client else None
+        forwarded_for = request.headers.get("x-forwarded-for")
+        client = login_client_key(peer, forwarded_for)
         if limiter.blocked(client):
             logger.warning("login rate limit hit for %s", client)
             return JSONResponse({"error": "too many attempts"}, status_code=429)

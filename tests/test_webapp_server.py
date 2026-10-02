@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from webapp.engine import MAX_SESSIONS, MAX_SOURCE_BYTES, LiveEngine
-from webapp.server import LOGIN_FAIL_LIMIT, create_app
+from webapp.server import LOGIN_FAIL_LIMIT, create_app, login_client_key
 
 
 def _engine():
@@ -36,6 +36,23 @@ def _engine():
         decode_image=decode_image,
         encode_jpeg=encode_jpeg,
     )
+
+
+class LoginClientKeyTests(unittest.TestCase):
+    def test_forwarded_first_hop_from_localhost_peer(self):
+        self.assertEqual(
+            login_client_key("127.0.0.1", "203.0.113.5, 127.0.0.1"),
+            "203.0.113.5",
+        )
+
+    def test_localhost_peer_without_forwarded(self):
+        self.assertEqual(login_client_key("127.0.0.1", None), "127.0.0.1")
+
+    def test_non_localhost_peer_ignores_forwarded(self):
+        self.assertEqual(
+            login_client_key("testclient", "203.0.113.5, 127.0.0.1"),
+            "testclient",
+        )
 
 
 class ServerTests(unittest.TestCase):
