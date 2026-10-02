@@ -209,9 +209,21 @@
       }
     }
 
+    function scheduleSendFrame() {
+      if (!running || !socket || socket.readyState !== WebSocket.OPEN) return;
+      if (!localVideo.videoWidth) {
+        setTimeout(scheduleSendFrame, 50);
+        return;
+      }
+      sendFrame();
+    }
+
     function sendFrame() {
       if (!running || busy || !socket || socket.readyState !== WebSocket.OPEN) return;
-      if (!localVideo.videoWidth) return;
+      if (!localVideo.videoWidth) {
+        scheduleSendFrame();
+        return;
+      }
       const longEdge = Math.max(localVideo.videoWidth, localVideo.videoHeight);
       const scale = 640 / longEdge;
       const width = Math.max(1, Math.round(localVideo.videoWidth * scale));
@@ -221,8 +233,13 @@
       ctx.drawImage(localVideo, 0, 0, width, height);
       busy = true;
       canvas.toBlob(async (blob) => {
-        if (!running || !blob || !socket || socket.readyState !== WebSocket.OPEN) {
+        if (!running || !socket || socket.readyState !== WebSocket.OPEN) {
           busy = false;
+          return;
+        }
+        if (!blob) {
+          busy = false;
+          scheduleSendFrame();
           return;
         }
         socket.send(await blob.arrayBuffer());
@@ -244,29 +261,38 @@
         return;
       }
       localVideo.srcObject = stream;
+      localVideo.addEventListener("loadedmetadata", () => {
+        if (running) scheduleSendFrame();
+      });
       const protocol = location.protocol === "https:" ? "wss" : "ws";
-      socket = new WebSocket(protocol + "://" + location.host + "/live");
-      socket.binaryType = "blob";
+      const ws = new WebSocket(protocol + "://" + location.host + "/live");
+      socket = ws;
+      ws.binaryType = "blob";
       running = true;
       stopBtn.disabled = false;
-      socket.addEventListener("open", async () => {
+      ws.addEventListener("open", async () => {
+        if (ws !== socket) return;
         const bytes = new Uint8Array(await file.arrayBuffer());
+        if (ws !== socket) return;
         const imageB64 = toBase64(bytes);
-        socket.send(JSON.stringify({type:"source", image: imageB64}));
+        ws.send(JSON.stringify({type:"source", image: imageB64}));
       });
-      socket.addEventListener("message", (event) => {
+      ws.addEventListener("message", (event) => {
+        if (ws !== socket) return;
         if (typeof event.data === "string") {
           const message = JSON.parse(event.data);
           busy = false;
           if (message.type === "ready") {
             setStatus(studioStatus, "Live", false);
-            sendFrame();
+            scheduleSendFrame();
             return;
           }
           setStatus(studioStatus, message.message || "Error", true);
           if (message.message === "no face found" || message.message === "server is full" || message.message === "unreadable image") {
             stopLive();
+            return;
           }
+          scheduleSendFrame();
           return;
         }
         const url = URL.createObjectURL(event.data);
@@ -275,9 +301,10 @@
         output.src = url;
         noteFrame();
         busy = false;
-        sendFrame();
+        scheduleSendFrame();
       });
-      socket.addEventListener("close", () => {
+      ws.addEventListener("close", () => {
+        if (ws !== socket) return;
         if (running) setStatus(studioStatus, "Disconnected", true);
         stopLive();
       });
