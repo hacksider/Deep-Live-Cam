@@ -144,6 +144,7 @@
     let stream = null;
     let running = false;
     let busy = false;
+    let sourceReady = false;
     let frames = 0;
     let fpsStamp = performance.now();
 
@@ -186,6 +187,7 @@
     function stopLive() {
       running = false;
       busy = false;
+      sourceReady = false;
       if (socket) {
         socket.close();
         socket = null;
@@ -210,7 +212,7 @@
     }
 
     function scheduleSendFrame() {
-      if (!running || !socket || socket.readyState !== WebSocket.OPEN) return;
+      if (!running || !sourceReady || busy || !socket || socket.readyState !== WebSocket.OPEN) return;
       if (!localVideo.videoWidth) {
         setTimeout(scheduleSendFrame, 50);
         return;
@@ -219,7 +221,7 @@
     }
 
     function sendFrame() {
-      if (!running || busy || !socket || socket.readyState !== WebSocket.OPEN) return;
+      if (!running || !sourceReady || busy || !socket || socket.readyState !== WebSocket.OPEN) return;
       if (!localVideo.videoWidth) {
         scheduleSendFrame();
         return;
@@ -281,17 +283,18 @@
         if (ws !== socket) return;
         if (typeof event.data === "string") {
           const message = JSON.parse(event.data);
-          busy = false;
           if (message.type === "ready") {
+            sourceReady = true;
             setStatus(studioStatus, "Live", false);
             scheduleSendFrame();
             return;
           }
           setStatus(studioStatus, message.message || "Error", true);
-          if (message.message === "no face found" || message.message === "server is full" || message.message === "unreadable image") {
+          if (!sourceReady || message.message === "no face found" || message.message === "server is full" || message.message === "unreadable image") {
             stopLive();
             return;
           }
+          busy = false;
           scheduleSendFrame();
           return;
         }
