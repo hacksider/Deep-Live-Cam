@@ -13,10 +13,11 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request, WebSocket
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from starlette.websockets import WebSocketDisconnect
 
 from webapp.engine import LiveEngine
+from webapp.runtime import base_path as normalize_base_path
 
 COOKIE_NAME = "dlc_session"
 STATIC_INDEX = Path(__file__).resolve().parent / "static" / "index.html"
@@ -93,7 +94,14 @@ class _LoginLimiter:
         self._failures.setdefault(key, deque()).append(now)
 
 
-def create_app(engine: LiveEngine, password: str, secure_cookie: bool = False) -> FastAPI:
+def create_app(
+    engine: LiveEngine,
+    password: str,
+    secure_cookie: bool = False,
+    base_path: str = "",
+) -> FastAPI:
+    public_base = normalize_base_path(base_path)
+    cookie_path = public_base or "/"
     limiter = _LoginLimiter(LOGIN_FAIL_LIMIT, LOGIN_FAIL_WINDOW)
 
     @asynccontextmanager
@@ -120,7 +128,9 @@ def create_app(engine: LiveEngine, password: str, secure_cookie: bool = False) -
     def index():
         if not STATIC_INDEX.is_file():
             return Response("studio page is not built yet", status_code=503)
-        return FileResponse(STATIC_INDEX)
+        page = STATIC_INDEX.read_text(encoding="utf-8")
+        page = page.replace("__BASE_PATH_JSON__", json.dumps(public_base))
+        return HTMLResponse(page)
 
     @app.post("/login")
     async def login(request: Request):
@@ -146,7 +156,7 @@ def create_app(engine: LiveEngine, password: str, secure_cookie: bool = False) -
             httponly=True,
             samesite="lax",
             secure=secure_cookie,
-            path="/",
+            path=cookie_path,
         )
         return response
 

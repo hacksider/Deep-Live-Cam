@@ -364,7 +364,7 @@ python run.py --execution-provider openvino
 
 A password-protected browser page that swaps your webcam with one source face on the server.
 
--   Set `WEB_PASSWORD` (required). Optional: `WEB_PORT` (default `8000`) and `WEB_SECURE_COOKIE` (default on; set to `0` only for local HTTP testing).
+-   Set `WEB_PASSWORD` (required). Optional: `WEB_PORT` (default `8000`), `WEB_SECURE_COOKIE` (default on; set to `0` only for local HTTP testing), and `WEB_BASE_PATH` (for example `/DEEPFAKE`) when a proxy serves the app under a prefix and strips that prefix before forwarding. Copy `.env.example` to `.env` to keep those values in the repo folder. A variable already set in the environment wins over `.env`.
 -   From this repo, run `python -m webapp`. It listens on `127.0.0.1` only.
 -   Put Caddy or nginx with TLS in front of `127.0.0.1:8000`. The session cookie is `Secure`, so the page needs HTTPS.
 -   The server allows 8 live sessions at a time.

@@ -171,6 +171,16 @@ class ServerTests(unittest.TestCase):
         self.assertIn("path=/", set_cookie)
         self.assertNotIn("max-age", set_cookie)
 
+    def test_base_path_is_on_the_cookie_and_the_page(self):
+        with TestClient(create_app(self.engine, "secret", base_path="/DEEPFAKE/")) as client:
+            response = client.post("/login", json={"password": "secret"})
+            page = client.get("/")
+        set_cookie = response.headers["set-cookie"]
+        self.assertIn("Path=/DEEPFAKE", set_cookie.split("; "))
+        self.assertIn('const basePath = "/DEEPFAKE";', page.text)
+        self.assertIn('fetch(basePath + "/login"', page.text)
+        self.assertIn('location.host + basePath + "/live"', page.text)
+
     def test_wrong_password_logs_a_warning(self):
         with self.assertLogs("webapp.server", level="WARNING"):
             self.client.post("/login", json={"password": "nope"})

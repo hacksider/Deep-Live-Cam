@@ -127,6 +127,7 @@
   </main>
   <canvas id="grab" hidden></canvas>
   <script>
+    const basePath = __BASE_PATH_JSON__;
     const loginForm = document.querySelector("#login");
     const studio = document.querySelector("#studio");
     const loginStatus = document.querySelector("#loginStatus");
@@ -154,7 +155,7 @@
     }
 
     async function showSession() {
-      const response = await fetch("/session");
+      const response = await fetch(basePath + "/session");
       const signedIn = response.status === 204;
       loginForm.hidden = signedIn;
       studio.hidden = !signedIn;
@@ -162,7 +163,7 @@
 
     loginForm.addEventListener("submit", async (event) => {
       event.preventDefault();
-      const response = await fetch("/login", {
+      const response = await fetch(basePath + "/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password: document.querySelector("#password").value }),
@@ -271,7 +272,7 @@
         if (running) scheduleSendFrame();
       });
       const protocol = location.protocol === "https:" ? "wss" : "ws";
-      const ws = new WebSocket(protocol + "://" + location.host + "/live");
+      const ws = new WebSocket(protocol + "://" + location.host + basePath + "/live");
       socket = ws;
       ws.binaryType = "blob";
       running = true;

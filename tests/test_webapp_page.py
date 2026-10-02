@@ -39,6 +39,8 @@ class PageTests(unittest.TestCase):
             response = client.get("/")
         self.assertEqual(response.status_code, 200)
         self.assertIn("getUserMedia", response.text)
+        self.assertIn('const basePath = "";', response.text)
+        self.assertNotIn("__BASE_PATH_JSON__", response.text)
 
 
 if __name__ == "__main__":

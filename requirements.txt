@@ -19,3 +19,4 @@ pygrabber; sys_platform == 'win32'
 fastapi>=0.115
 uvicorn[standard]>=0.32
 httpx>=0.27
+python-dotenv>=1.0

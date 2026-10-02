@@ -29,3 +29,8 @@ switch_states.json
 install.bat
 /.claude
 *.bat
+/ffmpeg.exe
+/ffprobe.exe
+/docs/
+/.superpowers/
+/.env
