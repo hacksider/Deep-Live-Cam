@@ -110,11 +110,21 @@ class LiveEngine:
         if len(image_bytes) > MAX_SOURCE_BYTES:
             self._set_source(session_id, None, "unreadable image")
             return None
-        image = self._decode_image(image_bytes)
+        try:
+            image = self._decode_image(image_bytes)
+        except Exception:
+            logger.exception("source decode failed for session %s", session_id)
+            self._set_source(session_id, None, "unreadable image")
+            return None
         if image is None:
             self._set_source(session_id, None, "unreadable image")
             return None
-        face = self._get_one_face(image)
+        try:
+            face = self._get_one_face(image)
+        except Exception:
+            logger.exception("source face detection failed for session %s", session_id)
+            self._set_source(session_id, None, "unreadable image")
+            return None
         if face is None:
             self._set_source(session_id, None, "no face found")
             return None
@@ -133,7 +143,12 @@ class LiveEngine:
         if source_face is None:
             self._publish(session_id, seq, ("error", "no face found"))
             return
-        frame = self._decode_image(jpeg)
+        try:
+            frame = self._decode_image(jpeg)
+        except Exception:
+            logger.exception("frame decode failed for session %s", session_id)
+            self._publish(session_id, seq, ("error", "bad frame"))
+            return
         if frame is None:
             self._publish(session_id, seq, ("error", "bad frame"))
             return

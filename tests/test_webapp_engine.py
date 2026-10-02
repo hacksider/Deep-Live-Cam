@@ -135,6 +135,54 @@ class LiveEngineTests(unittest.TestCase):
             ("jpeg", b"enc:swapped:faceA:ok"),
         )
 
+    def test_source_decode_exception_does_not_abort_drain(self):
+        def decode_image(data: bytes):
+            if data == b"raise-source":
+                raise ValueError("decode blew up")
+            if data in (b"bad", b"bad-source"):
+                return None
+            return data
+
+        engine = LiveEngine(
+            get_one_face=lambda image: image,
+            detect_one_face=lambda frame: b"target:" + frame,
+            swap_face=lambda source, target, frame: b"swapped",
+            decode_image=decode_image,
+            encode_jpeg=lambda frame: b"enc:" + frame,
+        )
+        self.assertTrue(engine.open_session("bad"))
+        engine.submit_source("bad", b"raise-source")
+        self.assertTrue(engine.open_session("good"))
+        engine.submit_source("good", b"faceB")
+        seq, _rejected = engine.submit_frame("good", b"fb")
+        engine.drain()
+        self.assertEqual(engine.source_message("bad"), "unreadable image")
+        self.assertEqual(engine.source_message("good"), "ready")
+        self.assertEqual(engine.frame_result("good", seq), ("jpeg", b"enc:swapped"))
+
+    def test_get_one_face_exception_does_not_abort_drain(self):
+        def get_one_face(image: bytes):
+            if image == b"raise-face":
+                raise RuntimeError("face detector blew up")
+            return image
+
+        engine = LiveEngine(
+            get_one_face=get_one_face,
+            detect_one_face=lambda frame: b"target:" + frame,
+            swap_face=lambda source, target, frame: b"swapped",
+            decode_image=lambda data: data,
+            encode_jpeg=lambda frame: b"enc:" + frame,
+        )
+        self.assertTrue(engine.open_session("bad"))
+        engine.submit_source("bad", b"raise-face")
+        self.assertTrue(engine.open_session("good"))
+        engine.submit_source("good", b"faceB")
+        seq, _rejected = engine.submit_frame("good", b"fb")
+        engine.drain()
+        self.assertEqual(engine.source_message("bad"), "unreadable image")
+        self.assertEqual(engine.source_message("good"), "ready")
+        self.assertEqual(engine.frame_result("good", seq), ("jpeg", b"enc:swapped"))
+
 
 if __name__ == "__main__":
     unittest.main()
