@@ -360,6 +360,17 @@ python run.py --execution-provider openvino
 -   Use a screen capture tool like OBS to stream.
 -   To change the face, select a new source image.
 
+## Live web preview
+
+A password-protected browser page that swaps your webcam with one source face on the server.
+
+-   Set `WEB_PASSWORD` (required). Optional: `WEB_PORT` (default `8000`) and `WEB_SECURE_COOKIE` (default on; set to `0` only for local HTTP testing).
+-   From this repo, run `python -m webapp`. It listens on `127.0.0.1` only.
+-   Put Caddy or nginx with TLS in front of `127.0.0.1:8000`. The session cookie is `Secure`, so the page needs HTTPS.
+-   The server allows 8 live sessions at a time.
+-   The inswapper model must already be in the `models` folder.
+-   Have the reverse proxy rate-limit `POST /login`.
+
 ## Download all models in this huggingface link
 - [**Download models here**](https://huggingface.co/hacksider/deep-live-cam/tree/main)
 

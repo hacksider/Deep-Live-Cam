@@ -4,8 +4,11 @@ import binascii
 import hashlib
 import hmac
 import json
+import logging
 import threading
+import time
 import uuid
+from collections import deque
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -18,35 +21,80 @@ from webapp.engine import LiveEngine
 COOKIE_NAME = "dlc_session"
 STATIC_INDEX = Path(__file__).resolve().parent / "static" / "index.html"
 _WAIT_SECONDS = 5.0
+_POLL_SECONDS = 0.002
+LOGIN_FAIL_LIMIT = 30
+LOGIN_FAIL_WINDOW = 60.0
+_LOGIN_TRACKED_MAX = 10_000
+
+logger = logging.getLogger(__name__)
+
+
+def _b(text: str) -> bytes:
+    # surrogatepass: never raises, even for lone surrogates in odd input.
+    return text.encode("utf-8", errors="surrogatepass")
 
 
 def session_token(password: str) -> str:
-    return hmac.new(password.encode("utf-8"), b"dlc-web-v1", hashlib.sha256).hexdigest()
+    return hmac.new(_b(password), b"dlc-web-v1", hashlib.sha256).hexdigest()
 
 
 def _cookie_ok(cookies, password: str) -> bool:
     got = cookies.get(COOKIE_NAME)
     if not got:
         return False
-    return hmac.compare_digest(got, session_token(password))
+    return hmac.compare_digest(_b(got), _b(session_token(password)))
 
 
 def _password_ok(given: str, password: str) -> bool:
     return hmac.compare_digest(
-        hashlib.sha256(given.encode("utf-8")).digest(),
-        hashlib.sha256(password.encode("utf-8")).digest(),
+        hashlib.sha256(_b(given)).digest(),
+        hashlib.sha256(_b(password)).digest(),
     )
 
 
-def create_app(engine: LiveEngine, password: str) -> FastAPI:
+class _LoginLimiter:
+    def __init__(self, limit: int, window: float) -> None:
+        self._limit = limit
+        self._window = window
+        self._failures: dict[str, deque[float]] = {}
+
+    def _prune(self, key: str, now: float) -> deque[float]:
+        stamps = self._failures.get(key)
+        if stamps is None:
+            return deque()
+        while stamps and now - stamps[0] >= self._window:
+            stamps.popleft()
+        if not stamps:
+            del self._failures[key]
+        return stamps
+
+    def blocked(self, key: str) -> bool:
+        return len(self._prune(key, time.monotonic())) >= self._limit
+
+    def record_failure(self, key: str) -> None:
+        now = time.monotonic()
+        if key not in self._failures and len(self._failures) >= _LOGIN_TRACKED_MAX:
+            for other in list(self._failures):
+                self._prune(other, now)
+            if len(self._failures) >= _LOGIN_TRACKED_MAX:
+                return
+        self._failures.setdefault(key, deque()).append(now)
+
+
+def create_app(engine: LiveEngine, password: str, secure_cookie: bool = False) -> FastAPI:
+    limiter = _LoginLimiter(LOGIN_FAIL_LIMIT, LOGIN_FAIL_WINDOW)
+
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
         stop = threading.Event()
 
         def loop() -> None:
             while not stop.is_set():
-                engine.drain()
-                stop.wait(0.01)
+                try:
+                    engine.drain()
+                except Exception:
+                    logger.exception("gpu-worker pass failed")
+                stop.wait(_POLL_SECONDS)
 
         thread = threading.Thread(target=loop, name="gpu-worker", daemon=True)
         thread.start()
@@ -64,12 +112,18 @@ def create_app(engine: LiveEngine, password: str) -> FastAPI:
 
     @app.post("/login")
     async def login(request: Request):
+        client = request.client.host if request.client else "unknown"
+        if limiter.blocked(client):
+            logger.warning("login rate limit hit for %s", client)
+            return JSONResponse({"error": "too many attempts"}, status_code=429)
         try:
             body = await request.json()
         except Exception:
-            return JSONResponse({"error": "wrong password"}, status_code=401)
+            body = None
         given = body.get("password") if isinstance(body, dict) else None
         if not isinstance(given, str) or not _password_ok(given, password):
+            limiter.record_failure(client)
+            logger.warning("wrong password from %s", client)
             return JSONResponse({"error": "wrong password"}, status_code=401)
         response = JSONResponse({"ok": True})
         response.set_cookie(
@@ -77,6 +131,7 @@ def create_app(engine: LiveEngine, password: str) -> FastAPI:
             session_token(password),
             httponly=True,
             samesite="lax",
+            secure=secure_cookie,
             path="/",
         )
         return response
@@ -147,12 +202,12 @@ async def _handle_text(websocket: WebSocket, engine: LiveEngine, session_id: str
 
 
 async def _wait_source(engine: LiveEngine, session_id: str) -> str | None:
-    loops = int(_WAIT_SECONDS / 0.01)
+    loops = int(_WAIT_SECONDS / _POLL_SECONDS)
     for _ in range(loops):
         message = engine.source_message(session_id)
         if message is not None:
             return message
-        await asyncio.sleep(0.01)
+        await asyncio.sleep(_POLL_SECONDS)
     return None
 
 
@@ -173,10 +228,10 @@ async def _handle_frame(websocket: WebSocket, engine: LiveEngine, session_id: st
 
 
 async def _wait_frame(engine: LiveEngine, session_id: str, seq: int):
-    loops = int(_WAIT_SECONDS / 0.01)
+    loops = int(_WAIT_SECONDS / _POLL_SECONDS)
     for _ in range(loops):
         result = engine.frame_result(session_id, seq)
         if result is not None:
             return result
-        await asyncio.sleep(0.01)
+        await asyncio.sleep(_POLL_SECONDS)
     return None

@@ -1,6 +1,6 @@
 import unittest
 
-from webapp.engine import MAX_JPEG_BYTES, MAX_SESSIONS, LiveEngine
+from webapp.engine import MAX_JPEG_BYTES, MAX_SESSIONS, MAX_SOURCE_BYTES, LiveEngine
 
 
 class LiveEngineTests(unittest.TestCase):
@@ -99,6 +99,12 @@ class LiveEngineTests(unittest.TestCase):
         self.engine.submit_source("a", b"bad-source")
         self.engine.drain()
         self.assertEqual(self.engine.source_message("a"), "unreadable image")
+
+    def test_oversized_source_is_image_too_large(self):
+        self.assertTrue(self.engine.open_session("a"))
+        self.engine.submit_source("a", b"x" * (MAX_SOURCE_BYTES + 1))
+        self.engine.drain()
+        self.assertEqual(self.engine.source_message("a"), "image too large")
 
     def test_oversized_jpeg_is_rejected_without_swap(self):
         self._ready("a", b"faceA")

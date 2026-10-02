@@ -254,6 +254,10 @@
         setStatus(studioStatus, "Choose a source face first", true);
         return;
       }
+      if (file.size > 8000000) {
+        setStatus(studioStatus, "image too large", true);
+        return;
+      }
       startBtn.disabled = true;
       try {
         stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
@@ -290,7 +294,7 @@
             return;
           }
           setStatus(studioStatus, message.message || "Error", true);
-          if (!sourceReady || message.message === "no face found" || message.message === "server is full" || message.message === "unreadable image") {
+          if (!sourceReady || message.message === "no face found" || message.message === "server is full" || message.message === "unreadable image" || message.message === "image too large") {
             stopLive();
             return;
           }

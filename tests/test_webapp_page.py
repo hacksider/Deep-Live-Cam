@@ -21,6 +21,12 @@ class PageTests(unittest.TestCase):
         compact = "".join(text.split())
         self.assertIn('{type:"source",image:', compact)
 
+    def test_page_treats_image_too_large_as_fatal_and_checks_size(self):
+        text = PAGE.read_text(encoding="utf-8")
+        self.assertIn('message.message === "image too large"', text)
+        self.assertIn("file.size > 8000000", text)
+        self.assertLess(text.index("file.size > 8000000"), text.index("new WebSocket("))
+
     def test_root_serves_the_page_without_a_cookie(self):
         engine = LiveEngine(
             get_one_face=lambda image: None,

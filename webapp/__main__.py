@@ -34,7 +34,8 @@ def main() -> None:
         decode_image=decode_image,
         encode_jpeg=encode_jpeg,
     )
-    app = create_app(engine, password)
+    secure_cookie = os.environ.get("WEB_SECURE_COOKIE") != "0"
+    app = create_app(engine, password, secure_cookie=secure_cookie)
     uvicorn.run(app, host=BIND_HOST, port=port)
 
 

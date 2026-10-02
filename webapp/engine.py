@@ -108,7 +108,7 @@ class LiveEngine:
 
     def _apply_source(self, session_id: str, image_bytes: bytes):
         if len(image_bytes) > MAX_SOURCE_BYTES:
-            self._set_source(session_id, None, "unreadable image")
+            self._set_source(session_id, None, "image too large")
             return None
         try:
             image = self._decode_image(image_bytes)
