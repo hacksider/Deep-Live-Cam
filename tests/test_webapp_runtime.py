@@ -1,6 +1,6 @@
 import unittest
+from types import SimpleNamespace
 
-import modules.globals as globals_module
 from webapp.runtime import (
     BIND_HOST,
     apply_swap_defaults,
@@ -33,10 +33,11 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(choose_providers(["CPUExecutionProvider"]), ["CPUExecutionProvider"])
 
     def test_defaults_are_process_wide_constants(self):
-        apply_swap_defaults(globals_module)
-        self.assertFalse(globals_module.mouth_mask)
-        self.assertEqual(globals_module.opacity, 1.0)
-        self.assertFalse(globals_module.poisson_blend)
+        ns = SimpleNamespace(mouth_mask=True, opacity=0.5, poisson_blend=True)
+        apply_swap_defaults(ns)
+        self.assertFalse(ns.mouth_mask)
+        self.assertEqual(ns.opacity, 1.0)
+        self.assertFalse(ns.poisson_blend)
 
     def test_missing_model_exits(self):
         with self.assertRaises(SystemExit):
