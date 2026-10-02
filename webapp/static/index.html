@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Live desk</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,560;9..144,650&family=Inconsolata:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #14110e;
+      --panel: #221c16;
+      --line: #3a3128;
+      --ink: #f3eadf;
+      --muted: #a89888;
+      --copper: #e07a3d;
+      --danger: #d4544a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background:
+        radial-gradient(900px 420px at 10% -10%, rgba(224, 122, 61, 0.16), transparent 60%),
+        var(--bg);
+      font-family: Fraunces, Georgia, serif;
+    }
+    main {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 28px;
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 32px 24px 48px;
+    }
+    h1 { font-weight: 650; font-size: 42px; letter-spacing: -0.04em; margin: 0 0 8px; }
+    p, label, button, .status { font-family: Inconsolata, ui-monospace, monospace; }
+    .lede { color: var(--muted); margin: 0 0 22px; line-height: 1.45; }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 18px;
+    }
+    label { display: block; color: var(--muted); margin-bottom: 8px; }
+    input, button { width: 100%; font: inherit; }
+    input[type="password"], input[type="file"] {
+      color: var(--ink);
+      background: #100e0c;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+      margin-bottom: 12px;
+    }
+    button {
+      background: var(--copper);
+      color: #1a100b;
+      border: 0;
+      border-radius: 999px;
+      padding: 12px 16px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    button.secondary { background: transparent; color: var(--ink); border: 1px solid var(--line); margin-top: 8px; }
+    button:disabled { opacity: 0.45; cursor: default; }
+    .consent { color: var(--muted); font-size: 14px; line-height: 1.4; margin-top: 18px; }
+    .status { min-height: 1.2em; margin-top: 12px; color: var(--copper); }
+    .status.error { color: var(--danger); }
+    .stage { position: relative; min-height: 420px; }
+    .stage img, .stage video {
+      width: 100%;
+      border-radius: 18px;
+      background: #0c0b0a;
+      aspect-ratio: 16 / 9;
+      object-fit: cover;
+    }
+    video.inset {
+      position: absolute;
+      width: 180px;
+      right: 16px;
+      bottom: 16px;
+      border: 2px solid var(--copper);
+      aspect-ratio: 4 / 3;
+    }
+    .fps {
+      position: absolute;
+      left: 16px;
+      top: 16px;
+      font-family: Inconsolata, monospace;
+      background: rgba(20, 17, 14, 0.8);
+      padding: 6px 10px;
+      border-radius: 999px;
+    }
+    @media (max-width: 800px) {
+      main { grid-template-columns: 1fr; }
+      video.inset { width: 120px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section>
+      <h1>Live desk</h1>
+      <p class="lede">One source face. Your camera. The server swaps, the page shows it.</p>
+      <form id="login" class="panel">
+        <label for="password">Shared password</label>
+        <input id="password" type="password" autocomplete="current-password" required>
+        <button type="submit">Enter</button>
+        <div id="loginStatus" class="status"></div>
+      </form>
+      <form id="studio" class="panel" hidden>
+        <label for="face">Source face</label>
+        <input id="face" type="file" accept="image/jpeg,image/png">
+        <button id="start" type="button">Start</button>
+        <button id="stop" class="secondary" type="button" disabled>Stop</button>
+        <div id="studioStatus" class="status"></div>
+      </form>
+      <p class="consent">Use a face only with that person's consent, and label anything you share as a deepfake.</p>
+    </section>
+    <section class="stage panel">
+      <div class="fps" id="fps">0 fps</div>
+      <img id="output" alt="Swapped preview">
+      <video id="local" class="inset" autoplay muted playsinline></video>
+    </section>
+  </main>
+  <canvas id="grab" hidden></canvas>
+  <script>
+    const loginForm = document.querySelector("#login");
+    const studio = document.querySelector("#studio");
+    const loginStatus = document.querySelector("#loginStatus");
+    const studioStatus = document.querySelector("#studioStatus");
+    const faceInput = document.querySelector("#face");
+    const startBtn = document.querySelector("#start");
+    const stopBtn = document.querySelector("#stop");
+    const localVideo = document.querySelector("#local");
+    const output = document.querySelector("#output");
+    const fpsEl = document.querySelector("#fps");
+    const canvas = document.querySelector("#grab");
+    const ctx = canvas.getContext("2d");
+
+    let socket = null;
+    let stream = null;
+    let running = false;
+    let busy = false;
+    let frames = 0;
+    let fpsStamp = performance.now();
+
+    function setStatus(node, text, isError) {
+      node.textContent = text;
+      node.classList.toggle("error", Boolean(isError));
+    }
+
+    async function showSession() {
+      const response = await fetch("/session");
+      const signedIn = response.status === 204;
+      loginForm.hidden = signedIn;
+      studio.hidden = !signedIn;
+    }
+
+    loginForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const response = await fetch("/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: document.querySelector("#password").value }),
+      });
+      if (response.status !== 200) {
+        setStatus(loginStatus, "Wrong password", true);
+        return;
+      }
+      setStatus(loginStatus, "", false);
+      await showSession();
+    });
+
+    function toBase64(bytes) {
+      let text = "";
+      const chunk = 0x8000;
+      for (let index = 0; index < bytes.length; index += chunk) {
+        text += String.fromCharCode(...bytes.subarray(index, index + chunk));
+      }
+      return btoa(text);
+    }
+
+    function stopLive() {
+      running = false;
+      busy = false;
+      if (socket) {
+        socket.close();
+        socket = null;
+      }
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+        stream = null;
+      }
+      localVideo.srcObject = null;
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+    }
+
+    function noteFrame() {
+      frames += 1;
+      const now = performance.now();
+      if (now - fpsStamp >= 1000) {
+        fpsEl.textContent = frames + " fps";
+        frames = 0;
+        fpsStamp = now;
+      }
+    }
+
+    function sendFrame() {
+      if (!running || busy || !socket || socket.readyState !== WebSocket.OPEN) return;
+      if (!localVideo.videoWidth) return;
+      const longEdge = Math.max(localVideo.videoWidth, localVideo.videoHeight);
+      const scale = 640 / longEdge;
+      const width = Math.max(1, Math.round(localVideo.videoWidth * scale));
+      const height = Math.max(1, Math.round(localVideo.videoHeight * scale));
+      canvas.width = width;
+      canvas.height = height;
+      ctx.drawImage(localVideo, 0, 0, width, height);
+      busy = true;
+      canvas.toBlob(async (blob) => {
+        if (!running || !blob || !socket || socket.readyState !== WebSocket.OPEN) {
+          busy = false;
+          return;
+        }
+        socket.send(await blob.arrayBuffer());
+      }, "image/jpeg", 0.7);
+    }
+
+    startBtn.addEventListener("click", async () => {
+      const file = faceInput.files && faceInput.files[0];
+      if (!file) {
+        setStatus(studioStatus, "Choose a source face first", true);
+        return;
+      }
+      startBtn.disabled = true;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      } catch (error) {
+        setStatus(studioStatus, error.message || "Camera permission denied", true);
+        startBtn.disabled = false;
+        return;
+      }
+      localVideo.srcObject = stream;
+      const protocol = location.protocol === "https:" ? "wss" : "ws";
+      socket = new WebSocket(protocol + "://" + location.host + "/live");
+      socket.binaryType = "blob";
+      running = true;
+      stopBtn.disabled = false;
+      socket.addEventListener("open", async () => {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        const imageB64 = toBase64(bytes);
+        socket.send(JSON.stringify({type:"source", image: imageB64}));
+      });
+      socket.addEventListener("message", (event) => {
+        if (typeof event.data === "string") {
+          const message = JSON.parse(event.data);
+          busy = false;
+          if (message.type === "ready") {
+            setStatus(studioStatus, "Live", false);
+            sendFrame();
+            return;
+          }
+          setStatus(studioStatus, message.message || "Error", true);
+          if (message.message === "no face found" || message.message === "server is full" || message.message === "unreadable image") {
+            stopLive();
+          }
+          return;
+        }
+        const url = URL.createObjectURL(event.data);
+        if (output.dataset.url) URL.revokeObjectURL(output.dataset.url);
+        output.dataset.url = url;
+        output.src = url;
+        noteFrame();
+        busy = false;
+        sendFrame();
+      });
+      socket.addEventListener("close", () => {
+        if (running) setStatus(studioStatus, "Disconnected", true);
+        stopLive();
+      });
+    });
+
+    stopBtn.addEventListener("click", () => {
+      setStatus(studioStatus, "Stopped", false);
+      stopLive();
+    });
+
+    showSession();
+  </script>
+</body>
+</html>
