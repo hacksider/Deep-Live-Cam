@@ -13,6 +13,7 @@ from __future__ import annotations
 import os
 import platform
 import queue
+import re
 import sys
 import tempfile
 import threading
@@ -76,6 +77,7 @@ from modules.utilities import (
 )
 from modules import imread_unicode
 from modules.video_capture import VideoCapturer
+from modules.virtual_cam import VirtualCamOutput
 
 if platform.system() == "Windows":
     from pygrabber.dshow_graph import FilterGraph
@@ -329,6 +331,9 @@ def save_switch_states():
         "mouth_mask_size": modules.globals.mouth_mask_size,
         "capture_resolution": list(modules.globals.capture_resolution),
         "det_size": modules.globals.det_size,
+        "virtual_cam_enabled": modules.globals.virtual_cam_enabled,
+        "virtual_cam_device": modules.globals.virtual_cam_device,
+        "show_preview_window": modules.globals.show_preview_window,
     }
     try:
         with open("switch_states.json", "w") as f:
@@ -370,6 +375,9 @@ def load_switch_states():
                 pass
         if state.get("det_size") in (160, 320, 640):
             modules.globals.det_size = int(state["det_size"])
+        modules.globals.virtual_cam_enabled = bool(state.get("virtual_cam_enabled", False))
+        modules.globals.virtual_cam_device = state.get("virtual_cam_device") or None
+        modules.globals.show_preview_window = bool(state.get("show_preview_window", True))
     except FileNotFoundError:
         pass
     except (OSError, json.JSONDecodeError):
@@ -440,16 +448,31 @@ def get_available_cameras() -> Tuple[List[int], List[str]]:
     if platform.system() == "Darwin":
         return [0, 1], ["Camera 0", "Camera 1"]
 
-    # Linux probe
+    # Linux probe. Explicit CAP_V4L2 avoids OpenCV auto-probing a backend
+    # (FFmpeg/GStreamer) whose V4L2 input emits a spurious but harmless
+    # "ioctl(VIDIOC_QBUF): Bad file descriptor" on open.
     indices: List[int] = []
     names: List[str] = []
     for i in range(10):
-        cap = cv2.VideoCapture(f"/dev/video{i}")
+        cap = cv2.VideoCapture(f"/dev/video{i}", cv2.CAP_V4L2)
         if cap.isOpened():
             indices.append(i)
             names.append(f"Camera {i}")
             cap.release()
     return (indices, names) if names else ([], ["No cameras found"])
+
+
+def _resolve_camera_device_index(device: str, available: List[int]) -> Optional[int]:
+    """Map a --camera-input value ('/dev/video0', 'video0', '0', ...) to a
+    device index, provided that index is actually among the detected
+    cameras. Returns None if it can't be parsed or isn't available."""
+    device = device.strip()
+    match = re.search(r"(\d+)\s*$", device)
+    try:
+        idx = int(match.group(1)) if match else int(device)
+    except ValueError:
+        return None
+    return idx if idx in available else None
 
 
 # ─── main window ─────────────────────────────────────────────────────────
@@ -509,6 +532,7 @@ class MainWindow(QMainWindow):
 
         # Source/Target row
         layout.addLayout(self._build_image_row())
+        self._load_initial_source()
 
         # Options grid
         layout.addWidget(self._build_options_card())
@@ -534,6 +558,40 @@ class MainWindow(QMainWindow):
         footer.setCursor(Qt.CursorShape.PointingHandCursor)
         footer.mousePressEvent = lambda _e: webbrowser.open("https://deeplivecam.net")
         layout.addWidget(footer)
+
+        self._apply_cli_camera_args()
+
+    def _apply_cli_camera_args(self) -> None:
+        """Wire up --camera-input / --camera-output, set via the CLI.
+
+        --camera-output alone just pre-fills the virtual camera device.
+        --camera-input alone just pre-selects that camera in the combo box.
+        Both together: switch on Virtual Camera, switch off the preview
+        window, select the camera, and start Live — a one-shot "run
+        headless into v4l2loopback" launch.
+        """
+        cam_in = modules.globals.camera_input
+        cam_out = modules.globals.camera_output
+
+        if cam_out:
+            modules.globals.virtual_cam_device = cam_out
+
+        idx = None
+        if cam_in:
+            idx = _resolve_camera_device_index(cam_in, self._camera_indices)
+            if idx is None:
+                update_status(f"--camera-input '{cam_in}' not found among available cameras")
+            else:
+                self.cb_camera.setCurrentIndex(self._camera_indices.index(idx))
+
+        if not (cam_in and cam_out):
+            return
+        if idx is None:
+            return
+
+        self.sw_virtual_cam.setChecked(True)
+        self.sw_show_preview.setChecked(False)
+        QTimer.singleShot(0, self._on_live)
 
     # ── image row ────────────────────────────────────────────────────────
 
@@ -801,8 +859,59 @@ class MainWindow(QMainWindow):
         ))
         grid.addWidget(self.cb_det_size, 2, 1, 1, 2)
 
+        # Row 3: virtual camera output
+        self.sw_virtual_cam = _Switch(
+            _("Virtual Camera"),
+            modules.globals.virtual_cam_enabled,
+            _(
+                "Mirror the live preview to a virtual camera (v4l2loopback "
+                "on Linux, OBS Virtual Camera on Windows/macOS) so other "
+                "apps can use the face-swapped feed as a webcam. Requires "
+                "'pip install pyvirtualcam' and, on Linux, a v4l2loopback "
+                "device already created (e.g. via modprobe v4l2loopback)."
+            ),
+        )
+        self.sw_virtual_cam.toggled.connect(self._on_virtual_cam_toggled)
+        grid.addWidget(self.sw_virtual_cam, 3, 0, 1, 3)
+
+        # Row 4: preview window on/off (headless = v4l2 output only)
+        self.sw_show_preview = _Switch(
+            _("Preview window"),
+            modules.globals.show_preview_window,
+            _(
+                "Show the live preview window. Turn off to run headless — "
+                "frames still go to the virtual camera (if enabled) without "
+                "rendering a window. Use the Live/Stop button to stop a "
+                "headless session."
+            ),
+        )
+        self.sw_show_preview.toggled.connect(self._on_show_preview_toggled)
+        grid.addWidget(self.sw_show_preview, 4, 0, 1, 3)
+
+        self._live_sync_timer = QTimer(self)
+        self._live_sync_timer.timeout.connect(self._sync_live_button)
+        self._live_sync_timer.start(300)
+
         grid.setColumnStretch(1, 1)
         return card
+
+    def _on_virtual_cam_toggled(self, enabled: bool) -> None:
+        modules.globals.virtual_cam_enabled = enabled
+        save_switch_states()
+        if _WEBCAM_PREVIEW is not None:
+            _WEBCAM_PREVIEW.set_virtual_cam_enabled(enabled)
+
+    def _on_show_preview_toggled(self, enabled: bool) -> None:
+        modules.globals.show_preview_window = enabled
+        save_switch_states()
+        if _WEBCAM_PREVIEW is not None:
+            _WEBCAM_PREVIEW.set_preview_visible(enabled)
+
+    def _sync_live_button(self) -> None:
+        running = _WEBCAM_PREVIEW is not None and _WEBCAM_PREVIEW.is_running()
+        desired = _("Stop") if running else _("Live")
+        if self.btn_live.text() != desired:
+            self.btn_live.setText(desired)
 
     def _on_resolution_change(self, idx: int) -> None:
         if 0 <= idx < len(self._resolution_options):
@@ -832,6 +941,20 @@ class MainWindow(QMainWindow):
 
     def set_status(self, text: str) -> None:
         self._status_label.setText(text)
+
+    def _load_initial_source(self) -> None:
+        """Preload the source face passed via -s/--source into the GUI."""
+        path = modules.globals.source_path
+        if not path:
+            return
+        if is_image(path):
+            global _RECENT_SOURCE_DIR
+            _RECENT_SOURCE_DIR = os.path.dirname(path)
+            self.source_label.setPixmap(render_image_preview(path, (200, 200)))
+            self.source_label.setText("")
+        else:
+            print(f"[ui] --source '{path}' is not a readable image, ignoring")
+            modules.globals.source_path = None
 
     def _on_select_source(self) -> None:
         global _RECENT_SOURCE_DIR
@@ -1018,6 +1141,9 @@ class MainWindow(QMainWindow):
             _PREVIEW.show()
 
     def _on_live(self) -> None:
+        if _WEBCAM_PREVIEW is not None and _WEBCAM_PREVIEW.is_running():
+            _WEBCAM_PREVIEW.close()
+            return
         idx = self.cb_camera.currentIndex()
         if idx < 0 or idx >= len(self._camera_indices):
             update_status("No camera available")
@@ -1051,7 +1177,7 @@ def _update_tumbler(var: str, value: bool) -> None:
     save_switch_states()
     # If we're currently in a live preview, refresh frame processors so
     # toggling enhancers takes effect immediately.
-    if _WEBCAM_PREVIEW is not None and _WEBCAM_PREVIEW.isVisible():
+    if _WEBCAM_PREVIEW is not None and _WEBCAM_PREVIEW.is_running():
         get_frame_processors_modules(modules.globals.frame_processors)
 
 
@@ -1142,12 +1268,14 @@ class _CaptureWorker(QThread):
 class _ProcessingWorker(QThread):
     """Pulls raw frames, runs detect/swap/enhance, pushes processed frames."""
 
-    def __init__(self, capture_queue, processed_queue, stop_event, camera_fps: float):
+    def __init__(self, capture_queue, processed_queue, stop_event, camera_fps: float,
+                 vcam: Optional["VirtualCamOutput"] = None):
         super().__init__()
         self._cq = capture_queue
         self._pq = processed_queue
         self._stop = stop_event
         self._fps = camera_fps
+        self._vcam = vcam
 
     def run(self) -> None:
         frame_processors = get_frame_processors_modules(modules.globals.frame_processors)
@@ -1264,6 +1392,9 @@ class _ProcessingWorker(QThread):
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2,
                 )
 
+            if self._vcam is not None:
+                self._vcam.send(temp_frame)
+
             try:
                 self._pq.put_nowait(temp_frame)
             except queue.Full:
@@ -1306,11 +1437,16 @@ class WebcamPreviewWindow(QWidget):
         self._processed_queue: queue.Queue = queue.Queue(maxsize=2)
         self._stop_event = threading.Event()
 
+        self._vcam: Optional[VirtualCamOutput] = None
+        if modules.globals.virtual_cam_enabled:
+            self._vcam = VirtualCamOutput(camera_fps, modules.globals.virtual_cam_device)
+
         self._capture_worker = _CaptureWorker(
             self._cap, self._capture_queue, self._stop_event
         )
         self._processing_worker = _ProcessingWorker(
-            self._capture_queue, self._processed_queue, self._stop_event, camera_fps
+            self._capture_queue, self._processed_queue, self._stop_event, camera_fps,
+            self._vcam,
         )
         self._capture_worker.start()
         self._processing_worker.start()
@@ -1329,8 +1465,34 @@ class WebcamPreviewWindow(QWidget):
             bgr_frame = self._processed_queue.get_nowait()
         except queue.Empty:
             return
+        if not self.isVisible():
+            # Headless: skip the resize/convert, nothing is on screen to show.
+            return
         bgr_frame = fit_image_to_size(bgr_frame, self.width(), self.height())
         self._image_label.setPixmap(_bgr_to_qpixmap(bgr_frame))
+
+    def is_running(self) -> bool:
+        """True once capture/processing threads are up and not stopped yet."""
+        stop_event = getattr(self, "_stop_event", None)
+        return stop_event is not None and not stop_event.is_set()
+
+    def set_preview_visible(self, visible: bool) -> None:
+        if visible:
+            self.show()
+        else:
+            self.hide()
+
+    def set_virtual_cam_enabled(self, enabled: bool) -> None:
+        """Start/stop virtual-camera output for the running preview session."""
+        if enabled and self._vcam is None:
+            self._vcam = VirtualCamOutput(
+                self._cap.actual_fps, modules.globals.virtual_cam_device
+            )
+            self._processing_worker._vcam = self._vcam
+        elif not enabled and self._vcam is not None:
+            self._processing_worker._vcam = None
+            self._vcam.close()
+            self._vcam = None
 
     def closeEvent(self, event) -> None:
         self._stop_event.set()
@@ -1347,6 +1509,9 @@ class WebcamPreviewWindow(QWidget):
             self._cap.release()
         except Exception:
             pass
+        if self._vcam is not None:
+            self._vcam.close()
+            self._vcam = None
         global _WEBCAM_PREVIEW
         if _WEBCAM_PREVIEW is self:
             _WEBCAM_PREVIEW = None
@@ -1358,7 +1523,8 @@ def _open_webcam_preview(camera_index: int) -> None:
     if _WEBCAM_PREVIEW is not None:
         _WEBCAM_PREVIEW.close()
     _WEBCAM_PREVIEW = WebcamPreviewWindow(camera_index)
-    _WEBCAM_PREVIEW.show()
+    if modules.globals.show_preview_window:
+        _WEBCAM_PREVIEW.show()
 
 
 # ─── mapper dialogs (image/video + live) ────────────────────────────────

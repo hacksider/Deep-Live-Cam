@@ -45,6 +45,26 @@ camera_input_combobox: Any | None = None # Placeholder for UI element if needed
 webcam_preview_running: bool = False
 show_fps: bool = False
 
+# Mirror the live preview to a virtual camera (v4l2loopback on Linux, OBS
+# Virtual Camera on Windows/macOS) via pyvirtualcam, so other apps (Zoom,
+# browsers, OBS, ...) can use the face-swapped feed as a webcam.
+# virtual_cam_device: explicit device path (e.g. "/dev/video10"); empty/None
+# lets pyvirtualcam auto-pick the first available virtual camera.
+virtual_cam_enabled: bool = False
+virtual_cam_device: str | None = None
+
+# Show the live preview window. Disable to run headless with output only
+# going to the virtual camera (saves the per-frame resize/convert cost of
+# rendering the preview widget).
+show_preview_window: bool = True
+
+# One-shot CLI launch helpers: --camera-input / --camera-output. Not
+# persisted in switch_states.json — these only drive the auto-start
+# behavior wired up once at GUI startup (see
+# MainWindow._apply_cli_camera_args in ui.py) and are otherwise unused.
+camera_input: str | None = None
+camera_output: str | None = None
+
 # System Configuration
 max_memory: int | None = None        # Memory limit in GB? (Needs clarification)
 execution_providers: List[str] = []  # e.g., ['CUDAExecutionProvider', 'CPUExecutionProvider']
