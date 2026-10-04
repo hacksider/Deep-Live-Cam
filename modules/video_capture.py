@@ -72,7 +72,25 @@ class VideoCapturer:
                     except Exception:
                         continue
             elif platform.system() == "Linux":
-                self.cap = cv2.VideoCapture(f"/dev/video{self.device_index}")
+                # Explicit cv2.CAP_V4L2 is required: without it, OpenCV
+                # auto-probes backends and opens the device through one
+                # (FFmpeg/GStreamer's V4L2 input) that reliably prints a
+                # spurious but harmless "ioctl(VIDIOC_QBUF): Bad file
+                # descriptor" to stderr on open — cv2.CAP_V4L2 forces
+                # OpenCV's own native V4L2 backend instead, which doesn't.
+                # Format/resolution/fps are passed as construction params
+                # (same as the Windows path above) so they take effect
+                # without a second, needless stream restart afterwards.
+                mjpg = cv2.VideoWriter_fourcc(*'MJPG')
+                open_params = [
+                    cv2.CAP_PROP_FOURCC, mjpg,
+                    cv2.CAP_PROP_FRAME_WIDTH, width,
+                    cv2.CAP_PROP_FRAME_HEIGHT, height,
+                    cv2.CAP_PROP_FPS, fps,
+                ]
+                self.cap = cv2.VideoCapture(
+                    f"/dev/video{self.device_index}", cv2.CAP_V4L2, open_params
+                )
             else:
                 self.cap = cv2.VideoCapture(self.device_index)
 
@@ -80,9 +98,11 @@ class VideoCapturer:
                 raise RuntimeError("Failed to open camera")
 
             # Belt-and-braces: also set via cap.set() for backends that honor
-            # post-open changes (MSMF, V4L2). DSHOW ignores these, but the
-            # construction params above already handled it.
-            if platform.system() != "Windows":
+            # post-open changes (e.g. AVFoundation on macOS). DSHOW/MSMF/ANY
+            # on Windows and V4L2 on Linux already got them at construction
+            # above — repeating them here would just force another
+            # (needless, noisy) stream restart.
+            if platform.system() not in ("Windows", "Linux"):
                 self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
                 self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
                 self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
