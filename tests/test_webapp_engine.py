@@ -189,6 +189,108 @@ class LiveEngineTests(unittest.TestCase):
         self.assertEqual(engine.source_message("good"), "ready")
         self.assertEqual(engine.frame_result("good", seq), ("jpeg", b"enc:swapped"))
 
+    def test_each_session_renders_with_its_own_look(self):
+        seen = []
+
+        def render(source, frame, look):
+            seen.append((source, dict(look)))
+            return b"rendered:" + frame
+
+        engine = LiveEngine(
+            get_one_face=lambda image: image,
+            detect_one_face=lambda frame: b"unused",
+            swap_face=lambda source, target, frame: b"unused",
+            decode_image=lambda data: data,
+            encode_jpeg=lambda frame: b"enc:" + frame,
+            render=render,
+        )
+        self.assertTrue(engine.open_session("a"))
+        self.assertTrue(engine.open_session("b"))
+        engine.submit_source("a", b"faceA")
+        engine.submit_source("b", b"faceB")
+        engine.drain()
+        stored, notice = engine.update_look("a", _look(sharpness=1.5, mouth=20))
+        self.assertIsNone(notice)
+        self.assertEqual(stored["sharpness"], 1.5)
+        stored, notice = engine.update_look("b", _look(opacity=0.25, enhancer="gfpgan", many_faces=True))
+        self.assertIsNone(notice)
+        rejected, problem = engine.update_look("a", {"opacity": True})
+        self.assertIsNone(rejected)
+        self.assertEqual(problem, "bad look")
+        engine.submit_frame("a", b"fa")
+        engine.submit_frame("b", b"fb")
+        engine.drain()
+        self.assertEqual(seen[0], (b"faceA", _look(sharpness=1.5, mouth=20)))
+        self.assertEqual(
+            seen[1],
+            (b"faceB", _look(opacity=0.25, enhancer="gfpgan", many_faces=True)),
+        )
+        self.assertEqual(engine.frame_result("a", 1), ("jpeg", b"enc:rendered:fa"))
+
+    def test_missing_enhancer_keeps_the_previous_choice(self):
+        engine = LiveEngine(
+            get_one_face=lambda image: image,
+            detect_one_face=lambda frame: None,
+            swap_face=lambda source, target, frame: frame,
+            decode_image=lambda data: data,
+            encode_jpeg=lambda frame: frame,
+            enhancer_ready=lambda name: name != "gfpgan",
+        )
+        self.assertTrue(engine.open_session("a"))
+        engine.update_look("a", _look(enhancer="gpen512", sharpness=1))
+        stored, notice = engine.update_look("a", _look(enhancer="gfpgan", sharpness=3))
+        self.assertEqual(notice, "GFPGAN model is not installed")
+        self.assertEqual(stored["enhancer"], "gpen512")
+        self.assertEqual(stored["sharpness"], 3)
+
+    def test_render_none_returns_the_original_jpeg(self):
+        engine = LiveEngine(
+            get_one_face=lambda image: image,
+            detect_one_face=lambda frame: b"unused",
+            swap_face=lambda source, target, frame: b"unused",
+            decode_image=lambda data: data,
+            encode_jpeg=lambda frame: b"enc:" + frame,
+            render=lambda source, frame, look: None,
+        )
+        self.assertTrue(engine.open_session("a"))
+        engine.submit_source("a", b"faceA")
+        engine.drain()
+        seq, _rejected = engine.submit_frame("a", b"nobody")
+        engine.drain()
+        self.assertEqual(engine.frame_result("a", seq), ("jpeg", b"nobody"))
+
+    def test_render_exception_returns_original_jpeg(self):
+        def render(source, frame, look):
+            raise RuntimeError("render blew up")
+
+        engine = LiveEngine(
+            get_one_face=lambda image: image,
+            detect_one_face=lambda frame: b"unused",
+            swap_face=lambda source, target, frame: frame,
+            decode_image=lambda data: data,
+            encode_jpeg=lambda frame: b"enc:" + frame,
+            render=render,
+        )
+        self.assertTrue(engine.open_session("a"))
+        engine.submit_source("a", b"faceA")
+        engine.drain()
+        seq, _rejected = engine.submit_frame("a", b"frame")
+        engine.drain()
+        self.assertEqual(engine.frame_result("a", seq), ("jpeg", b"frame"))
+
+
+def _look(**overrides):
+    payload = {
+        "opacity": 1,
+        "sharpness": 0,
+        "mouth": 0,
+        "many_faces": False,
+        "poisson": False,
+        "enhancer": "none",
+    }
+    payload.update(overrides)
+    return payload
+
 
 if __name__ == "__main__":
     unittest.main()

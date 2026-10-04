@@ -202,7 +202,13 @@ async def _handle_text(websocket: WebSocket, engine: LiveEngine, session_id: str
     except json.JSONDecodeError:
         await websocket.send_json({"type": "error", "message": "unknown message"})
         return
-    if not isinstance(payload, dict) or payload.get("type") != "source":
+    if not isinstance(payload, dict):
+        await websocket.send_json({"type": "error", "message": "unknown message"})
+        return
+    if payload.get("type") == "look":
+        await _handle_look(websocket, engine, session_id, payload)
+        return
+    if payload.get("type") != "source":
         await websocket.send_json({"type": "error", "message": "unknown message"})
         return
     image = payload.get("image")
@@ -223,6 +229,19 @@ async def _handle_text(websocket: WebSocket, engine: LiveEngine, session_id: str
         await websocket.send_json({"type": "ready"})
         return
     await websocket.send_json({"type": "error", "message": message})
+
+
+async def _handle_look(websocket: WebSocket, engine: LiveEngine, session_id: str, payload: dict) -> None:
+    stored, problem = engine.update_look(session_id, payload)
+    if stored is None:
+        await websocket.send_json({"type": "error", "message": problem or "bad look"})
+        return
+    if problem:
+        await websocket.send_json(
+            {"type": "look", "message": problem, "enhancer": stored["enhancer"]}
+        )
+        return
+    await websocket.send_json({"type": "look"})
 
 
 async def _wait_source(engine: LiveEngine, session_id: str) -> str | None:

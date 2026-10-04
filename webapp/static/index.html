@@ -27,26 +27,46 @@
         var(--bg);
       font-family: Fraunces, Georgia, serif;
     }
-    main {
-      display: grid;
-      grid-template-columns: 320px 1fr;
-      gap: 28px;
-      max-width: 1180px;
+    header, #desk {
+      max-width: 1440px;
       margin: 0 auto;
-      padding: 32px 24px 48px;
+      padding: 0 24px;
     }
+    header { padding-top: 28px; }
     h1 { font-weight: 650; font-size: 42px; letter-spacing: -0.04em; margin: 0 0 8px; }
-    p, label, button, .status { font-family: Inconsolata, ui-monospace, monospace; }
-    .lede { color: var(--muted); margin: 0 0 22px; line-height: 1.45; }
+    p, label, button, select, .status, .hint, .slider-head { font-family: Inconsolata, ui-monospace, monospace; }
+    .lede { color: var(--muted); margin: 0 0 18px; line-height: 1.45; max-width: 42rem; }
+    #desk {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 360px;
+      gap: 18px;
+      align-items: start;
+      padding-bottom: 36px;
+    }
+    #desk.controls-hidden { grid-template-columns: minmax(0, 1fr); }
+    #desk.controls-hidden .deck { display: none; }
+    #desk.is-full {
+      max-width: none;
+      width: 100%;
+      height: 100%;
+      padding: 12px;
+      gap: 12px;
+      background: #0c0b0a;
+    }
+    #desk.is-full .stage,
+    #desk.is-full .deck { max-height: none; height: 100%; }
+    #desk.is-full .stage img { height: 100%; max-height: none; }
     .panel {
       background: var(--panel);
       border: 1px solid var(--line);
       border-radius: 18px;
       padding: 18px;
     }
+    .deck { max-height: calc(100vh - 130px); overflow: auto; }
     label { display: block; color: var(--muted); margin-bottom: 8px; }
-    input, button { width: 100%; font: inherit; }
-    input[type="password"], input[type="file"] {
+    input, button, select { font: inherit; }
+    .deck input, .deck button, .deck select { width: 100%; }
+    input[type="password"], input[type="file"], select {
       color: var(--ink);
       background: #100e0c;
       border: 1px solid var(--line);
@@ -65,7 +85,7 @@
     }
     button.secondary { background: transparent; color: var(--ink); border: 1px solid var(--line); margin-top: 8px; }
     button:disabled { opacity: 0.45; cursor: default; }
-    .consent { color: var(--muted); font-size: 14px; line-height: 1.4; margin-top: 18px; }
+    .consent { color: var(--muted); font-size: 14px; line-height: 1.4; margin: 18px 0 0; }
     .status { min-height: 1.2em; margin-top: 12px; color: var(--copper); }
     .status.error { color: var(--danger); }
     .stage { position: relative; min-height: 420px; }
@@ -73,8 +93,16 @@
       width: 100%;
       border-radius: 18px;
       background: #0c0b0a;
-      aspect-ratio: 16 / 9;
-      object-fit: cover;
+      object-fit: contain;
+    }
+    .stage img { height: min(72vh, 820px); }
+    .empty {
+      position: absolute;
+      inset: 64px 24px 24px;
+      display: flex;
+      align-items: flex-end;
+      color: var(--muted);
+      margin: 0;
     }
     video.inset {
       position: absolute;
@@ -83,53 +111,164 @@
       bottom: 16px;
       border: 2px solid var(--copper);
       aspect-ratio: 4 / 3;
+      height: auto;
+    }
+    .stage.mirrored img,
+    .stage.mirrored video { transform: scaleX(-1); }
+    .chrome {
+      position: absolute;
+      z-index: 2;
+      top: 12px;
+      left: 12px;
+      right: 12px;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      pointer-events: none;
+    }
+    .chrome > * { pointer-events: auto; }
+    .chrome-actions { display: flex; gap: 8px; }
+    .chrome button {
+      width: auto;
+      margin: 0;
+      padding: 8px 12px;
+      background: rgba(20, 17, 14, 0.82);
+      color: var(--ink);
+      border: 1px solid var(--line);
     }
     .fps {
-      position: absolute;
-      left: 16px;
-      top: 16px;
       font-family: Inconsolata, monospace;
       background: rgba(20, 17, 14, 0.8);
-      padding: 6px 10px;
+      padding: 8px 12px;
       border-radius: 999px;
     }
-    @media (max-width: 800px) {
-      main { grid-template-columns: 1fr; }
+    .group { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 14px; }
+    .group h2 {
+      font-family: Inconsolata, monospace;
+      font-size: 13px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--copper);
+      margin: 0 0 8px;
+    }
+    .hint { color: var(--muted); font-size: 13px; line-height: 1.35; margin: 0 0 12px; }
+    .slider-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 14px;
+      margin: 10px 0 4px;
+    }
+    .slider-head strong { color: var(--ink); font-weight: 700; }
+    input[type="range"] { width: 100%; accent-color: var(--copper); margin: 0 0 4px; }
+    .check {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--ink);
+      margin: 8px 0;
+    }
+    .check input { width: auto; margin: 0; }
+    @media (max-width: 900px) {
+      #desk { grid-template-columns: 1fr; }
+      .stage { order: -1; }
+      .deck { max-height: none; }
       video.inset { width: 120px; }
+      h1 { font-size: 34px; }
     }
   </style>
 </head>
 <body>
-  <main>
-    <section>
-      <h1>Live desk</h1>
-      <p class="lede">One source face. Your camera. The server swaps, the page shows it.</p>
-      <form id="login" class="panel">
+  <header>
+    <h1>Live desk</h1>
+    <p class="lede">One source face. Your camera. Turn the same knobs as the desktop app, then open the picture full screen.</p>
+  </header>
+  <div id="desk">
+    <section class="stage panel" id="stage">
+      <div class="chrome">
+        <div class="fps" id="fps">0 fps</div>
+        <div class="chrome-actions">
+          <button id="controls" type="button">Hide controls</button>
+          <button id="fullscreen" type="button" aria-pressed="false">Full screen</button>
+        </div>
+      </div>
+      <p class="empty" id="empty">The swapped camera shows up here. Double-click the picture for full screen.</p>
+      <img id="output" alt="Swapped preview" hidden>
+      <video id="local" class="inset" autoplay muted playsinline hidden></video>
+    </section>
+    <aside class="deck panel">
+      <form id="login">
         <label for="password">Shared password</label>
         <input id="password" type="password" autocomplete="current-password" required>
         <button type="submit">Enter</button>
         <div id="loginStatus" class="status"></div>
       </form>
-      <form id="studio" class="panel" hidden>
+      <form id="studio" hidden>
         <label for="face">Source face</label>
         <input id="face" type="file" accept="image/jpeg,image/png">
         <button id="start" type="button">Start</button>
         <button id="stop" class="secondary" type="button" disabled>Stop</button>
         <div id="studioStatus" class="status"></div>
       </form>
+      <div id="tweaks" hidden>
+        <div class="group">
+          <h2>Picture</h2>
+          <p class="hint">Frame size and max FPS change the next camera frame. Smaller and slower is easier on the server.</p>
+          <label class="check" for="mirror"><input id="mirror" type="checkbox"> Mirror preview</label>
+          <label class="check" for="showFps"><input id="showFps" type="checkbox" checked> Show FPS</label>
+          <label for="frameSize">Frame size</label>
+          <select id="frameSize">
+            <option value="320">320 · fast</option>
+            <option value="480">480</option>
+            <option value="640" selected>640 · default</option>
+            <option value="960">960 · sharp</option>
+          </select>
+          <div class="slider-head"><span>JPEG quality</span><strong id="qualityValue">70%</strong></div>
+          <input id="quality" type="range" min="0.5" max="0.95" step="0.05" value="0.7" aria-label="JPEG quality">
+          <label for="fpsCap">Max FPS</label>
+          <select id="fpsCap">
+            <option value="0" selected>Uncapped</option>
+            <option value="30">30</option>
+            <option value="24">24</option>
+            <option value="15">15</option>
+            <option value="12">12</option>
+            <option value="8">8</option>
+          </select>
+        </div>
+        <div class="group">
+          <h2>Swap</h2>
+          <p class="hint">These match the desktop live controls. Move them while the camera is running.</p>
+          <div class="slider-head"><span>Transparency</span><strong id="opacityValue">100%</strong></div>
+          <input id="opacity" type="range" min="0" max="1" step="0.01" value="1" aria-label="Transparency">
+          <p class="hint">0% is the original face. 100% is fully swapped.</p>
+          <div class="slider-head"><span>Sharpness</span><strong id="sharpnessValue">0.0</strong></div>
+          <input id="sharpness" type="range" min="0" max="5" step="0.1" value="0" aria-label="Sharpness">
+          <div class="slider-head"><span>Mouth mask</span><strong id="mouthValue">0</strong></div>
+          <input id="mouth" type="range" min="0" max="100" step="1" value="0" aria-label="Mouth mask">
+          <p class="hint">0 keeps the swapped mouth. 100 reveals the original mouth down to the chin.</p>
+          <label class="check" for="manyFaces"><input id="manyFaces" type="checkbox"> Many faces</label>
+          <label class="check" for="poisson"><input id="poisson" type="checkbox"> Poisson blend</label>
+          <label for="enhancer">Face enhancer</label>
+          <select id="enhancer">
+            <option value="none" selected>None</option>
+            <option value="gfpgan">GFPGAN</option>
+            <option value="gpen512">GPEN-512</option>
+            <option value="gpen256">GPEN-256</option>
+          </select>
+          <button id="reset" class="secondary" type="button">Reset tweaks</button>
+        </div>
+      </div>
       <p class="consent">Use a face only with that person's consent, and label anything you share as a deepfake.</p>
-    </section>
-    <section class="stage panel">
-      <div class="fps" id="fps">0 fps</div>
-      <img id="output" alt="Swapped preview">
-      <video id="local" class="inset" autoplay muted playsinline></video>
-    </section>
-  </main>
+    </aside>
+  </div>
   <canvas id="grab" hidden></canvas>
   <script>
     const basePath = __BASE_PATH_JSON__;
+    const STORAGE_KEY = "dlc-desk-controls";
     const loginForm = document.querySelector("#login");
     const studio = document.querySelector("#studio");
+    const tweaks = document.querySelector("#tweaks");
     const loginStatus = document.querySelector("#loginStatus");
     const studioStatus = document.querySelector("#studioStatus");
     const faceInput = document.querySelector("#face");
@@ -137,9 +276,30 @@
     const stopBtn = document.querySelector("#stop");
     const localVideo = document.querySelector("#local");
     const output = document.querySelector("#output");
+    const empty = document.querySelector("#empty");
     const fpsEl = document.querySelector("#fps");
     const canvas = document.querySelector("#grab");
     const ctx = canvas.getContext("2d");
+    const desk = document.querySelector("#desk");
+    const stage = document.querySelector("#stage");
+    const fullscreenBtn = document.querySelector("#fullscreen");
+    const controlsBtn = document.querySelector("#controls");
+    const mirror = document.querySelector("#mirror");
+    const showFps = document.querySelector("#showFps");
+    const frameSize = document.querySelector("#frameSize");
+    const quality = document.querySelector("#quality");
+    const qualityValue = document.querySelector("#qualityValue");
+    const fpsCap = document.querySelector("#fpsCap");
+    const opacity = document.querySelector("#opacity");
+    const opacityValue = document.querySelector("#opacityValue");
+    const sharpness = document.querySelector("#sharpness");
+    const sharpnessValue = document.querySelector("#sharpnessValue");
+    const mouth = document.querySelector("#mouth");
+    const mouthValue = document.querySelector("#mouthValue");
+    const manyFaces = document.querySelector("#manyFaces");
+    const poisson = document.querySelector("#poisson");
+    const enhancer = document.querySelector("#enhancer");
+    const resetBtn = document.querySelector("#reset");
 
     let socket = null;
     let stream = null;
@@ -148,10 +308,135 @@
     let sourceReady = false;
     let frames = 0;
     let fpsStamp = performance.now();
+    let lastSentAt = 0;
+    let lookTimer = null;
 
     function setStatus(node, text, isError) {
       node.textContent = text;
       node.classList.toggle("error", Boolean(isError));
+    }
+
+    function refreshLabels() {
+      opacityValue.textContent = Math.round(Number(opacity.value) * 100) + "%";
+      sharpnessValue.textContent = Number(sharpness.value).toFixed(1);
+      mouthValue.textContent = String(Math.round(Number(mouth.value)));
+      qualityValue.textContent = Math.round(Number(quality.value) * 100) + "%";
+    }
+
+    function applyMirror() {
+      stage.classList.toggle("mirrored", mirror.checked);
+    }
+
+    function applyShowFps() {
+      fpsEl.hidden = !showFps.checked;
+    }
+
+    function applyControlsVisibility() {
+      const hidden = desk.classList.contains("controls-hidden");
+      controlsBtn.textContent = hidden ? "Controls" : "Hide controls";
+    }
+
+    function currentLook() {
+      return {
+        type: "look",
+        opacity: Number(opacity.value),
+        sharpness: Number(sharpness.value),
+        mouth: Number(mouth.value),
+        many_faces: manyFaces.checked,
+        poisson: poisson.checked,
+        enhancer: enhancer.value,
+      };
+    }
+
+    function persist() {
+      const data = {
+        opacity: opacity.value,
+        sharpness: sharpness.value,
+        mouth: mouth.value,
+        manyFaces: manyFaces.checked,
+        poisson: poisson.checked,
+        enhancer: enhancer.value,
+        mirror: mirror.checked,
+        showFps: showFps.checked,
+        frameSize: frameSize.value,
+        quality: quality.value,
+        fpsCap: fpsCap.value,
+        controlsHidden: desk.classList.contains("controls-hidden"),
+      };
+      try {
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      } catch (error) {
+        return;
+      }
+    }
+
+    function restore() {
+      let data = null;
+      try {
+        data = JSON.parse(sessionStorage.getItem(STORAGE_KEY) || "null");
+      } catch (error) {
+        data = null;
+      }
+      if (!data || typeof data !== "object") return;
+      const inRange = (input, value) => {
+        const number = Number(value);
+        return Number.isFinite(number) && number >= Number(input.min) && number <= Number(input.max);
+      };
+      if (inRange(opacity, data.opacity)) opacity.value = data.opacity;
+      if (inRange(sharpness, data.sharpness)) sharpness.value = data.sharpness;
+      if (inRange(mouth, data.mouth)) mouth.value = data.mouth;
+      if (typeof data.manyFaces === "boolean") manyFaces.checked = data.manyFaces;
+      if (typeof data.poisson === "boolean") poisson.checked = data.poisson;
+      if ([...enhancer.options].some((option) => option.value === data.enhancer)) enhancer.value = data.enhancer;
+      if (typeof data.mirror === "boolean") mirror.checked = data.mirror;
+      if (typeof data.showFps === "boolean") showFps.checked = data.showFps;
+      if ([...frameSize.options].some((option) => option.value === String(data.frameSize))) frameSize.value = String(data.frameSize);
+      if (inRange(quality, data.quality)) quality.value = data.quality;
+      if ([...fpsCap.options].some((option) => option.value === String(data.fpsCap))) fpsCap.value = String(data.fpsCap);
+      desk.classList.toggle("controls-hidden", Boolean(data.controlsHidden));
+    }
+
+    function sendLook() {
+      if (!socket || socket.readyState !== WebSocket.OPEN) return;
+      socket.send(JSON.stringify(currentLook()));
+    }
+
+    function queueLook() {
+      persist();
+      clearTimeout(lookTimer);
+      lookTimer = setTimeout(sendLook, 80);
+    }
+
+    function sendLookNow() {
+      persist();
+      clearTimeout(lookTimer);
+      sendLook();
+    }
+
+    function fullscreenElement() {
+      return document.fullscreenElement || document.webkitFullscreenElement || null;
+    }
+
+    function syncFullscreenButton() {
+      const on = fullscreenElement() === desk;
+      desk.classList.toggle("is-full", on);
+      fullscreenBtn.textContent = on ? "Exit full screen" : "Full screen";
+      fullscreenBtn.setAttribute("aria-pressed", on ? "true" : "false");
+    }
+
+    async function toggleFullscreen() {
+      try {
+        if (fullscreenElement() === desk) {
+          if (document.exitFullscreen) await document.exitFullscreen();
+          else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+          return;
+        }
+        if (desk.requestFullscreen) await desk.requestFullscreen();
+        else if (desk.webkitRequestFullscreen) desk.webkitRequestFullscreen();
+        else setStatus(studioStatus, "Full screen is not available in this browser", true);
+      } catch (error) {
+        setStatus(studioStatus, error.message || "Full screen was blocked", true);
+      }
     }
 
     async function showSession() {
@@ -159,6 +444,7 @@
       const signedIn = response.status === 204;
       loginForm.hidden = signedIn;
       studio.hidden = !signedIn;
+      tweaks.hidden = !signedIn;
     }
 
     loginForm.addEventListener("submit", async (event) => {
@@ -189,6 +475,7 @@
       running = false;
       busy = false;
       sourceReady = false;
+      lastSentAt = 0;
       if (socket) {
         socket.close();
         socket = null;
@@ -198,6 +485,7 @@
         stream = null;
       }
       localVideo.srcObject = null;
+      localVideo.hidden = true;
       startBtn.disabled = false;
       stopBtn.disabled = true;
     }
@@ -218,6 +506,14 @@
         setTimeout(scheduleSendFrame, 50);
         return;
       }
+      const cap = Number(fpsCap.value);
+      if (cap > 0) {
+        const wait = lastSentAt + (1000 / cap) - performance.now();
+        if (wait > 1) {
+          setTimeout(scheduleSendFrame, wait);
+          return;
+        }
+      }
       sendFrame();
     }
 
@@ -228,12 +524,13 @@
         return;
       }
       const longEdge = Math.max(localVideo.videoWidth, localVideo.videoHeight);
-      const scale = 640 / longEdge;
+      const scale = Number(frameSize.value) / longEdge;
       const width = Math.max(1, Math.round(localVideo.videoWidth * scale));
       const height = Math.max(1, Math.round(localVideo.videoHeight * scale));
       canvas.width = width;
       canvas.height = height;
       ctx.drawImage(localVideo, 0, 0, width, height);
+      lastSentAt = performance.now();
       busy = true;
       canvas.toBlob(async (blob) => {
         if (!running || !socket || socket.readyState !== WebSocket.OPEN) {
@@ -246,7 +543,7 @@
           return;
         }
         socket.send(await blob.arrayBuffer());
-      }, "image/jpeg", 0.7);
+      }, "image/jpeg", Number(quality.value));
     }
 
     startBtn.addEventListener("click", async () => {
@@ -260,14 +557,19 @@
         return;
       }
       startBtn.disabled = true;
+      const edge = Number(frameSize.value) || 640;
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: edge }, height: { ideal: Math.round(edge * 3 / 4) } },
+          audio: false,
+        });
       } catch (error) {
         setStatus(studioStatus, error.message || "Camera permission denied", true);
         startBtn.disabled = false;
         return;
       }
       localVideo.srcObject = stream;
+      localVideo.hidden = false;
       localVideo.addEventListener("loadedmetadata", () => {
         if (running) scheduleSendFrame();
       });
@@ -283,11 +585,22 @@
         if (ws !== socket) return;
         const imageB64 = toBase64(bytes);
         ws.send(JSON.stringify({type:"source", image: imageB64}));
+        sendLook();
       });
       ws.addEventListener("message", (event) => {
         if (ws !== socket) return;
         if (typeof event.data === "string") {
           const message = JSON.parse(event.data);
+          if (message.type === "look") {
+            if (message.message) {
+              setStatus(studioStatus, message.message, true);
+              if (typeof message.enhancer === "string") {
+                enhancer.value = message.enhancer;
+                persist();
+              }
+            }
+            return;
+          }
           if (message.type === "ready") {
             sourceReady = true;
             setStatus(studioStatus, "Live", false);
@@ -307,6 +620,8 @@
         if (output.dataset.url) URL.revokeObjectURL(output.dataset.url);
         output.dataset.url = url;
         output.src = url;
+        output.hidden = false;
+        empty.hidden = true;
         noteFrame();
         busy = false;
         scheduleSendFrame();
@@ -323,6 +638,62 @@
       stopLive();
     });
 
+    fullscreenBtn.addEventListener("click", toggleFullscreen);
+    output.addEventListener("dblclick", toggleFullscreen);
+    document.addEventListener("fullscreenchange", syncFullscreenButton);
+    document.addEventListener("webkitfullscreenchange", syncFullscreenButton);
+    controlsBtn.addEventListener("click", () => {
+      desk.classList.toggle("controls-hidden");
+      applyControlsVisibility();
+      persist();
+    });
+
+    for (const el of [opacity, sharpness, mouth]) {
+      el.addEventListener("input", () => {
+        refreshLabels();
+        queueLook();
+      });
+    }
+    quality.addEventListener("input", () => {
+      refreshLabels();
+      persist();
+    });
+    for (const el of [manyFaces, poisson, enhancer]) {
+      el.addEventListener("change", sendLookNow);
+    }
+    mirror.addEventListener("change", () => {
+      applyMirror();
+      persist();
+    });
+    showFps.addEventListener("change", () => {
+      applyShowFps();
+      persist();
+    });
+    frameSize.addEventListener("change", persist);
+    fpsCap.addEventListener("change", persist);
+    resetBtn.addEventListener("click", () => {
+      opacity.value = "1";
+      sharpness.value = "0";
+      mouth.value = "0";
+      manyFaces.checked = false;
+      poisson.checked = false;
+      enhancer.value = "none";
+      mirror.checked = false;
+      showFps.checked = true;
+      frameSize.value = "640";
+      quality.value = "0.7";
+      fpsCap.value = "0";
+      refreshLabels();
+      applyMirror();
+      applyShowFps();
+      sendLookNow();
+    });
+
+    restore();
+    refreshLabels();
+    applyMirror();
+    applyShowFps();
+    applyControlsVisibility();
     showSession();
   </script>
 </body>

@@ -27,6 +27,17 @@ class PageTests(unittest.TestCase):
         self.assertIn("file.size > 8000000", text)
         self.assertLess(text.index("file.size > 8000000"), text.index("new WebSocket("))
 
+    def test_page_has_fullscreen_and_live_controls(self):
+        text = PAGE.read_text(encoding="utf-8")
+        self.assertIn("requestFullscreen", text)
+        self.assertIn("Full screen", text)
+        self.assertIn("Sharpness", text)
+        self.assertIn("Mouth mask", text)
+        self.assertIn("Many faces", text)
+        self.assertIn("Poisson blend", text)
+        self.assertIn("Max FPS", text)
+        self.assertIn('type: "look"', text)
+
     def test_root_serves_the_page_without_a_cookie(self):
         engine = LiveEngine(
             get_one_face=lambda image: None,

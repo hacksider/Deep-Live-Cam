@@ -278,6 +278,27 @@ class ServerTests(unittest.TestCase):
             )
         self.assertEqual(self.engine.session_count(), MAX_SESSIONS)
 
+    def test_look_is_acked_and_a_bad_look_leaves_the_socket_open(self):
+        self.client.post("/login", json={"password": "secret"})
+        with self.client.websocket_connect("/live") as socket:
+            socket.send_json(
+                {
+                    "type": "look",
+                    "opacity": 0.4,
+                    "sharpness": 2,
+                    "mouth": 10,
+                    "many_faces": False,
+                    "poisson": True,
+                    "enhancer": "none",
+                }
+            )
+            self.assertEqual(socket.receive_json(), {"type": "look"})
+            socket.send_json({"type": "look", "opacity": 4})
+            self.assertEqual(socket.receive_json(), {"type": "error", "message": "bad look"})
+            image = base64.b64encode(b"faceA").decode("ascii")
+            socket.send_json({"type": "source", "image": image})
+            self.assertEqual(socket.receive_json(), {"type": "ready"})
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -9,6 +9,7 @@ from modules.face_analyser import detect_one_face_fast, get_one_face
 from modules.processors.frame.face_swapper import pre_start, swap_face
 from webapp.engine import LiveEngine
 from webapp.images import decode_image, encode_jpeg
+from webapp.look import make_production_renderer, model_installed
 from webapp.runtime import (
     BIND_HOST,
     apply_swap_defaults,
@@ -37,6 +38,8 @@ def main() -> None:
         swap_face=swap_face,
         decode_image=decode_image,
         encode_jpeg=encode_jpeg,
+        render=make_production_renderer(),
+        enhancer_ready=model_installed,
     )
     secure_cookie = os.environ.get("WEB_SECURE_COOKIE") != "0"
     app = create_app(
