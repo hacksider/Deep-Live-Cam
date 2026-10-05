@@ -12,7 +12,7 @@ tqdm>=4.66.3
 certifi>=2024.7.4
 onnxruntime==1.28.0; sys_platform == 'darwin' and platform_machine == 'arm64'
 onnxruntime==1.23.0; sys_platform == 'darwin' and platform_machine != 'arm64'
-onnxruntime-gpu==1.26.0; sys_platform != 'darwin'
+onnxruntime-gpu==1.30.0; sys_platform != 'darwin'
 opennsfw2==0.18.0
 keras>=3.0.0
 protobuf>=6.33.5,<8
