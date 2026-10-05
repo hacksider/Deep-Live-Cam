@@ -1,9 +1,7 @@
 import glob
 import mimetypes
 import os
-import platform
 import shutil
-import ssl
 import subprocess
 import urllib
 from pathlib import Path
@@ -11,6 +9,7 @@ from typing import List, Any
 from tqdm import tqdm
 
 import modules.globals
+from modules.model_downloader import _ssl_context
 
 TEMP_FILE = "temp.mp4"
 TEMP_DIRECTORY = "temp"
@@ -293,13 +292,10 @@ def conditional_download(download_directory_path: str, urls: List[str]) -> None:
         )
         if not os.path.exists(download_file_path):
             request = urllib.request.Request(url)
-            
-            # Create a specific SSL context for macOS to avoid globally disabling verification
-            ctx = None
-            if platform.system().lower() == "darwin":
-                ctx = ssl._create_unverified_context()
-                
-            response = urllib.request.urlopen(request, context=ctx)
+
+            # Verified TLS on every platform; never disable verification here —
+            # model files are executed by the ONNX runtime (#1890).
+            response = urllib.request.urlopen(request, context=_ssl_context())
             total = int(response.headers.get("Content-Length", 0))
             with tqdm(
                 total=total,
