@@ -220,6 +220,9 @@ _APP: Optional[QApplication] = None
 _MAIN: Optional["MainWindow"] = None
 _PREVIEW: Optional["PreviewWindow"] = None
 _WEBCAM_PREVIEW: Optional["WebcamPreviewWindow"] = None
+# How long to wait quietly for a live-preview worker to notice the stop flag
+# before saying so. Shutdown then keeps waiting: it has to finish.
+WORKER_SHUTDOWN_GRACE_MS = 30000
 _MAPPER: Optional["MapperDialog"] = None
 _LIVE_MAPPER: Optional["LiveMapperDialog"] = None
 _LANG: Optional[LanguageManager] = None
@@ -887,16 +890,35 @@ class MainWindow(QMainWindow):
             _PREVIEW.hide()
         try:
             response = requests.get(
-                "https://thispersondoesnotexist.com/",
+                "https://thispersondoesnotexist.com/random-person.jpeg",
                 headers={"User-Agent": "Mozilla/5.0"},
                 timeout=10,
             )
             response.raise_for_status()
+            content_type = response.headers.get("content-type", "")
+            if not content_type.startswith("image/"):
+                raise ValueError(f"expected an image, got {content_type!r}")
             temp_path = os.path.join(tempfile.gettempdir(), "deep_live_cam_random_face.jpg")
-            with open(temp_path, "wb") as f:
-                f.write(response.content)
+            staging_path = f"{temp_path}.part"
+            # Download into a staging file and validate there. Writing straight
+            # to temp_path would destroy the image currently in use whenever a
+            # later fetch comes back bad, and content-type alone does not prove
+            # the bytes decode.
+            try:
+                with open(staging_path, "wb") as f:
+                    f.write(response.content)
+                pixmap = render_image_preview(staging_path, (200, 200))
+                if imread_unicode(staging_path) is None:
+                    raise ValueError("downloaded image could not be decoded")
+                os.replace(staging_path, temp_path)
+            except Exception:
+                try:
+                    os.remove(staging_path)
+                except OSError:
+                    pass
+                raise
             modules.globals.source_path = temp_path
-            self.source_label.setPixmap(render_image_preview(temp_path, (200, 200)))
+            self.source_label.setPixmap(pixmap)
             self.source_label.setText("")
         except Exception as exc:
             print(f"Failed to fetch random face: {exc}")
@@ -1092,11 +1114,15 @@ class PreviewWindow(QWidget):
         temp_frame = get_video_frame(modules.globals.target_path, frame_number)
         if modules.globals.nsfw_filter and check_and_ignore_nsfw(temp_frame):
             return
+        source_frame = imread_unicode(modules.globals.source_path)
+        if source_frame is None:
+            update_status(
+                f"Could not read source image: {modules.globals.source_path}"
+            )
+            return
         from modules.processors.frame.core import get_frame_processors_modules as _gfpm
         for fp in _gfpm(modules.globals.frame_processors):
-            temp_frame = fp.process_frame(
-                get_one_face(imread_unicode(modules.globals.source_path)), temp_frame
-            )
+            temp_frame = fp.process_frame(get_one_face(source_frame), temp_frame)
         # Fit to current widget size while preserving aspect ratio.
         h, w = temp_frame.shape[:2]
         bound_w = min(PREVIEW_MAX_WIDTH, max(self.width(), PREVIEW_DEFAULT_WIDTH))
@@ -1153,6 +1179,7 @@ class _ProcessingWorker(QThread):
         frame_processors = get_frame_processors_modules(modules.globals.frame_processors)
         source_image = None
         last_source_path = None
+        reported_source_error = None
         prev_time = time.time()
         fps_update_interval = 0.5
         frame_count = 0
@@ -1177,8 +1204,27 @@ class _ProcessingWorker(QThread):
                     modules.globals.source_path
                     and modules.globals.source_path != last_source_path
                 ):
-                    last_source_path = modules.globals.source_path
-                    source_image = get_one_face(imread_unicode(modules.globals.source_path))
+                    source_frame = imread_unicode(modules.globals.source_path)
+                    if source_frame is None:
+                        # Clear the cached path along with the image. It keeps
+                        # a source that is only transiently unreadable (still
+                        # being written, on a volume that just went away) from
+                        # being given up on, and it keeps a bad pick from
+                        # sticking: with the path cached, A -> unreadable B -> A
+                        # never reloaded A, so swapping stayed off. Retrying
+                        # every frame is cheap; the message is reported once per
+                        # path so it cannot flood the status line.
+                        source_image = None
+                        last_source_path = None
+                        if reported_source_error != modules.globals.source_path:
+                            reported_source_error = modules.globals.source_path
+                            update_status(
+                                f"Could not read source image: {modules.globals.source_path}"
+                            )
+                    else:
+                        last_source_path = modules.globals.source_path
+                        reported_source_error = None
+                        source_image = get_one_face(source_frame)
 
                 det_count += 1
                 if det_count % det_interval == 0:
@@ -1333,20 +1379,41 @@ class WebcamPreviewWindow(QWidget):
         self._image_label.setPixmap(_bgr_to_qpixmap(bgr_frame))
 
     def closeEvent(self, event) -> None:
-        self._stop_event.set()
-        try:
-            self._timer.stop()
-        except Exception:
-            pass
-        for worker in (self._capture_worker, self._processing_worker):
+        # __init__ can bail out before these exist (e.g. the camera fails to open),
+        # and closeEvent still runs.
+        stop_event = getattr(self, "_stop_event", None)
+        if stop_event is not None:
+            stop_event.set()
+        timer = getattr(self, "_timer", None)
+        if timer is not None:
             try:
-                worker.wait(2000)
+                timer.stop()
             except Exception:
                 pass
-        try:
-            self._cap.release()
-        except Exception:
-            pass
+        # Shutdown has to actually complete. Qt aborts the process when a
+        # running QThread is destroyed, and holding a straggler in a module
+        # global only moves that abort to interpreter exit. Both loops re-check
+        # the stop flag between bounded operations (a camera read, a 50ms queue
+        # get, one inference), so waiting terminates; a first-time model load
+        # is simply slow, which is what the grace period absorbs quietly.
+        for name in ("_capture_worker", "_processing_worker"):
+            worker = getattr(self, name, None)
+            if worker is None:
+                continue
+            if not worker.wait(WORKER_SHUTDOWN_GRACE_MS):
+                print(
+                    f"[webcam] still waiting for {name[1:]} to stop...",
+                    flush=True,
+                )
+                worker.wait()
+        # Only now: releasing the capture while the capture thread could still
+        # be inside cap.read() is not safe.
+        cap = getattr(self, "_cap", None)
+        if cap is not None:
+            try:
+                cap.release()
+            except Exception:
+                pass
         global _WEBCAM_PREVIEW
         if _WEBCAM_PREVIEW is self:
             _WEBCAM_PREVIEW = None
@@ -1611,6 +1678,17 @@ def close_mapper_window() -> None:
 # ─── entry point ─────────────────────────────────────────────────────────
 
 
+def _close_live_windows() -> None:
+    """Close every window that owns worker threads, so the threads stop."""
+    for win in (_WEBCAM_PREVIEW, _LIVE_MAPPER):
+        if win is None:
+            continue
+        try:
+            win.close()
+        except Exception:
+            pass
+
+
 class _Window:
     """Thin wrapper exposing .mainloop() for core.py compatibility."""
 
@@ -1636,7 +1714,14 @@ def init(
     _APP.setStyleSheet(QSS)
 
     _BRIDGE = _UIBridge()
-    _MAIN = MainWindow(start, destroy)
+    def _destroy_with_cleanup(*args, **kwargs):
+        # core.destroy() ends in a bare quit(), which raises SystemExit and tears
+        # the interpreter down without unwinding Qt. Destroying a running QThread
+        # is fatal in Qt, so stop the live-preview workers before that happens.
+        _close_live_windows()
+        return destroy(*args, **kwargs)
+
+    _MAIN = MainWindow(start, _destroy_with_cleanup)
     _PREVIEW = PreviewWindow()
 
     # Route status updates onto the UI thread regardless of caller.
