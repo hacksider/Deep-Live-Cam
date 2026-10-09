@@ -65,6 +65,36 @@ def _create_elliptical_mask(size: Tuple[int, int]) -> np.ndarray:
     return mask
 
 
+def _match_face_color(bgr_fake: np.ndarray, aimg: np.ndarray, mask: Optional[np.ndarray] = None) -> np.ndarray:
+    """Match bgr_fake's LAB color statistics to the target's aligned crop.
+
+    inswapper bakes in the source's skin tone/lighting, which is often the
+    single biggest "looks fake" cue when it doesn't match the target scene.
+    Stats are restricted to `mask` (the face ellipse) so hair/background
+    pixels near the aligned crop's corners don't skew the target statistics
+    away from actual skin tone.
+    """
+    try:
+        fake_f = bgr_fake.astype(np.float32) / 255.0
+        tgt_f = aimg.astype(np.float32) / 255.0
+        fake_lab = cv2.cvtColor(fake_f, cv2.COLOR_BGR2LAB)
+        tgt_lab = cv2.cvtColor(tgt_f, cv2.COLOR_BGR2LAB)
+
+        fake_mean, fake_std = cv2.meanStdDev(fake_lab, mask=mask)
+        tgt_mean, tgt_std = cv2.meanStdDev(tgt_lab, mask=mask)
+        fake_mean = fake_mean.reshape((1, 1, 3))
+        fake_std = np.maximum(fake_std.reshape((1, 1, 3)), 1e-6)
+        tgt_mean = tgt_mean.reshape((1, 1, 3))
+        tgt_std = tgt_std.reshape((1, 1, 3))
+
+        result_lab = (fake_lab - fake_mean) * (tgt_std / fake_std) + tgt_mean
+        result_bgr = cv2.cvtColor(result_lab.astype(np.float32), cv2.COLOR_LAB2BGR)
+        result_bgr = np.clip(result_bgr, 0.0, 1.0)
+        return (result_bgr * 255.0).astype(np.uint8)
+    except Exception:
+        return bgr_fake
+
+
 def _apply_poisson_blend(swapped_frame: Frame, original_frame: Frame,
                          target_face: Face, affine_matrix: np.ndarray = None,
                          bgr_fake: np.ndarray = None) -> Frame:
@@ -563,6 +593,18 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
         if not isinstance(bgr_fake, np.ndarray):
             return original_frame
 
+        # Match the swapped face's skin tone/lighting to the target scene.
+        # Cheap (single 128x128 warp + masked LAB stats) so it's safe to run
+        # even in live mode.
+        if getattr(modules.globals, "color_match", False):
+            try:
+                fh, fw = bgr_fake.shape[:2]
+                aimg = cv2.warpAffine(temp_frame, M, (fw, fh), borderMode=cv2.BORDER_REPLICATE)
+                stat_mask = np.where(_create_elliptical_mask((fh, fw)) > 0.5, np.uint8(255), np.uint8(0))
+                bgr_fake = _match_face_color(bgr_fake, aimg, stat_mask)
+            except Exception:
+                pass
+
         # Pass a dummy aimg with correct shape — _fast_paste_back only uses aimg.shape
         # to create the white mask. Avoids redundant norm_crop2 (~0.6ms).
         _face_size = face_swapper.input_size[0]
@@ -661,9 +703,11 @@ def apply_post_processing(current_frame: Frame, swapped_face_bboxes: List[np.nda
 
     sharpness_value = getattr(modules.globals, "sharpness", 0.0)
     enable_interpolation = getattr(modules.globals, "enable_interpolation", False)
+    interpolation_weight = getattr(modules.globals, "interpolation_weight", 0.0)
+    interpolation_active = enable_interpolation and 0 < interpolation_weight < 1
 
     # Skip copy when no post-processing is active
-    if sharpness_value <= 0.0 and not enable_interpolation:
+    if sharpness_value <= 0.0 and not interpolation_active:
         PREVIOUS_FRAME_RESULT = None
         return current_frame
 
@@ -705,12 +749,9 @@ def apply_post_processing(current_frame: Frame, swapped_face_bboxes: List[np.nda
 
 
     # 2. Apply Interpolation (if enabled)
-    enable_interpolation = getattr(modules.globals, "enable_interpolation", False)
-    interpolation_weight = getattr(modules.globals, "interpolation_weight", 0.2)
-
     final_frame = processed_frame # Start with the current (potentially sharpened) frame
 
-    if enable_interpolation and 0 < interpolation_weight < 1:
+    if interpolation_active:
         if PREVIOUS_FRAME_RESULT is not None and PREVIOUS_FRAME_RESULT.shape == processed_frame.shape and PREVIOUS_FRAME_RESULT.dtype == processed_frame.dtype:
             # Perform interpolation
             try:
