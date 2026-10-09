@@ -157,7 +157,9 @@ cd Deep-Live-Cam
 **3. Download the Models**
 
 1. [gfpgan-1024.onnx](https://huggingface.co/hacksider/deep-live-cam/resolve/main/gfpgan-1024.onnx)
-2. [inswapper\_128\_fp16.onnx](https://huggingface.co/hacksider/deep-live-cam/resolve/main/inswapper_128_fp16.onnx)
+2. [inswapper\_128.onnx](https://huggingface.co/hacksider/deep-live-cam/resolve/main/inswapper_128.onnx)
+
+The application also accepts `inswapper_128_fp16.onnx` when an FP16-capable GPU is available.
 
 Place these files in the "**models**" folder.
 
