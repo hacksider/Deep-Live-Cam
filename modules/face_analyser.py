@@ -48,14 +48,28 @@ def get_face_analyser() -> Any:
                 from modules.processors.frame._onnx_enhancer import (
                     build_provider_config,
                 )
-                from modules.model_downloader import ensure_insightface_pack
+                from modules.model_downloader import (
+                    INSIGHTFACE_MODEL_FILES,
+                    INSIGHTFACE_ROOT,
+                    ensure_insightface_pack,
+                )
 
-                ensure_insightface_pack('buffalo_l')
-                providers = build_provider_config()
+                if not ensure_insightface_pack("buffalo_l"):
+                    raise RuntimeError(
+                        "Could not prepare local InsightFace models for buffalo_l. "
+                        "Check the download error or place the required ONNX "
+                        "models in models/buffalo_l."
+                    )
+                model_paths = [
+                    os.path.join(INSIGHTFACE_ROOT, "models", "buffalo_l", filename)
+                    for filename in INSIGHTFACE_MODEL_FILES.values()
+                ]
+                providers = build_provider_config(model_paths=model_paths)
                 analyser = insightface.app.FaceAnalysis(
-                    name='buffalo_l',
+                    name="buffalo_l",
+                    root=INSIGHTFACE_ROOT,
                     providers=providers,
-                    allowed_modules=['detection', 'recognition', 'landmark_2d_106']
+                    allowed_modules=list(INSIGHTFACE_MODEL_FILES),
                 )
                 det_size = _current_det_size()
                 analyser.prepare(ctx_id=0, det_size=det_size)
@@ -77,11 +91,12 @@ def _optimize_det_model(fa: Any, providers, det_size: tuple) -> None:
     RetinaFace FPN upsampling path.  21ms → 4ms on M3 Max.
     """
     from modules.onnx_optimize import optimize_for_coreml, IS_APPLE_SILICON
+
     if not IS_APPLE_SILICON:
         return
 
     det_model = fa.det_model
-    model_path = getattr(det_model, 'model_file', None)
+    model_path = getattr(det_model, "model_file", None)
     if model_path is None or not os.path.exists(model_path):
         return
 
@@ -92,6 +107,7 @@ def _optimize_det_model(fa: Any, providers, det_size: tuple) -> None:
         return
 
     import onnxruntime
+
     session_options = onnxruntime.SessionOptions()
     session_options.graph_optimization_level = (
         onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
@@ -105,15 +121,21 @@ def _optimize_det_model(fa: Any, providers, det_size: tuple) -> None:
     for p in providers:
         name = p[0] if isinstance(p, tuple) else p
         if name == "CoreMLExecutionProvider":
-            det_providers.append((
-                "CoreMLExecutionProvider",
-                {"ModelFormat": "MLProgram", "MLComputeUnits": "CPUAndGPU"},
-            ))
+            from modules.processors.frame._onnx_enhancer import configure_coreml_cache
+
+            options = (
+                dict(p[1]) if isinstance(p, tuple) else {"ModelFormat": "MLProgram"}
+            )
+            options["MLComputeUnits"] = "CPUAndGPU"
+            options = configure_coreml_cache(options, [optimized_path])
+            det_providers.append(("CoreMLExecutionProvider", options))
         else:
             det_providers.append(p)
 
     det_model.session = onnxruntime.InferenceSession(
-        optimized_path, sess_options=session_options, providers=det_providers,
+        optimized_path,
+        sess_options=session_options,
+        providers=det_providers,
     )
 
 

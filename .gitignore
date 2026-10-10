@@ -12,6 +12,7 @@ tf_env/
 *.mkv
 
 .tmp/
+/.cache/
 temp/
 .venv/
 venv/
