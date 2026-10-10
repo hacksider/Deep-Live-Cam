@@ -1053,10 +1053,21 @@ class MainWindow(QMainWindow):
             if modules.globals.source_path is None:
                 update_status("Please select a source image first")
                 return
-            from modules.face_analyser import get_face_analyser
-            from modules.processors.frame.face_swapper import get_face_swapper
-            get_face_analyser()
-            get_face_swapper()
+            # Model loading posts status updates, which pump the event loop.
+            # A second Live click processed there would re-enter
+            # get_face_swapper() on this thread and deadlock on its lock.
+            if getattr(self, "_live_starting", False):
+                return
+            self._live_starting = True
+            self.btn_live.setEnabled(False)
+            try:
+                from modules.face_analyser import get_face_analyser
+                from modules.processors.frame.face_swapper import get_face_swapper
+                get_face_analyser()
+                get_face_swapper()
+            finally:
+                self._live_starting = False
+                self.btn_live.setEnabled(True)
             _open_webcam_preview(camera_index)
         else:
             modules.globals.source_target_map = []
