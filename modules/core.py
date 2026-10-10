@@ -5,12 +5,12 @@ if any(arg.startswith('--execution-provider') for arg in sys.argv):
     os.environ['OMP_NUM_THREADS'] = '6'
 # reduce tensorflow log level
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-import warnings
 from typing import List
 import platform
 import signal
 import shutil
 import argparse
+import tempfile
 try:
     import torch
     HAS_TORCH = True
@@ -27,14 +27,11 @@ import modules.globals
 import modules.metadata
 import modules.ui as ui
 from modules.processors.frame.core import get_frame_processors_modules, process_video_in_memory
-from modules.utilities import has_image_extension, is_image, is_video, detect_fps, create_video, extract_frames, get_temp_frame_paths, restore_audio, create_temp, move_temp, clean_temp, normalize_output_path
+from modules.utilities import has_image_extension, is_video, detect_fps, create_video, extract_frames, get_temp_frame_paths, restore_audio, create_temp, move_temp, clean_temp, normalize_output_path
 
 if HAS_TORCH and 'ROCMExecutionProvider' in modules.globals.execution_providers:
     del torch
 
-warnings.filterwarnings('ignore', category=FutureWarning, module='insightface')
-if HAS_TORCH:
-    warnings.filterwarnings('ignore', category=UserWarning, module='torchvision')
 
 
 def parse_args() -> None:
@@ -214,7 +211,37 @@ def update_status(message: str, scope: str = 'DLC.CORE') -> None:
     if not modules.globals.headless:
         ui.update_status(message)
 
-def start() -> None:
+def _process_image() -> bool:
+    """Publish an image only after every processor confirms a successful write."""
+    output_path = os.path.abspath(modules.globals.output_path)
+    suffix = os.path.splitext(output_path)[1] or '.png'
+    staging_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            dir=os.path.dirname(output_path), suffix=suffix, delete=False
+        ) as staging:
+            staging_path = staging.name
+        shutil.copy2(modules.globals.target_path, staging_path)
+        for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
+            update_status('Progressing...', frame_processor.NAME)
+            if not frame_processor.process_image(
+                modules.globals.source_path, staging_path, staging_path
+            ):
+                return False
+            release_resources()
+        if not os.path.isfile(staging_path) or os.path.getsize(staging_path) == 0:
+            return False
+        os.replace(staging_path, output_path)
+        return True
+    except OSError as error:
+        update_status(f'Unable to write output image: {error}')
+        return False
+    finally:
+        if staging_path and os.path.exists(staging_path):
+            os.unlink(staging_path)
+
+
+def start() -> bool:
     """Start processing with performance monitoring."""
     import time
     
@@ -222,31 +249,24 @@ def start() -> None:
     
     for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
         if not frame_processor.pre_start():
-            return
+            return False
     update_status('Processing...')
     
     # process image to image
     if has_image_extension(modules.globals.target_path):
         if modules.globals.nsfw_filter and ui.check_and_ignore_nsfw(modules.globals.target_path, destroy):
-            return
-        try:
-            shutil.copy2(modules.globals.target_path, modules.globals.output_path)
-        except Exception as e:
-            print("Error copying file:", str(e))
-        for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
-            update_status('Progressing...', frame_processor.NAME)
-            frame_processor.process_image(modules.globals.source_path, modules.globals.output_path, modules.globals.output_path)
-            release_resources()
-        if is_image(modules.globals.target_path):
+            return False
+        succeeded = _process_image()
+        if succeeded:
             elapsed = time.time() - start_time
             update_status(f'Processing to image succeed! (Time: {elapsed:.2f}s)')
         else:
             update_status('Processing to image failed!')
-        return
+        return succeeded
     
     # process image to videos
     if modules.globals.nsfw_filter and ui.check_and_ignore_nsfw(modules.globals.target_path, destroy):
-        return
+        return False
 
     # Detect FPS early (needed by both pipelines)
     if modules.globals.keep_fps:
@@ -310,7 +330,7 @@ def start() -> None:
     if not video_created:
         update_status('Video encoding failed. No temporary output video was created.')
         clean_temp(modules.globals.target_path)
-        return
+        return False
     
     # handle audio
     if modules.globals.keep_audio:
@@ -328,8 +348,10 @@ def start() -> None:
     total_time = time.time() - start_time
     if is_video(modules.globals.target_path) and modules.globals.output_path and os.path.isfile(modules.globals.output_path):
         update_status(f'Video processing succeeded! Total time: {total_time:.2f}s')
+        return True
     else:
         update_status('Processing to video failed!')
+        return False
 
 
 def destroy(to_quit=True) -> None:
@@ -342,16 +364,17 @@ def destroy(to_quit=True) -> None:
 def run() -> None:
     parse_args()
     if not pre_check():
-        return
+        raise SystemExit(1)
     for frame_processor in get_frame_processors_modules(modules.globals.frame_processors):
         if not frame_processor.pre_check():
-            return
+            raise SystemExit(1)
     # Pre-load face analyser in main thread before GUI starts
     #from modules.face_analyser import get_face_analyser
     #get_face_analyser()
     limit_resources()
     if modules.globals.headless:
-        start()
+        if not start():
+            raise SystemExit(1)
     else:
         window = ui.init(start, destroy, modules.globals.lang)
         window.mainloop()
