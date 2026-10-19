@@ -278,5 +278,72 @@ class RandomFaceDownloadTest(unittest.TestCase):
             self.assertEqual(handle.read(), fresh)
 
 
+class AsyncSwapWorkerTest(unittest.TestCase):
+    """With async swap on, the worker swaps through AsyncLiveSwapper, keeps
+    its result over a short detector miss but drops it once the face is gone,
+    and stops it when the preview ends."""
+
+    def test_worker_drives_the_async_swapper(self):
+        calls = []
+
+        class _Async:
+            def __init__(self):
+                calls.append("init")
+
+            def swap(self, _source, _target, frame):
+                calls.append("swap")
+                return frame
+
+            def clear(self):
+                calls.append("clear")
+
+            def close(self):
+                calls.append("close")
+
+        class _Swapper:
+            NAME = "DLC.FACE-SWAPPER"
+            AsyncLiveSwapper = _Async
+
+            @staticmethod
+            def swap_face(_source, _target, frame):
+                calls.append("sync")
+                return frame
+
+            @staticmethod
+            def apply_post_processing(frame, _bboxes):
+                return frame
+
+        face = object()
+        # A one-frame miss, then a miss longer than the 0.5 s grace period.
+        detections = iter([face, None, face] + [None] * 6 + [face])
+        capture_q = queue.Queue(maxsize=2)
+        processed_q = queue.Queue(maxsize=2)
+        stop = threading.Event()
+        modules.globals.map_faces = False
+        modules.globals.many_faces = False
+        modules.globals.mouth_mask = False
+        modules.globals.source_path = "A"
+        modules.globals.live_async_swap = True
+        self.addCleanup(setattr, modules.globals, "live_async_swap", False)
+
+        with patch.object(ui, "imread_unicode", lambda *_a, **_kw: _frame()), \
+             patch.object(ui, "get_one_face", lambda *_: object()), \
+             patch.object(ui, "get_frame_processors_modules", lambda *_: [_Swapper]), \
+             patch.object(ui, "detect_one_face_fast", lambda *_: next(detections)), \
+             patch.object(ui, "update_status", lambda *_: None):
+            # At 10 fps the detector runs on every frame.
+            worker = ui._ProcessingWorker(capture_q, processed_q, stop, 10.0)
+            worker.start()
+            try:
+                for _ in range(10):
+                    capture_q.put(_frame(), timeout=5)
+                    processed_q.get(timeout=5)
+            finally:
+                stop.set()
+                worker.wait(5000)
+
+        self.assertEqual(calls, ["init", "swap", "swap", "clear", "swap", "close"])
+
+
 if __name__ == "__main__":
     unittest.main()
