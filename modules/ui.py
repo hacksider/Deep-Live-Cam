@@ -223,6 +223,10 @@ _WEBCAM_PREVIEW: Optional["WebcamPreviewWindow"] = None
 # How long to wait quietly for a live-preview worker to notice the stop flag
 # before saying so. Shutdown then keeps waiting: it has to finish.
 WORKER_SHUTDOWN_GRACE_MS = 30000
+# How long the face may go undetected before the live preview drops the last
+# async swap result. A short detector miss keeps it, so the swap resumes at
+# once instead of showing the real face for a whole inference.
+ASYNC_SWAP_FACE_LOSS_GRACE_S = 0.5
 _MAPPER: Optional["MapperDialog"] = None
 _LIVE_MAPPER: Optional["LiveMapperDialog"] = None
 _LANG: Optional[LanguageManager] = None
@@ -812,7 +816,8 @@ class MainWindow(QMainWindow):
             _("Run the swap model in the background so the live preview keeps "
               "the camera's frame rate when the model is slow (CPU, Apple "
               "Silicon, older GPUs). The face follows head movement on every "
-              "frame, but expressions update only as fast as the model runs."),
+              "frame, but expressions update only as fast as the model runs. "
+              "Single-face mode only: not used with Many faces or Map faces."),
         )
         self.sw_async_swap.toggled.connect(
             lambda v: (
@@ -1196,11 +1201,7 @@ class _ProcessingWorker(QThread):
     def run(self) -> None:
         frame_processors = get_frame_processors_modules(modules.globals.frame_processors)
         async_swapper = None
-        # The face may go undetected for half a second before the last async
-        # result is dropped. A short detector miss keeps it, so the swap
-        # resumes at once instead of showing the real face for an inference.
-        async_grace_frames = max(1, round(self._fps * 0.5))
-        frames_without_face = 0
+        face_lost_at = None
         source_image = None
         last_source_path = None
         reported_source_error = None
@@ -1318,17 +1319,23 @@ class _ProcessingWorker(QThread):
 
                 # Once the face has been gone for a while, or async swap is
                 # switched off, the last async result is stale.
-                if cached_target_face is None:
-                    frames_without_face += 1
-                else:
-                    frames_without_face = 0
+                if cached_target_face is not None:
+                    face_lost_at = None
+                elif face_lost_at is None:
+                    face_lost_at = time.monotonic()
                 if async_swapper is not None and (
-                    frames_without_face > async_grace_frames
-                    or not modules.globals.live_async_swap
+                    not modules.globals.live_async_swap
+                    or (
+                        face_lost_at is not None
+                        and time.monotonic() - face_lost_at > ASYNC_SWAP_FACE_LOSS_GRACE_S
+                    )
                 ):
                     async_swapper.clear()
             else:
                 modules.globals.target_path = None
+                if async_swapper is not None:
+                    # Not used by map-faces; don't resume from a stale result.
+                    async_swapper.clear()
                 for fp in frame_processors:
                     if fp.NAME == "DLC.FACE-ENHANCER":
                         if modules.globals.fp_ui["face_enhancer"]:

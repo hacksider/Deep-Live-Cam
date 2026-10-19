@@ -4,6 +4,7 @@ Runs the real widgets and worker threads under Qt's offscreen platform. No
 model is ever loaded: face detection and the frame-processor list are stubbed,
 so the tests exercise control flow only and stay fast.
 """
+import itertools
 import os
 import queue
 import sys
@@ -280,8 +281,8 @@ class RandomFaceDownloadTest(unittest.TestCase):
 
 class AsyncSwapWorkerTest(unittest.TestCase):
     """With async swap on, the worker swaps through AsyncLiveSwapper, keeps
-    its result over a short detector miss but drops it once the face is gone,
-    and stops it when the preview ends."""
+    its result over a short detector miss but drops it once the face is gone
+    or map-faces takes over, and stops it when the preview ends."""
 
     def test_worker_drives_the_async_swapper(self):
         calls = []
@@ -313,9 +314,13 @@ class AsyncSwapWorkerTest(unittest.TestCase):
             def apply_post_processing(frame, _bboxes):
                 return frame
 
+            @staticmethod
+            def process_frame_v2(frame):
+                return frame
+
         face = object()
-        # A one-frame miss, then a miss longer than the 0.5 s grace period.
-        detections = iter([face, None, face] + [None] * 6 + [face])
+        # A one-frame miss, then a miss longer than the grace period.
+        detections = iter([face, None, face] + [None] * 4 + [face])
         capture_q = queue.Queue(maxsize=2)
         processed_q = queue.Queue(maxsize=2)
         stop = threading.Event()
@@ -325,24 +330,39 @@ class AsyncSwapWorkerTest(unittest.TestCase):
         modules.globals.source_path = "A"
         modules.globals.live_async_swap = True
         self.addCleanup(setattr, modules.globals, "live_async_swap", False)
+        self.addCleanup(setattr, modules.globals, "map_faces", False)
+
+        def feed(after=0.0):
+            capture_q.put(_frame(), timeout=5)
+            processed_q.get(timeout=5)
+            time.sleep(after)
 
         with patch.object(ui, "imread_unicode", lambda *_a, **_kw: _frame()), \
              patch.object(ui, "get_one_face", lambda *_: object()), \
              patch.object(ui, "get_frame_processors_modules", lambda *_: [_Swapper]), \
              patch.object(ui, "detect_one_face_fast", lambda *_: next(detections)), \
-             patch.object(ui, "update_status", lambda *_: None):
+             patch.object(ui, "update_status", lambda *_: None), \
+             patch.object(ui, "ASYNC_SWAP_FACE_LOSS_GRACE_S", 0.2):
             # At 10 fps the detector runs on every frame.
             worker = ui._ProcessingWorker(capture_q, processed_q, stop, 10.0)
             worker.start()
             try:
-                for _ in range(10):
-                    capture_q.put(_frame(), timeout=5)
-                    processed_q.get(timeout=5)
+                for _ in range(3):  # face, short miss, face
+                    feed()
+                for _ in range(4):  # a 0.3 s miss
+                    feed(after=0.1)
+                feed()  # face
+                modules.globals.map_faces = True
+                feed()
             finally:
                 stop.set()
                 worker.wait(5000)
 
-        self.assertEqual(calls, ["init", "swap", "swap", "clear", "swap", "close"])
+        # clear() repeats while its condition holds; collapse the repeats.
+        steps = [step for step, _ in itertools.groupby(calls)]
+        self.assertEqual(steps, ["init", "swap", "clear", "swap", "clear", "close"])
+        # The short miss sat between the first two swaps without a clear.
+        self.assertEqual(calls[:3], ["init", "swap", "swap"])
 
 
 if __name__ == "__main__":

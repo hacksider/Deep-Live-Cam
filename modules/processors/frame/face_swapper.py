@@ -645,8 +645,14 @@ class AsyncLiveSwapper:
     preview keeps the camera's frame rate and the face follows the head on
     every frame, while the face itself (expression, mouth, eyes) refreshes
     only as fast as the model runs, one inference behind. Meant for hardware
-    where the model is the bottleneck: CPU, Apple Silicon, older GPUs.
+    where the model is the bottleneck: CPU, Apple Silicon, older GPUs. The
+    live preview uses it for its single-face path only.
     """
+
+    # Eye-center movement since the previous frame, in inter-ocular distances,
+    # beyond which the target is taken to be a different face (the detector
+    # switched people); the result made for the previous face is not pasted.
+    MAX_TARGET_JUMP = 2.0
 
     def __init__(self) -> None:
         self._jobs: queue.Queue = queue.Queue(maxsize=1)
@@ -654,6 +660,8 @@ class AsyncLiveSwapper:
         # Bumped by clear(); a result from an older generation is dropped.
         self._generation = 0
         self._result: Optional[Tuple[Face, np.ndarray]] = None
+        # Eye center and inter-ocular distance of the previous target.
+        self._last_eyes: Optional[Tuple[np.ndarray, float]] = None
         self._thread = threading.Thread(
             target=self._run, name="DLC.ASYNC-SWAP", daemon=True
         )
@@ -664,19 +672,22 @@ class AsyncLiveSwapper:
 
         Returns ``temp_frame`` unchanged until a first result is ready.
         """
-        face_swapper = get_face_swapper()
+        # The model thread loads the model; until it has, frames pass through
+        # rather than this call waiting for it.
+        face_swapper = FACE_SWAPPER
         if face_swapper is None or source_face is None or target_face is None:
             return temp_frame
         if getattr(source_face, "normed_embedding", None) is None:
             return temp_frame
         try:
-            aimg, M = face_align.norm_crop2(
-                temp_frame, target_face.kps, face_swapper.input_size[0]
-            )
+            kps = np.asarray(target_face.kps, dtype=np.float32)
+            aimg, M = face_align.norm_crop2(temp_frame, kps, face_swapper.input_size[0])
         except Exception as e:
             print(f"Error during face swap: {e}")
             return temp_frame
 
+        if self._is_new_target(kps):
+            self.clear()
         with self._lock:
             job = (self._generation, face_swapper, source_face, aimg)
             result = self._result
@@ -688,30 +699,54 @@ class AsyncLiveSwapper:
         return paste_swapped_face(temp_frame, result[1], M, target_face)
 
     def clear(self) -> None:
-        """Forget the current result, e.g. because the face was lost."""
+        """Forget the current result and any waiting crop, e.g. because the
+        face was lost."""
         with self._lock:
             self._generation += 1
             self._result = None
+        while True:
+            try:
+                self._jobs.get_nowait()
+            except queue.Empty:
+                break
 
     def close(self) -> None:
-        """Stop the model thread once it finishes its current inference."""
+        """Stop the model thread, waiting for an inference in progress."""
         self.clear()
         _put_latest(self._jobs, None)
+        self._thread.join()
+
+    def _is_new_target(self, kps: np.ndarray) -> bool:
+        center = kps[:2].mean(axis=0)
+        previous = self._last_eyes
+        self._last_eyes = (center, float(np.linalg.norm(kps[0] - kps[1])))
+        if previous is None:
+            return False
+        return float(np.linalg.norm(center - previous[0])) > self.MAX_TARGET_JUMP * previous[1]
 
     def _run(self) -> None:
+        try:
+            get_face_swapper()
+        except Exception as e:
+            print(f"Error loading face swapper: {e}")
         while True:
             job = self._jobs.get()
             if job is None:
                 return
             generation, face_swapper, source_face, aimg = job
+            with self._lock:
+                if generation != self._generation:
+                    continue
             try:
                 bgr_fake = _swap_aligned_face(face_swapper, source_face, aimg)
             except Exception as e:
                 print(f"Error during face swap: {e}")
-                continue
+                bgr_fake = None
             with self._lock:
                 if generation == self._generation:
-                    self._result = (source_face, bgr_fake)
+                    # After a failed inference show the unswapped frame, as
+                    # swap_face() does, instead of freezing the last result.
+                    self._result = None if bgr_fake is None else (source_face, bgr_fake)
 
 
 def _put_latest(jobs: queue.Queue, job: Any) -> None:

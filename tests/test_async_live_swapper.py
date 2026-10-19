@@ -23,12 +23,14 @@ KPS = np.float32([[130, 110], [190, 110], [160, 140], [135, 170], [185, 170]])
 
 
 class _FakeSession:
-    """Returns the input crop unchanged; holds each run until ``gate`` is set."""
+    """Returns the input crop unchanged; holds each run until ``gate`` is set
+    and raises while ``fail`` is set."""
 
     def __init__(self):
         self.gate = threading.Event()
         self.gate.set()
         self.started = threading.Event()
+        self.fail = False
         self.inputs = []
 
     def run(self, _output_names, inputs):
@@ -36,6 +38,8 @@ class _FakeSession:
         self.inputs.append(int(round(blob[0, 0, 64, 64] * 255)))
         self.started.set()
         self.gate.wait(5)
+        if self.fail:
+            raise RuntimeError("inference failed")
         return [blob]
 
 
@@ -75,14 +79,20 @@ class AsyncLiveSwapperTest(unittest.TestCase):
     def setUp(self):
         self.model = _FakeSwapper()
         self.pasted = []
+        self.loaded_on = []
         modules.globals.execution_providers = ["CPUExecutionProvider"]
 
         def fake_paste(frame, bgr_fake, M, _target_face):
             self.pasted.append((int(bgr_fake[64, 64, 0]), M))
             return frame
 
+        def fake_get_face_swapper():
+            self.loaded_on.append(threading.current_thread().name)
+            return self.model
+
         for name, value in (
-            ("get_face_swapper", lambda: self.model),
+            ("FACE_SWAPPER", self.model),
+            ("get_face_swapper", fake_get_face_swapper),
             ("paste_swapped_face", fake_paste),
         ):
             patcher = patch.object(face_swapper, name, value)
@@ -137,24 +147,63 @@ class AsyncLiveSwapperTest(unittest.TestCase):
 
         self.assertEqual(self.pasted, [])
 
-    def test_clear_drops_the_result_and_any_inference_in_flight(self):
+    def test_clear_drops_the_result_and_all_pending_work(self):
         source = _source()
         self.model.session.gate.clear()
         self._swap(10, source)
         self.assertTrue(self.model.session.started.wait(5))
+        self._swap(20, source)  # waits in the queue
 
         self.swapper.clear()
         self.model.session.gate.set()
         time.sleep(0.2)
 
-        self.assertIsNone(self.swapper._result)
-        self._swap(20, source)
+        self.assertIsNone(self.swapper._result, "the inference in flight was kept")
+        self.assertEqual(self.model.session.inputs, [10], "the queued crop still ran")
+        self._swap(30, source)
         self.assertEqual(self.pasted, [])
 
-    def test_close_stops_the_model_thread(self):
+    def test_failed_inference_drops_the_last_result(self):
+        source = _source()
+        self._swap(10, source)
+        self.assertTrue(_wait_for(lambda: self.swapper._result is not None))
+
+        self.model.session.fail = True
+        self._swap(20, source)
+        self.assertTrue(_wait_for(lambda: self.swapper._result is None))
+
+        self.pasted.clear()
+        self._swap(30, source)
+        self.assertEqual(self.pasted, [], "kept pasting a result after inference failed")
+
+    def test_result_is_not_pasted_on_a_different_face(self):
+        source = _source()
+        self._swap(10, source)
+        self.assertTrue(_wait_for(lambda: self.swapper._result is not None))
+
+        # The detector switched to someone else, far away in the frame.
+        self.target.kps = KPS + [0, 150]
+        self._swap(20, source)
+
+        self.assertEqual(self.pasted, [])
+
+    def test_swap_never_loads_the_model_itself(self):
+        with patch.object(face_swapper, "FACE_SWAPPER", None):
+            frame = _frame(10)
+            self.assertIs(self.swapper.swap(_source(), self.target, frame), frame)
+        self.assertTrue(_wait_for(lambda: self.loaded_on))
+        self.assertEqual(set(self.loaded_on), {"DLC.ASYNC-SWAP"})
+
+    def test_close_waits_for_the_inference_in_progress(self):
+        self.model.session.gate.clear()
         self._swap(10, _source())
+        self.assertTrue(self.model.session.started.wait(5))
+        threading.Timer(0.3, self.model.session.gate.set).start()
+
+        started = time.perf_counter()
         self.swapper.close()
-        self.swapper._thread.join(5)
+
+        self.assertGreaterEqual(time.perf_counter() - started, 0.25)
         self.assertFalse(self.swapper._thread.is_alive())
 
 
