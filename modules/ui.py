@@ -1333,8 +1333,11 @@ class _ProcessingWorker(QThread):
                     async_swapper.clear()
             else:
                 modules.globals.target_path = None
+                # Single-face state goes stale while map-faces runs: resume
+                # from a fresh detection and a fresh async result.
+                cached_target_face = None
+                cached_many_faces = None
                 if async_swapper is not None:
-                    # Not used by map-faces; don't resume from a stale result.
                     async_swapper.clear()
                 for fp in frame_processors:
                     if fp.NAME == "DLC.FACE-ENHANCER":

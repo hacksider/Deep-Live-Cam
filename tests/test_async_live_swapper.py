@@ -187,6 +187,18 @@ class AsyncLiveSwapperTest(unittest.TestCase):
 
         self.assertEqual(self.pasted, [])
 
+    def test_result_is_not_pasted_on_a_face_of_another_size(self):
+        source = _source()
+        self._swap(10, source)
+        self.assertTrue(_wait_for(lambda: self.swapper._result is not None))
+
+        # Someone nearer the camera, in about the same place.
+        center = KPS[:2].mean(axis=0)
+        self.target.kps = (KPS - center) * 1.8 + center
+        self._swap(20, source)
+
+        self.assertEqual(self.pasted, [])
+
     def test_swap_never_loads_the_model_itself(self):
         with patch.object(face_swapper, "FACE_SWAPPER", None):
             frame = _frame(10)

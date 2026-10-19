@@ -364,6 +364,71 @@ class AsyncSwapWorkerTest(unittest.TestCase):
         # The short miss sat between the first two swaps without a clear.
         self.assertEqual(calls[:3], ["init", "swap", "swap"])
 
+    def test_map_faces_drops_the_cached_target(self):
+        """After map-faces, single-face swapping waits for a fresh detection
+        instead of cropping where the face was before."""
+        swapped = []
+
+        class _Async:
+            def swap(self, _source, target, frame):
+                swapped.append(target)
+                return frame
+
+            def clear(self):
+                pass
+
+            def close(self):
+                pass
+
+        class _Swapper:
+            NAME = "DLC.FACE-SWAPPER"
+            AsyncLiveSwapper = _Async
+
+            @staticmethod
+            def apply_post_processing(frame, _bboxes):
+                return frame
+
+            @staticmethod
+            def process_frame_v2(frame):
+                return frame
+
+        detections = iter(["A", "B", "C"])
+        capture_q = queue.Queue(maxsize=2)
+        processed_q = queue.Queue(maxsize=2)
+        stop = threading.Event()
+        modules.globals.map_faces = False
+        modules.globals.many_faces = False
+        modules.globals.mouth_mask = False
+        modules.globals.source_path = "A"
+        modules.globals.live_async_swap = True
+        self.addCleanup(setattr, modules.globals, "live_async_swap", False)
+        self.addCleanup(setattr, modules.globals, "map_faces", False)
+
+        def feed(map_faces=False):
+            modules.globals.map_faces = map_faces
+            capture_q.put(_frame(), timeout=5)
+            processed_q.get(timeout=5)
+
+        with patch.object(ui, "imread_unicode", lambda *_a, **_kw: _frame()), \
+             patch.object(ui, "get_one_face", lambda *_: object()), \
+             patch.object(ui, "get_frame_processors_modules", lambda *_: [_Swapper]), \
+             patch.object(ui, "detect_one_face_fast", lambda *_: next(detections)), \
+             patch.object(ui, "update_status", lambda *_: None):
+            # At 30 fps the detector runs on every second single-face frame.
+            worker = ui._ProcessingWorker(capture_q, processed_q, stop, 30.0)
+            worker.start()
+            try:
+                for _ in range(4):  # detections on the 2nd and 4th
+                    feed()
+                feed(map_faces=True)
+                feed()  # no detection here: "B" is stale
+                feed()  # detection
+            finally:
+                stop.set()
+                worker.wait(5000)
+
+        self.assertEqual(swapped, ["A", "A", "B", "C"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -649,10 +649,12 @@ class AsyncLiveSwapper:
     live preview uses it for its single-face path only.
     """
 
-    # Eye-center movement since the previous frame, in inter-ocular distances,
-    # beyond which the target is taken to be a different face (the detector
-    # switched people); the result made for the previous face is not pasted.
+    # Beyond these changes since the previous frame the target is taken to be
+    # a different face (the detector switched people), and the result made for
+    # the previous face is not pasted: eye-center movement, in inter-ocular
+    # distances, and the ratio between the two inter-ocular distances.
     MAX_TARGET_JUMP = 2.0
+    MAX_TARGET_SCALE = 1.5
 
     def __init__(self) -> None:
         self._jobs: queue.Queue = queue.Queue(maxsize=1)
@@ -718,11 +720,16 @@ class AsyncLiveSwapper:
 
     def _is_new_target(self, kps: np.ndarray) -> bool:
         center = kps[:2].mean(axis=0)
+        distance = float(np.linalg.norm(kps[0] - kps[1]))
         previous = self._last_eyes
-        self._last_eyes = (center, float(np.linalg.norm(kps[0] - kps[1])))
-        if previous is None:
-            return False
-        return float(np.linalg.norm(center - previous[0])) > self.MAX_TARGET_JUMP * previous[1]
+        self._last_eyes = (center, distance)
+        if previous is None or previous[1] <= 0 or distance <= 0:
+            return previous is not None
+        scale = distance / previous[1]
+        return (
+            float(np.linalg.norm(center - previous[0])) > self.MAX_TARGET_JUMP * previous[1]
+            or not 1 / self.MAX_TARGET_SCALE <= scale <= self.MAX_TARGET_SCALE
+        )
 
     def _run(self) -> None:
         try:
