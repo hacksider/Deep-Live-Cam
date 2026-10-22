@@ -252,15 +252,14 @@ def get_face_swapper() -> Any:
                 if not os.path.exists(model_path):
                     update_status(f"No inswapper model found in {models_dir}.", NAME)
                     return None
-            # On Apple Silicon, rewrite Pad(reflect) → Slice+Concat so
-            # CoreML can run the entire model in a single partition on
-            # the Neural Engine instead of bouncing between CPU and ANE.
-            if IS_APPLE_SILICON:
-                from modules.onnx_optimize import optimize_for_coreml
-                model_path = optimize_for_coreml(model_path)
-
             update_status(f"Loading face swapper model from: {model_path}", NAME)
             try:
+                # CoreML preparation parses the ONNX file too, so its failures
+                # must follow the same error path as inference-session loading.
+                if IS_APPLE_SILICON:
+                    from modules.onnx_optimize import optimize_for_coreml
+                    model_path = optimize_for_coreml(model_path)
+
                 providers_config = []
                 for p in modules.globals.execution_providers:
                     if p == "CoreMLExecutionProvider" and IS_APPLE_SILICON:
@@ -296,7 +295,7 @@ def get_face_swapper() -> Any:
                     _init_cuda_graph_session(model_path, FACE_SWAPPER)
                 update_status("Face swapper model loaded successfully.", NAME)
             except Exception as e:
-                update_status(f"Error loading face swapper model: {e}", NAME)
+                update_status(f"Error loading face swapper model from {model_path}: {e}", NAME)
                 FACE_SWAPPER = None
                 return None
     return FACE_SWAPPER

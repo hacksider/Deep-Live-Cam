@@ -1056,7 +1056,8 @@ class MainWindow(QMainWindow):
             from modules.face_analyser import get_face_analyser
             from modules.processors.frame.face_swapper import get_face_swapper
             get_face_analyser()
-            get_face_swapper()
+            if get_face_swapper() is None:
+                return
             _open_webcam_preview(camera_index)
         else:
             modules.globals.source_target_map = []
