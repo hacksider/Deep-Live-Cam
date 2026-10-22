@@ -7,7 +7,9 @@ enhance-face-via-ONNX pipeline.
 import os
 import platform
 import threading
-from typing import Any
+import hashlib
+import json
+from typing import Any, Mapping, Sequence
 
 import cv2
 import numpy as np
@@ -22,11 +24,44 @@ IS_APPLE_SILICON = platform.system() == "Darwin" and platform.machine() == "arm6
 THREAD_SEMAPHORE = threading.Semaphore(min(max(1, (os.cpu_count() or 1)), 8))
 
 
-def build_provider_config(providers=None):
+def configure_coreml_cache(
+    options: Mapping[str, object], model_paths: Sequence[str]
+) -> dict[str, str]:
+    """Use a local compiled-model cache with explicit invalidation.
+
+    ORT hashes the model path by default, so a single directory would retain
+    stale compiled weights after a same-path model replacement. Runtime,
+    macOS, model bytes and provider options all participate in our directory key.
+    """
+    from modules.onnx_optimize import CACHE_DIR, model_fingerprint
+
+    configured = {
+        key: str(value)
+        for key, value in options.items()
+        if key != "ModelCacheDirectory"
+    }
+    identity = {
+        "schema": 1,
+        "models": model_fingerprint(model_paths),
+        "onnxruntime": onnxruntime.__version__,
+        "macos": platform.mac_ver()[0],
+        "machine": platform.machine(),
+        "provider_options": configured,
+    }
+    cache_key = hashlib.sha256(
+        json.dumps(identity, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    cache_dir = CACHE_DIR / "coreml" / cache_key
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    configured["ModelCacheDirectory"] = str(cache_dir)
+    return configured
+
+
+def build_provider_config(providers=None, *, model_paths=None, coreml_options=None):
     """Wrap raw provider name strings with optimised CUDA / CoreML options.
 
-    Providers that are already ``(name, options_dict)`` tuples are passed
-    through unchanged.  Non-CUDA providers are left as bare strings.
+    Existing provider options are preserved. When model paths are given,
+    CoreML receives a local cache directory keyed on those model contents.
     """
     if providers is None:
         providers = modules.globals.execution_providers
@@ -34,8 +69,18 @@ def build_provider_config(providers=None):
     config = []
     for p in providers:
         if isinstance(p, tuple):
-            # Already configured – pass through
-            config.append(p)
+            name, options = p
+            if name == "CoreMLExecutionProvider" and IS_APPLE_SILICON:
+                # Call-site defaults must not overwrite an already configured
+                # provider's explicit choices (e.g. swapper specialization).
+                options = {**(coreml_options or {}), **options}
+                if model_paths is not None:
+                    options = configure_coreml_cache(options, model_paths)
+                else:
+                    options = {key: str(value) for key, value in options.items()}
+                config.append((name, options))
+            else:
+                config.append(p)
         elif p == "CUDAExecutionProvider":
             # Use bare provider — ONNX Runtime's defaults are fastest on
             # modern GPUs (Blackwell/sm_120).  Custom options like
@@ -43,14 +88,17 @@ def build_provider_config(providers=None):
             # architectures.
             config.append(p)
         elif p == "CoreMLExecutionProvider" and IS_APPLE_SILICON:
-            config.append((
-                "CoreMLExecutionProvider",
-                {
-                    "ModelFormat": "MLProgram",
-                    "MLComputeUnits": "ALL",
-                    "AllowLowPrecisionAccumulationOnGPU": 1,
-                },
-            ))
+            options = {
+                "ModelFormat": "MLProgram",
+                "MLComputeUnits": "ALL",
+                "AllowLowPrecisionAccumulationOnGPU": "1",
+            }
+            options.update(coreml_options or {})
+            if model_paths is not None:
+                options = configure_coreml_cache(options, model_paths)
+            else:
+                options = {key: str(value) for key, value in options.items()}
+            config.append(("CoreMLExecutionProvider", options))
         elif p == "OpenVINOExecutionProvider":
             # AUTO lets OpenVINO select the best device
             config.append(OPENVINO_PROVIDER_CONFIG)
@@ -103,9 +151,11 @@ def create_onnx_session(model_path: str) -> onnxruntime.InferenceSession:
     """
     if IS_APPLE_SILICON:
         from modules.onnx_optimize import optimize_for_coreml
+
         # Infer input shape from the model for Shape/Gather folding
         try:
             import onnx
+
             m = onnx.load(model_path)
             inp = m.graph.input[0]
             dims = inp.type.tensor_type.shape.dim
@@ -115,13 +165,15 @@ def create_onnx_session(model_path: str) -> onnxruntime.InferenceSession:
             input_shape = None
         model_path = optimize_for_coreml(model_path, input_shape=input_shape)
 
-    providers = build_provider_config()
+    providers = build_provider_config(model_paths=[model_path])
     session_options = onnxruntime.SessionOptions()
     session_options.graph_optimization_level = (
         onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
     )
     session = onnxruntime.InferenceSession(
-        model_path, sess_options=session_options, providers=providers,
+        model_path,
+        sess_options=session_options,
+        providers=providers,
     )
     return session
 
