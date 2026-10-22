@@ -44,6 +44,7 @@ live_resizable: bool = True
 camera_input_combobox: Any | None = None # Placeholder for UI element if needed
 webcam_preview_running: bool = False
 show_fps: bool = False
+live_async_swap: bool = False    # Run the swap model off the live loop (see AsyncLiveSwapper)
 
 # System Configuration
 max_memory: int | None = None        # Memory limit in GB? (Needs clarification)

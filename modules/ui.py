@@ -223,6 +223,10 @@ _WEBCAM_PREVIEW: Optional["WebcamPreviewWindow"] = None
 # How long to wait quietly for a live-preview worker to notice the stop flag
 # before saying so. Shutdown then keeps waiting: it has to finish.
 WORKER_SHUTDOWN_GRACE_MS = 30000
+# How long the face may go undetected before the live preview drops the last
+# async swap result. A short detector miss keeps it, so the swap resumes at
+# once instead of showing the real face for a whole inference.
+ASYNC_SWAP_FACE_LOSS_GRACE_S = 0.5
 _MAPPER: Optional["MapperDialog"] = None
 _LIVE_MAPPER: Optional["LiveMapperDialog"] = None
 _LANG: Optional[LanguageManager] = None
@@ -327,6 +331,7 @@ def save_switch_states():
         "live_resizable": modules.globals.live_resizable,
         "fp_ui": modules.globals.fp_ui,
         "show_fps": modules.globals.show_fps,
+        "live_async_swap": modules.globals.live_async_swap,
         "mouth_mask": modules.globals.mouth_mask,
         "show_mouth_mask_box": modules.globals.show_mouth_mask_box,
         "mouth_mask_size": modules.globals.mouth_mask_size,
@@ -356,6 +361,7 @@ def load_switch_states():
         modules.globals.live_resizable = state.get("live_resizable", False)
         modules.globals.fp_ui = state.get("fp_ui", {"face_enhancer": False})
         modules.globals.show_fps = state.get("show_fps", False)
+        modules.globals.live_async_swap = state.get("live_async_swap", False)
         # Mouth mask always starts disabled (slider at 0) on launch,
         # regardless of the persisted value — enable it explicitly each session.
         modules.globals.mouth_mask_size = 0.0
@@ -804,6 +810,23 @@ class MainWindow(QMainWindow):
         ))
         grid.addWidget(self.cb_det_size, 2, 1, 1, 2)
 
+        # Row 3: async swap
+        self.sw_async_swap = _Switch(
+            _("Async swap"), modules.globals.live_async_swap,
+            _("Run the swap model in the background so the live preview keeps "
+              "the camera's frame rate when the model is slow (CPU, Apple "
+              "Silicon, older GPUs). The face follows head movement on every "
+              "frame, but expressions update only as fast as the model runs. "
+              "Single-face mode only: not used with Many faces or Map faces."),
+        )
+        self.sw_async_swap.toggled.connect(
+            lambda v: (
+                setattr(modules.globals, "live_async_swap", v),
+                save_switch_states(),
+            )
+        )
+        grid.addWidget(self.sw_async_swap, 3, 0, 1, 3)
+
         grid.setColumnStretch(1, 1)
         return card
 
@@ -1177,6 +1200,8 @@ class _ProcessingWorker(QThread):
 
     def run(self) -> None:
         frame_processors = get_frame_processors_modules(modules.globals.frame_processors)
+        async_swapper = None
+        face_lost_at = None
         source_image = None
         last_source_path = None
         reported_source_error = None
@@ -1273,9 +1298,16 @@ class _ProcessingWorker(QThread):
                                     swapped_bboxes.append(t_face.bbox.astype(int))
                             temp_frame = result
                         elif cached_target_face is not None:
-                            temp_frame = fp.swap_face(
-                                source_image, cached_target_face, temp_frame
-                            )
+                            if modules.globals.live_async_swap:
+                                if async_swapper is None:
+                                    async_swapper = fp.AsyncLiveSwapper()
+                                temp_frame = async_swapper.swap(
+                                    source_image, cached_target_face, temp_frame
+                                )
+                            else:
+                                temp_frame = fp.swap_face(
+                                    source_image, cached_target_face, temp_frame
+                                )
                             if (
                                 hasattr(cached_target_face, "bbox")
                                 and cached_target_face.bbox is not None
@@ -1284,8 +1316,29 @@ class _ProcessingWorker(QThread):
                         temp_frame = fp.apply_post_processing(temp_frame, swapped_bboxes)
                     else:
                         temp_frame = fp.process_frame(source_image, temp_frame)
+
+                # Once the face has been gone for a while, or async swap is
+                # switched off, the last async result is stale.
+                if cached_target_face is not None:
+                    face_lost_at = None
+                elif face_lost_at is None:
+                    face_lost_at = time.monotonic()
+                if async_swapper is not None and (
+                    not modules.globals.live_async_swap
+                    or (
+                        face_lost_at is not None
+                        and time.monotonic() - face_lost_at > ASYNC_SWAP_FACE_LOSS_GRACE_S
+                    )
+                ):
+                    async_swapper.clear()
             else:
                 modules.globals.target_path = None
+                # Single-face state goes stale while map-faces runs: resume
+                # from a fresh detection and a fresh async result.
+                cached_target_face = None
+                cached_many_faces = None
+                if async_swapper is not None:
+                    async_swapper.clear()
                 for fp in frame_processors:
                     if fp.NAME == "DLC.FACE-ENHANCER":
                         if modules.globals.fp_ui["face_enhancer"]:
@@ -1321,6 +1374,9 @@ class _ProcessingWorker(QThread):
                     self._pq.put_nowait(temp_frame)
                 except queue.Full:
                     pass
+
+        if async_swapper is not None:
+            async_swapper.close()
 
 
 class WebcamPreviewWindow(QWidget):
