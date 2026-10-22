@@ -221,6 +221,72 @@ class SourceReloadTest(unittest.TestCase):
                 worker.wait(5000)
 
 
+class LiveTrackingTest(unittest.TestCase):
+    """Between detector runs the swap has to follow the head, not stay where
+    the last detection found it."""
+
+    def test_swapper_gets_a_tracked_face_between_detections(self):
+        import cv2
+        from insightface.app.common import Face
+
+        rng = np.random.RandomState(0)
+        scene = cv2.GaussianBlur(
+            rng.randint(0, 256, (240, 320, 3)).astype(np.uint8), (5, 5), 0
+        )
+
+        def moved_right(pixels):
+            shift = np.float32([[1, 0, pixels], [0, 1, 0]])
+            return cv2.warpAffine(scene, shift, (320, 240), borderMode=cv2.BORDER_REFLECT)
+
+        kps = np.float32([[135, 110], [185, 110], [160, 135], [140, 160], [180, 160]])
+        detection = Face(bbox=np.float32([110, 70, 210, 190]), kps=kps.copy(), det_score=0.9)
+        swapped_kps = []
+
+        class _Swapper:
+            NAME = "DLC.FACE-SWAPPER"
+
+            @staticmethod
+            def swap_face(_source, target, frame):
+                swapped_kps.append(np.array(target.kps))
+                return frame
+
+            @staticmethod
+            def apply_post_processing(frame, _bboxes):
+                return frame
+
+        capture_q = queue.Queue(maxsize=2)
+        processed_q = queue.Queue(maxsize=2)
+        stop = threading.Event()
+        modules.globals.map_faces = False
+        modules.globals.many_faces = False
+        modules.globals.mouth_mask = False
+        modules.globals.live_mirror = False
+        modules.globals.source_path = "A"
+
+        with patch.object(ui, "imread_unicode", lambda *_a, **_kw: _frame()), \
+             patch.object(ui, "get_one_face", lambda *_: object()), \
+             patch.object(ui, "get_frame_processors_modules", lambda *_: [_Swapper]), \
+             patch.object(ui, "detect_one_face_fast", lambda *_: detection), \
+             patch.object(ui, "update_status", lambda *_: None):
+            # At 30 fps the detector runs on every second frame: 2 and 4 here.
+            worker = ui._ProcessingWorker(capture_q, processed_q, stop, 30.0)
+            worker.start()
+            try:
+                for index in range(4):
+                    capture_q.put(moved_right(5 * index), timeout=5)
+                    processed_q.get(timeout=5)
+            finally:
+                stop.set()
+                worker.wait(5000)
+
+        self.assertEqual(len(swapped_kps), 3)
+        np.testing.assert_allclose(swapped_kps[0], kps)
+        # Frame 3 moved 5 px right of the frame the detector last ran on.
+        np.testing.assert_allclose(swapped_kps[1], kps + [5, 0], atol=0.3)
+        np.testing.assert_allclose(swapped_kps[2], kps)
+        np.testing.assert_array_equal(detection.kps, kps)
+
+
 class RandomFaceDownloadTest(unittest.TestCase):
     """A failed fetch must not damage the image already in use."""
 

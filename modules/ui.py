@@ -69,6 +69,7 @@ from modules.face_analyser import (
 from modules.gettext import LanguageManager
 from modules.gpu_processing import gpu_cvt_color, gpu_flip, gpu_resize
 from modules.processors.frame.core import get_frame_processors_modules
+from modules.temporal_face_tracker import TemporalFaceTracker
 from modules.utilities import (
     has_image_extension,
     is_image,
@@ -1188,6 +1189,7 @@ class _ProcessingWorker(QThread):
         cached_target_face = None
         cached_many_faces = None
         det_interval = max(1, round(self._fps * 0.08))
+        face_tracker = TemporalFaceTracker()
 
         while not self._stop.is_set():
             try:
@@ -1227,13 +1229,21 @@ class _ProcessingWorker(QThread):
                         source_image = get_one_face(source_frame)
 
                 det_count += 1
-                if det_count % det_interval == 0:
+                detected = det_count % det_interval == 0
+                if detected:
                     if modules.globals.many_faces:
                         cached_target_face = None
                         cached_many_faces = detect_many_faces_fast(temp_frame)
                     else:
                         cached_target_face = detect_one_face_fast(temp_frame)
                         cached_many_faces = None
+                elif cached_target_face is not None:
+                    # Between detections, move the last detection along with
+                    # the head rather than pasting the swap where the face
+                    # was. If tracking is unreliable, keep the detection.
+                    tracked_face = face_tracker.update(temp_frame)
+                    if tracked_face is not None:
+                        cached_target_face = tracked_face
 
                 cached_faces = None
                 if cached_many_faces:
@@ -1246,6 +1256,11 @@ class _ProcessingWorker(QThread):
                 # detection cycle — the helper no-ops if already present).
                 if modules.globals.mouth_mask and cached_faces:
                     ensure_landmarks(temp_frame, cached_faces)
+
+                # Track from each new detection. This runs after the landmarks
+                # are attached so that tracked faces carry them too.
+                if detected and det_interval > 1:
+                    face_tracker.reset(temp_frame, cached_target_face)
 
                 for fp in frame_processors:
                     if fp.NAME == "DLC.FACE-ENHANCER":
