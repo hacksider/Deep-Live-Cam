@@ -278,28 +278,21 @@ def _postprocess_face(output: np.ndarray) -> np.ndarray:
     return face[:, :, ::-1].copy()  # RGB -> BGR
 
 
-# Cache for temporal enhancement skipping in live mode.
-# GFPGAN output barely changes between consecutive frames (same face,
-# same position), so we run inference every _ENH_INTERVAL frames and
-# reuse the cached enhanced face + affine matrix in between.
-_enh_live_cache: dict = {
-    'enhanced_bgr': None,
-    'affine_matrix': None,
-    'align_size': 0,
-    'frame_count': 0,
-}
-_ENH_INTERVAL = 2  # run inference every N frames, paste cached result otherwise
-
-
-def enhance_face(temp_frame: Frame, detected_faces=None) -> Frame:
+def enhance_face(
+    temp_frame: Frame, detected_faces=None, *, strict: bool = False
+) -> Frame:
     """Enhances all faces in a frame using the GFPGAN ONNX model.
 
     Args:
         detected_faces: Pre-detected face list. When provided, skips
             the internal detection call (saves ~15-20ms per frame).
-            Also enables temporal caching — inference runs every
-            _ENH_INTERVAL frames, reusing the cached result otherwise.
+            Enhancement always uses this frame's pixels and geometry.
     """
+    faces = detected_faces if detected_faces is not None else get_many_faces(temp_frame)
+    if not faces:
+        if strict:
+            raise ValueError("No faces found in target image.")
+        return temp_frame
     session = get_face_enhancer()
 
     # Determine model input resolution from the session metadata
@@ -313,77 +306,60 @@ def enhance_face(temp_frame: Frame, detected_faces=None) -> Frame:
     except (ValueError, TypeError, IndexError):
         align_size = 512
 
-    # Use pre-detected faces if available, otherwise detect
-    faces = detected_faces if detected_faces is not None else get_many_faces(temp_frame)
-    if not faces:
-        return temp_frame
-
-    # Temporal caching: only available when faces are pre-detected (live mode)
-    # AND we're in single-face mode — the cache holds exactly one enhancement,
-    # so reusing it in many_faces mode would paste the same face onto every
-    # detected target.
     many_faces_mode = getattr(modules.globals, "many_faces", False)
-    use_cache = detected_faces is not None and not many_faces_mode
-    if use_cache:
-        _enh_live_cache['frame_count'] += 1
-        run_inference_this_frame = (_enh_live_cache['frame_count'] % _ENH_INTERVAL == 0
-                                   or _enh_live_cache['enhanced_bgr'] is None)
-    else:
-        run_inference_this_frame = True
 
     for face in faces:
         if not hasattr(face, "kps") or face.kps is None:
+            if strict:
+                raise ValueError("Target face has no five-point landmarks.")
             continue
 
         landmarks_5 = face.kps.astype(np.float32)
+        if strict and (
+            landmarks_5.shape != (5, 2) or not np.isfinite(landmarks_5).all()
+        ):
+            raise ValueError("Target face has invalid five-point landmarks.")
         if landmarks_5.shape[0] < 5:
             continue
 
-        if run_inference_this_frame:
-            aligned_face, affine_matrix = _align_face(
-                temp_frame, landmarks_5, output_size=align_size
+        aligned_face, affine_matrix = _align_face(
+            temp_frame, landmarks_5, output_size=align_size
+        )
+        if aligned_face is None or affine_matrix is None:
+            if strict:
+                raise ValueError("Unable to align target face for enhancement.")
+            continue
+        if strict and (
+            not np.isfinite(affine_matrix).all()
+            or abs(np.linalg.det(affine_matrix[:, :2])) <= np.finfo(np.float32).eps
+        ):
+            raise ValueError("Target face alignment is degenerate.")
+
+        try:
+            with THREAD_SEMAPHORE:
+                from modules.processors.frame._onnx_enhancer import (
+                    run_inference,
+                )
+                input_tensor = _preprocess_face(aligned_face)
+                output_tensor = run_inference(session, input_name, input_tensor)
+                enhanced_bgr = _postprocess_face(output_tensor)
+
+            eh, ew = enhanced_bgr.shape[:2]
+            if eh != align_size or ew != align_size:
+                enhanced_bgr = cv2.resize(
+                    enhanced_bgr,
+                    (align_size, align_size),
+                    interpolation=cv2.INTER_LANCZOS4,
+                )
+
+            _paste_back(
+                temp_frame, enhanced_bgr, affine_matrix, output_size=align_size
             )
-            if aligned_face is None or affine_matrix is None:
-                continue
-
-            try:
-                with THREAD_SEMAPHORE:
-                    from modules.processors.frame._onnx_enhancer import (
-                        run_inference,
-                    )
-                    input_tensor = _preprocess_face(aligned_face)
-                    output_tensor = run_inference(session, input_name, input_tensor)
-                    enhanced_bgr = _postprocess_face(output_tensor)
-
-                eh, ew = enhanced_bgr.shape[:2]
-                if eh != align_size or ew != align_size:
-                    enhanced_bgr = cv2.resize(
-                        enhanced_bgr,
-                        (align_size, align_size),
-                        interpolation=cv2.INTER_LANCZOS4,
-                    )
-
-                # Cache for reuse on next frame
-                if use_cache:
-                    _enh_live_cache['enhanced_bgr'] = enhanced_bgr
-                    _enh_live_cache['affine_matrix'] = affine_matrix
-                    _enh_live_cache['align_size'] = align_size
-
-                _paste_back(
-                    temp_frame, enhanced_bgr, affine_matrix, output_size=align_size
-                )
-            except Exception as e:
-                print(f"{NAME}: Error enhancing a face: {e}")
-                continue
-        else:
-            # Reuse cached enhanced face — just paste back onto current frame
-            cached = _enh_live_cache
-            if cached['enhanced_bgr'] is not None:
-                _paste_back(
-                    temp_frame, cached['enhanced_bgr'],
-                    cached['affine_matrix'],
-                    output_size=cached['align_size'],
-                )
+        except Exception as e:
+            print(f"{NAME}: Error enhancing a face: {e}")
+            if strict:
+                raise
+            continue
         if not many_faces_mode:
             break  # single-face live mode — only process first face
 
@@ -391,9 +367,9 @@ def enhance_face(temp_frame: Frame, detected_faces=None) -> Frame:
 
 
 def process_frame(source_face: Face | None, temp_frame: Frame,
-                   detected_faces=None) -> Frame:
+                   detected_faces=None, *, strict: bool = False) -> Frame:
     """Processes a frame: enhances face if detected."""
-    return enhance_face(temp_frame, detected_faces=detected_faces)
+    return enhance_face(temp_frame, detected_faces=detected_faces, strict=strict)
 
 
 def process_frame_v2(temp_frame: Frame, detected_faces=None) -> Frame:
@@ -431,15 +407,25 @@ def process_frames(
 
 def process_image(
     source_path: str | None, target_path: str, output_path: str
-) -> None:
-    """Processes a single image file."""
-    target_frame = imread_unicode(target_path)
-    if target_frame is None:
-        print(f"{NAME}: Error: Failed to read target image {target_path}")
-        return
-    result_frame = process_frame(None, target_frame)
-    imwrite_unicode(output_path, result_frame)
-    print(f"{NAME}: Enhanced image saved to {output_path}")
+) -> bool:
+    """Return True only after enhancement and writing succeeded."""
+    try:
+        target_frame = imread_unicode(target_path)
+        if target_frame is None:
+            print(f"{NAME}: Error: Failed to read target image {target_path}")
+            return False
+        result_frame = process_frame(None, target_frame, strict=True)
+        if result_frame is None:
+            print(f"{NAME}: Error: Enhancement returned no image")
+            return False
+        if not imwrite_unicode(output_path, result_frame):
+            print(f"{NAME}: Error: Failed to write output image {output_path}")
+            return False
+        print(f"{NAME}: Enhanced image saved to {output_path}")
+        return True
+    except Exception as error:
+        print(f"{NAME}: Error processing image: {error}")
+        return False
 
 
 def process_video(

@@ -2,8 +2,52 @@ import importlib
 import sys
 import types
 import unittest
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from unittest.mock import patch
+
+
+@contextmanager
+def _isolated_module_import(stubs, module_name):
+    # Importlib writes child modules onto parent packages independently of
+    # sys.modules. Restore both, including globals changed by each scenario.
+    package_state = [
+        (module, dict(vars(module)))
+        for name, module in list(sys.modules.items())
+        if (name == "modules" or name.startswith("modules."))
+        and isinstance(module, types.ModuleType)
+        and hasattr(module, "__path__")
+    ]
+    child_names = {name.rsplit(".", 1)[-1] for name in (*stubs, module_name)}
+    try:
+        with ExitStack() as stack:
+            globals_module = sys.modules.get("modules.globals")
+            if globals_module is not None:
+                stack.enter_context(patch.dict(vars(globals_module)))
+            stack.enter_context(patch.dict(sys.modules, stubs, clear=False))
+            for name, stub in stubs.items():
+                parent_name, separator, child_name = name.rpartition(".")
+                parent = sys.modules.get(parent_name) if separator else None
+                if parent is not None:
+                    setattr(parent, child_name, stub)
+            sys.modules.pop(module_name, None)
+            yield importlib.import_module(module_name)
+    finally:
+        missing = object()
+        for package, original in package_state:
+            for name in set(vars(package)) | set(original):
+                current = vars(package).get(name, missing)
+                previous = original.get(name, missing)
+                if current is previous:
+                    continue
+                if (
+                    isinstance(current, types.ModuleType)
+                    or isinstance(previous, types.ModuleType)
+                    or name in child_names
+                ):
+                    if previous is missing:
+                        delattr(package, name)
+                    else:
+                        setattr(package, name, previous)
 
 
 @contextmanager
@@ -73,10 +117,8 @@ def _patched_core_import_stubs(calls, pipe_result=False):
             normalize_output_path=lambda _source, _target, output: output,
         ),
     }
-    with patch.dict(sys.modules, stubs, clear=False):
-        sys.modules.pop("modules.core", None)
-        yield importlib.import_module("modules.core")
-        sys.modules.pop("modules.core", None)
+    with _isolated_module_import(stubs, "modules.core") as core:
+        yield core
 
 
 def _configure_video_run(core, *, map_faces):
@@ -96,6 +138,25 @@ def _configure_video_run(core, *, map_faces):
 
 
 class MapFacesFallbackTests(unittest.TestCase):
+    def test_import_stubs_restore_module_and_parent_references_on_exception(self):
+        package = importlib.import_module("modules")
+        original_core = types.ModuleType("modules.core")
+        original_ui = types.ModuleType("modules.ui")
+        with patch.dict(sys.modules, {
+            "modules.core": original_core, "modules.ui": original_ui,
+        }), patch.object(package, "core", original_core, create=True), patch.object(
+            package, "ui", original_ui, create=True
+        ):
+            with self.assertRaisesRegex(RuntimeError, "test failure"):
+                with _patched_core_import_stubs([]) as core:
+                    self.assertIs(package.core, core)
+                    self.assertIsNot(package.ui, original_ui)
+                    raise RuntimeError("test failure")
+            self.assertIs(sys.modules["modules.core"], original_core)
+            self.assertIs(sys.modules["modules.ui"], original_ui)
+            self.assertIs(package.core, original_core)
+            self.assertIs(package.ui, original_ui)
+
     def test_map_faces_disk_fallback_extracts_frames_before_processing(self):
         calls = []
         with _patched_core_import_stubs(calls, pipe_result=False) as core:

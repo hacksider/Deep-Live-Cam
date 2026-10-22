@@ -11,7 +11,7 @@ from tqdm import tqdm
 
 import modules
 import modules.globals
-from modules.face_analyser import get_one_face
+from modules.face_analyser import detect_one_face_fast, ensure_landmarks
 
 FRAME_PROCESSORS_MODULES: List[ModuleType] = []
 FRAME_PROCESSORS_INTERFACE = [
@@ -302,28 +302,19 @@ def _run_pipe_pipeline(
 
     reader = None
     writer = None
-    try:
-        reader = subprocess.Popen(
-            reader_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        )
-        writer = subprocess.Popen(
-            writer_cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE,
-        )
-    except Exception as e:
-        print(f"[DLC.CORE] Failed to start FFmpeg pipes: {e}")
-        for proc in (reader, writer):
-            if proc:
-                try:
-                    proc.kill()
-                except Exception:
-                    pass
-        return False
-
     processed_count = 0
     bar_fmt = ('{l_bar}{bar}| {n_fmt}/{total_fmt} '
                '[{elapsed}<{remaining}, {rate_fmt}{postfix}]')
 
     try:
+        # Inherit stderr so diagnostic output cannot fill an unread pipe and
+        # deadlock a decoder/encoder. FFmpeg errors remain in the app's log.
+        reader = subprocess.Popen(
+            reader_cmd, stdout=subprocess.PIPE, stderr=None,
+        )
+        writer = subprocess.Popen(
+            writer_cmd, stdin=subprocess.PIPE, stderr=None,
+        )
         with tqdm(total=total_frames, desc='Processing', unit='frame',
                   dynamic_ncols=True, bar_format=bar_fmt) as progress:
             progress.set_postfix({
@@ -332,62 +323,77 @@ def _run_pipe_pipeline(
                 'mode': 'in-memory',
             })
 
-            # Pipelined detection: while processing frame N (swap on
-            # ANE), start detecting the face in the next frame
-            # (detection on GPU).  They use different hardware units
-            # so the work overlaps.
-            detect_executor = ThreadPoolExecutor(max_workers=1)
-            pending_detect = None
             use_pipeline = not modules.globals.many_faces
 
-            while True:
+            def read_frame() -> np.ndarray | None:
                 raw = reader.stdout.read(frame_size)
                 if len(raw) != frame_size:
-                    break
-
-                frame = np.frombuffer(raw, dtype=np.uint8).reshape(
+                    return None
+                return np.frombuffer(raw, dtype=np.uint8).reshape(
                     (height, width, 3)
                 ).copy()
 
-                # Get the detection result for THIS frame
-                if use_pipeline:
-                    if pending_detect is not None:
-                        target_face = pending_detect.result()
-                    else:
-                        target_face = get_one_face(frame)
-                    # Start detecting on THIS frame eagerly — the result
-                    # will be used for the next iteration.  At video
-                    # frame rates the face barely moves between frames.
-                    # Hand the detector its own copy: the frame processors
-                    # below mutate `frame` in place (paste-back), which
-                    # would otherwise race with detection.
-                    pending_detect = detect_executor.submit(
-                        get_one_face, frame.copy())
-                else:
-                    target_face = None
+            # Keep a single lookahead frame: its detection overlaps processing
+            # of the current frame, but its geometry is only used with that
+            # same frame. The context manager also joins on errors/pipe failure.
+            with ThreadPoolExecutor(max_workers=1) as detect_executor:
+                frame = read_frame()
+                pending_detect = (
+                    detect_executor.submit(detect_one_face_fast, frame)
+                    if use_pipeline and frame is not None else None
+                )
+                while frame is not None:
+                    target_face = (
+                        pending_detect.result() if pending_detect is not None else None
+                    )
+                    next_frame = read_frame()
+                    pending_detect = (
+                        detect_executor.submit(detect_one_face_fast, next_frame)
+                        if use_pipeline and next_frame is not None else None
+                    )
+                    # Swap and enhancers use the detector's five keypoints.
+                    # Only the mouth mask needs the separate 106-point model;
+                    # target identity recognition is unnecessary in simple mode.
+                    if target_face is not None and modules.globals.mouth_mask:
+                        ensure_landmarks(frame, [target_face])
 
-                # Run frame through every active processor
-                for fp in frame_processors:
-                    try:
-                        frame = fp.process_frame(source_face, frame, target_face=target_face)
-                    except TypeError:
-                        frame = fp.process_frame(source_face, frame)
+                    for fp in frame_processors:
+                        if use_pipeline and fp.NAME == "DLC.FACE-SWAPPER":
+                            if target_face is None:
+                                # Detection explicitly found nothing. Avoid a
+                                # second detector call inside process_frame().
+                                frame = fp.apply_post_processing(frame, [])
+                            else:
+                                frame = fp.process_frame(
+                                    source_face, frame, target_face=target_face,
+                                )
+                        elif use_pipeline and fp.NAME in (
+                            "DLC.FACE-ENHANCER",
+                            "DLC.FACE-ENHANCER-GPEN256",
+                            "DLC.FACE-ENHANCER-GPEN512",
+                        ):
+                            frame = fp.process_frame(
+                                source_face, frame,
+                                detected_faces=[] if target_face is None else [target_face],
+                            )
+                        else:
+                            frame = fp.process_frame(source_face, frame)
 
-                writer.stdin.write(frame.tobytes())
-                processed_count += 1
-                progress.update(1)
-
-            detect_executor.shutdown(wait=True)
+                    writer.stdin.write(frame.tobytes())
+                    processed_count += 1
+                    progress.update(1)
+                    frame = next_frame
 
         # Graceful shutdown
         writer.stdin.close()
-        writer.wait()
-        reader.wait()
+        writer.wait(timeout=30)
+        reader.wait(timeout=5)
 
+        if reader.returncode != 0:
+            print(f"[DLC.CORE] FFmpeg decoder failed (exit {reader.returncode}).")
+            return False
         if writer.returncode != 0:
-            stderr_out = writer.stderr.read().decode(errors='ignore').strip()
-            if stderr_out:
-                print(f"[DLC.CORE] FFmpeg encoder error: {stderr_out}")
+            print(f"[DLC.CORE] FFmpeg encoder failed (exit {writer.returncode}).")
             return False
 
         return processed_count > 0 and os.path.isfile(temp_output_path)
@@ -395,13 +401,27 @@ def _run_pipe_pipeline(
     except BrokenPipeError:
         print("[DLC.CORE] FFmpeg pipe broken (encoder may not be available).")
         return False
+    except subprocess.TimeoutExpired:
+        print("[DLC.CORE] FFmpeg finalization timed out.")
+        return False
     except Exception as e:
         print(f"[DLC.CORE] In-memory processing error: {e}")
         return False
     finally:
         for proc in (reader, writer):
-            if proc:
+            if proc is not None:
                 try:
-                    proc.kill()
-                except Exception:
-                    pass
+                    if proc.poll() is None:
+                        proc.kill()
+                    proc.wait(timeout=5)
+                except (OSError, subprocess.TimeoutExpired) as error:
+                    print(f"[DLC.CORE] Unable to finish FFmpeg cleanup: {error}")
+                finally:
+                    for pipe in (proc.stdin, proc.stdout, proc.stderr):
+                        if pipe is not None:
+                            try:
+                                pipe.close()
+                            except OSError:
+                                # A broken encoder pipe is already a failure;
+                                # closing it must not prevent closing the rest.
+                                pass
