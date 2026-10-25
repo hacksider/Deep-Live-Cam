@@ -74,5 +74,34 @@ class DetectFpsTests(unittest.TestCase):
             self.assertEqual(utilities.detect_fps("demo.mp4"), 30.0)
 
 
+class NormalizeOutputPathTests(unittest.TestCase):
+    def test_missing_output_defaults_next_to_target(self) -> None:
+        utilities = _load_utilities_module()
+
+        self.assertEqual(
+            utilities.normalize_output_path(
+                "faces/source.jpg", utilities.os.path.join("videos", "target.mp4"), None
+            ),
+            utilities.os.path.join("videos", "source-target.mp4"),
+        )
+
+    def test_output_directory_gets_generated_name(self) -> None:
+        utilities = _load_utilities_module()
+
+        with mock.patch.object(utilities.os.path, "isdir", return_value=True):
+            self.assertEqual(
+                utilities.normalize_output_path("source.jpg", "target.mp4", "out"),
+                utilities.os.path.join("out", "source-target.mp4"),
+            )
+
+    def test_output_file_is_kept(self) -> None:
+        utilities = _load_utilities_module()
+
+        self.assertEqual(
+            utilities.normalize_output_path("source.jpg", "target.mp4", "result.mp4"),
+            "result.mp4",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

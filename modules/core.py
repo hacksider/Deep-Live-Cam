@@ -123,6 +123,9 @@ def parse_args() -> None:
         print('\033[33mArgument --gpu-threads is deprecated. Use --execution-threads instead.\033[0m')
         modules.globals.execution_threads = args.gpu_threads_deprecated
 
+    if modules.globals.headless and not (modules.globals.source_path and modules.globals.target_path):
+        program.error('CLI mode needs both -s/--source and -t/--target')
+
 
 def encode_execution_providers(execution_providers: List[str]) -> List[str]:
     return [execution_provider.replace('ExecutionProvider', '').lower() for execution_provider in execution_providers]
