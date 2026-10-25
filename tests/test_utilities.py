@@ -97,10 +97,11 @@ class NormalizeOutputPathTests(unittest.TestCase):
     def test_output_file_is_kept(self) -> None:
         utilities = _load_utilities_module()
 
-        self.assertEqual(
-            utilities.normalize_output_path("source.jpg", "target.mp4", "result.mp4"),
-            "result.mp4",
-        )
+        with mock.patch.object(utilities.os.path, "isdir", return_value=False):
+            self.assertEqual(
+                utilities.normalize_output_path("source.jpg", "target.mp4", "result.mp4"),
+                "result.mp4",
+            )
 
 
 if __name__ == "__main__":
