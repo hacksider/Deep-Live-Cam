@@ -1,6 +1,12 @@
 import numpy as np
-from sklearn.cluster import KMeans
 from typing import Any
+
+try:
+    from sklearn.cluster import KMeans
+    _HAS_SKLEARN = True
+except Exception:
+    _HAS_SKLEARN = False
+    from scipy.cluster.vq import kmeans2
 
 
 def find_cluster_centroids(embeddings, max_k=10) -> Any:
@@ -10,26 +16,38 @@ def find_cluster_centroids(embeddings, max_k=10) -> Any:
     if max_k < 1:
         raise ValueError("max_k must be at least 1")
 
+    embeddings = np.asarray(embeddings, dtype=np.float32)
     max_k = min(max_k, n_samples)
     if max_k == 1:
-        kmeans = KMeans(n_clusters=1, random_state=0)
-        kmeans.fit(embeddings)
-        return kmeans.cluster_centers_
+        if _HAS_SKLEARN:
+            kmeans = KMeans(n_clusters=1, random_state=0)
+            kmeans.fit(embeddings)
+            return kmeans.cluster_centers_
+        else:
+            return np.mean(embeddings, axis=0, keepdims=True)
 
     inertia = []
     cluster_centroids = []
-    K = range(1, max_k+1)
+    K = range(1, max_k + 1)
 
     for k in K:
-        kmeans = KMeans(n_clusters=k, random_state=0)
-        kmeans.fit(embeddings)
-        inertia.append(kmeans.inertia_)
-        cluster_centroids.append({"k": k, "centroids": kmeans.cluster_centers_})
+        if _HAS_SKLEARN:
+            kmeans = KMeans(n_clusters=k, random_state=0)
+            kmeans.fit(embeddings)
+            inertia.append(kmeans.inertia_)
+            cluster_centroids.append({"k": k, "centroids": kmeans.cluster_centers_})
+        else:
+            centroids, labels = kmeans2(embeddings, k, minit='points')
+            # Calculate inertia: sum of squared distances to closest centroid
+            cur_inertia = float(np.sum((embeddings - centroids[labels]) ** 2))
+            inertia.append(cur_inertia)
+            cluster_centroids.append({"k": k, "centroids": centroids})
 
-    diffs = [inertia[i] - inertia[i+1] for i in range(len(inertia)-1)]
+    diffs = [inertia[i] - inertia[i + 1] for i in range(len(inertia) - 1)]
     optimal_centroids = cluster_centroids[diffs.index(max(diffs)) + 1]['centroids']
 
     return optimal_centroids
+
 
 def find_closest_centroid(centroids: list, normed_face_embedding) -> list:
     try:

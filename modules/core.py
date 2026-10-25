@@ -56,6 +56,7 @@ def parse_args() -> None:
     program.add_argument('-l', '--lang', help='Ui language', default="en")
     program.add_argument('--live-mirror', help='The live camera display as you see it in the front-facing camera frame', dest='live_mirror', action='store_true', default=False)
     program.add_argument('--live-resizable', help='The live camera frame is resizable', dest='live_resizable', action='store_true', default=False)
+    program.add_argument('--virtual-camera', help='Output live stream to virtual camera device', dest='virtual_camera', action='store_true', default=True)
     program.add_argument('--max-memory', help='maximum amount of RAM in GB', dest='max_memory', type=int, default=suggest_max_memory())
     program.add_argument('--execution-provider', help='execution provider', dest='execution_provider', default=[suggest_default_execution_provider()], choices=suggest_execution_providers(), nargs='+')
     program.add_argument('--execution-threads', help='number of execution threads', dest='execution_threads', type=int, default=None)
@@ -74,7 +75,7 @@ def parse_args() -> None:
     modules.globals.target_path = args.target_path
     modules.globals.output_path = normalize_output_path(modules.globals.source_path, modules.globals.target_path, args.output_path)
     modules.globals.frame_processors = args.frame_processor
-    modules.globals.headless = args.source_path or args.target_path or args.output_path
+    modules.globals.headless = bool(args.target_path and (args.source_path or args.map_faces))
     modules.globals.keep_fps = args.keep_fps
     modules.globals.keep_audio = args.keep_audio
     modules.globals.keep_frames = args.keep_frames
@@ -86,6 +87,7 @@ def parse_args() -> None:
     modules.globals.video_quality = args.video_quality
     modules.globals.live_mirror = args.live_mirror
     modules.globals.live_resizable = args.live_resizable
+    modules.globals.virtual_camera = args.virtual_camera
     modules.globals.max_memory = args.max_memory
     modules.globals.execution_providers = decode_execution_providers(args.execution_provider)
     modules.globals.execution_threads = args.execution_threads

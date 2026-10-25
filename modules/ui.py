@@ -33,6 +33,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import (
+    QFrame,
     QApplication,
     QCheckBox,
     QComboBox,
@@ -85,8 +86,8 @@ import json
 
 # ─── constants ────────────────────────────────────────────────────────────
 
-ROOT_HEIGHT = 820
-ROOT_WIDTH = 640
+ROOT_HEIGHT = 890
+ROOT_WIDTH = 660
 
 PREVIEW_MAX_HEIGHT = 700
 PREVIEW_MAX_WIDTH = 1200
@@ -162,7 +163,8 @@ QComboBox QAbstractItemView {
 
 QCheckBox {
     spacing: 8px;
-    padding: 4px 0;
+    padding: 2px 0;
+    min-height: 22px;
 }
 QCheckBox::indicator {
     width: 36px; height: 18px;
@@ -327,6 +329,7 @@ def save_switch_states():
         "live_resizable": modules.globals.live_resizable,
         "fp_ui": modules.globals.fp_ui,
         "show_fps": modules.globals.show_fps,
+        "virtual_camera": modules.globals.virtual_camera,
         "mouth_mask": modules.globals.mouth_mask,
         "show_mouth_mask_box": modules.globals.show_mouth_mask_box,
         "mouth_mask_size": modules.globals.mouth_mask_size,
@@ -356,6 +359,7 @@ def load_switch_states():
         modules.globals.live_resizable = state.get("live_resizable", False)
         modules.globals.fp_ui = state.get("fp_ui", {"face_enhancer": False})
         modules.globals.show_fps = state.get("show_fps", False)
+        modules.globals.virtual_camera = state.get("virtual_camera", True)
         # Mouth mask always starts disabled (slider at 0) on launch,
         # regardless of the persisted value — enable it explicitly each session.
         modules.globals.mouth_mask_size = 0.0
@@ -504,11 +508,18 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(ROOT_WIDTH, ROOT_HEIGHT)
         self.resize(ROOT_WIDTH, ROOT_HEIGHT)
 
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
         root = QWidget()
-        self.setCentralWidget(root)
+        scroll.setWidget(root)
+        self.setCentralWidget(scroll)
+
         layout = QVBoxLayout(root)
         layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(12)
+        layout.setSpacing(8)
 
         # Source/Target row
         layout.addLayout(self._build_image_row())
@@ -547,6 +558,9 @@ class MainWindow(QMainWindow):
         # Source column
         src_col = QVBoxLayout()
         self.source_label = _make_image_drop(_("Source face"), (200, 200))
+        if modules.globals.source_path and is_image(modules.globals.source_path):
+            self.source_label.setPixmap(render_image_preview(modules.globals.source_path, (200, 200)))
+            self.source_label.setText("")
         src_col.addWidget(self.source_label, alignment=Qt.AlignmentFlag.AlignCenter)
         src_row = QHBoxLayout()
         self.btn_select_source = QPushButton(_("Select a face"))
@@ -579,6 +593,9 @@ class MainWindow(QMainWindow):
         # Target column
         tgt_col = QVBoxLayout()
         self.target_label = _make_image_drop(_("Target"), (200, 200))
+        if modules.globals.target_path and is_image(modules.globals.target_path):
+            self.target_label.setPixmap(render_image_preview(modules.globals.target_path, (200, 200)))
+            self.target_label.setText("")
         tgt_col.addWidget(self.target_label, alignment=Qt.AlignmentFlag.AlignCenter)
         self.btn_select_target = QPushButton(_("Select a target"))
         self.btn_select_target.setToolTip(
@@ -624,6 +641,8 @@ class MainWindow(QMainWindow):
                                  "Fix blue/green color cast from some webcams")
         self.sw_show_fps = make("show_fps", "Show FPS",
                                 "Display frames-per-second counter on the live preview")
+        self.sw_vcam = make("virtual_camera", "Virtual Cam",
+                            "Broadcast swapped video to virtual webcam device")
 
         # Map faces is special — closes mapper when toggled off.
         self.sw_map_faces = _Switch(_("Map faces"), modules.globals.map_faces,
@@ -636,13 +655,16 @@ class MainWindow(QMainWindow):
             self.sw_keep_frames, self.sw_many_faces,
             self.sw_map_faces, self.sw_show_fps,
             self.sw_poisson, self.sw_color_fix,
+            self.sw_vcam,
         ]
         for i, w in enumerate(items):
             grid.addWidget(w, i // 2, i % 2)
 
+        next_row = (len(items) + 1) // 2
+
         # Face enhancer dropdown
         enhancer_label = QLabel(_("Face Enhancer:"))
-        grid.addWidget(enhancer_label, len(items) // 2, 0)
+        grid.addWidget(enhancer_label, next_row, 0)
 
         self.cb_enhancer = QComboBox()
         self.cb_enhancer.addItems(["None", "GFPGAN", "GPEN-512", "GPEN-256"])
@@ -656,7 +678,7 @@ class MainWindow(QMainWindow):
         self.cb_enhancer.setCurrentText(initial)
         self.cb_enhancer.currentTextChanged.connect(self._on_enhancer_change)
         self.cb_enhancer.setToolTip(_("Select a face enhancement model (None = no enhancement)"))
-        grid.addWidget(self.cb_enhancer, len(items) // 2, 1)
+        grid.addWidget(self.cb_enhancer, next_row, 1)
 
         return card
 
@@ -1027,7 +1049,7 @@ class MainWindow(QMainWindow):
         if path:
             modules.globals.output_path = path
             _RECENT_OUTPUT_DIR = os.path.dirname(path)
-            self._start_cb()
+            threading.Thread(target=self._start_cb, daemon=True).start()
 
     def _on_toggle_preview(self) -> None:
         if _PREVIEW is None:
@@ -1187,11 +1209,16 @@ class _ProcessingWorker(QThread):
         det_count = 0
         cached_target_face = None
         cached_many_faces = None
-        det_interval = max(1, round(self._fps * 0.08))
+        det_interval = max(2, round(self._fps * 0.15))
 
         while not self._stop.is_set():
             try:
                 frame = self._cq.get(timeout=0.05)
+                while not self._cq.empty():
+                    try:
+                        frame = self._cq.get_nowait()
+                    except queue.Empty:
+                        break
             except queue.Empty:
                 continue
 
@@ -1227,7 +1254,7 @@ class _ProcessingWorker(QThread):
                         source_image = get_one_face(source_frame)
 
                 det_count += 1
-                if det_count % det_interval == 0:
+                if det_count % det_interval == 0 or (cached_target_face is None and cached_many_faces is None):
                     if modules.globals.many_faces:
                         cached_target_face = None
                         cached_many_faces = detect_many_faces_fast(temp_frame)
@@ -1310,6 +1337,10 @@ class _ProcessingWorker(QThread):
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2,
                 )
 
+            if modules.globals.virtual_camera:
+                from modules import virtual_cam
+                virtual_cam.send(temp_frame)
+
             try:
                 self._pq.put_nowait(temp_frame)
             except queue.Full:
@@ -1358,6 +1389,10 @@ class WebcamPreviewWindow(QWidget):
         self._processing_worker = _ProcessingWorker(
             self._capture_queue, self._processed_queue, self._stop_event, camera_fps
         )
+        if modules.globals.virtual_camera:
+            from modules import virtual_cam
+            virtual_cam.start(self._cap.actual_width, self._cap.actual_height, camera_fps)
+
         self._capture_worker.start()
         self._processing_worker.start()
 
@@ -1375,6 +1410,7 @@ class WebcamPreviewWindow(QWidget):
             bgr_frame = self._processed_queue.get_nowait()
         except queue.Empty:
             return
+
         bgr_frame = fit_image_to_size(bgr_frame, self.width(), self.height())
         self._image_label.setPixmap(_bgr_to_qpixmap(bgr_frame))
 
@@ -1396,6 +1432,10 @@ class WebcamPreviewWindow(QWidget):
         # the stop flag between bounded operations (a camera read, a 50ms queue
         # get, one inference), so waiting terminates; a first-time model load
         # is simply slow, which is what the grace period absorbs quietly.
+        if modules.globals.virtual_camera:
+            from modules import virtual_cam
+            virtual_cam.stop()
+
         for name in ("_capture_worker", "_processing_worker"):
             worker = getattr(self, name, None)
             if worker is None:

@@ -11,10 +11,10 @@ os.environ["PATH"] = project_root + os.pathsep + os.environ.get("PATH", "")
 # find cuDNN/cublas. Python 3.8+ ignores PATH for extension-module native deps —
 # os.add_dll_directory() is required. Also keep PATH for child processes/ffmpeg.
 if sys.platform == "win32":
+    _candidate_dirs = []
     _site_packages = os.path.join(sys.prefix, "Lib", "site-packages")
     _venv_site_packages = os.path.join(project_root, "venv", "Lib", "site-packages")
     for _sp in (_site_packages, _venv_site_packages):
-        _candidate_dirs = []
         _torch_lib = os.path.join(_sp, "torch", "lib")
         if os.path.isdir(_torch_lib):
             _candidate_dirs.append(_torch_lib)
@@ -24,7 +24,17 @@ if sys.platform == "win32":
                 _bin_dir = os.path.join(_nvidia_dir, _pkg, "bin")
                 if os.path.isdir(_bin_dir):
                     _candidate_dirs.append(_bin_dir)
-        for _d in _candidate_dirs:
+
+    cuda_path = os.environ.get("CUDA_PATH")
+    if cuda_path:
+        _candidate_dirs.append(os.path.join(cuda_path, "bin"))
+
+    _local_cuda_libs = os.path.join(project_root, "cuda_libs")
+    if os.path.isdir(_local_cuda_libs):
+        _candidate_dirs.append(_local_cuda_libs)
+
+    for _d in _candidate_dirs:
+        if os.path.isdir(_d) and _d not in os.environ.get("PATH", ""):
             os.environ["PATH"] = _d + os.pathsep + os.environ["PATH"]
             try:
                 os.add_dll_directory(_d)
