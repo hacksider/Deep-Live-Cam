@@ -162,7 +162,7 @@ def postprocess_face(output: np.ndarray) -> np.ndarray:
     return img
 
 
-def _get_face_affine(face: Any, input_size: int):
+def _get_face_affine(face: Any, input_size: int, *, strict: bool = False):
     """Compute affine transform to align a face to GPEN input space.
 
     Returns (M, inv_M) — forward and inverse affine matrices.
@@ -188,12 +188,27 @@ def _get_face_affine(face: Any, input_size: int):
             lm106[61],  # right mouth
         ], dtype=np.float32)
 
-    if landmarks is None or len(landmarks) < 5:
+    if landmarks is None:
+        if strict:
+            raise ValueError("Target face has no landmarks for enhancement.")
+        return None, None
+    if strict and (
+        landmarks.shape != (5, 2) or not np.isfinite(landmarks).all()
+    ):
+        raise ValueError("Target face has invalid five-point landmarks.")
+    if len(landmarks) < 5:
         return None, None
 
     M = cv2.estimateAffinePartial2D(landmarks, template, method=cv2.LMEDS)[0]
     if M is None:
+        if strict:
+            raise ValueError("Unable to align target face for enhancement.")
         return None, None
+    if strict and (
+        not np.isfinite(M).all()
+        or abs(np.linalg.det(M[:, :2])) <= np.finfo(np.float32).eps
+    ):
+        raise ValueError("Target face alignment is degenerate.")
     inv_M = cv2.invertAffineTransform(M)
     return M, inv_M
 
@@ -203,9 +218,11 @@ def enhance_face_onnx(
     face: Any,
     session: onnxruntime.InferenceSession,
     input_size: int,
+    *,
+    strict: bool = False,
 ) -> np.ndarray:
     """Enhance a single face in the frame using an ONNX face restoration model."""
-    M, inv_M = _get_face_affine(face, input_size)
+    M, inv_M = _get_face_affine(face, input_size, strict=strict)
     if M is None:
         return frame
 

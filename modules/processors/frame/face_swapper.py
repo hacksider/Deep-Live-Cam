@@ -510,17 +510,23 @@ def _fast_paste_back(target_img: Frame, bgr_fake: np.ndarray, aimg: np.ndarray, 
     return target_img
 
 
-def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
+def swap_face(source_face: Face, target_face: Face, temp_frame: Frame, *, strict: bool = False) -> Frame:
     """Optimized face swapping with better memory management and performance."""
     face_swapper = get_face_swapper()
     if face_swapper is None:
         update_status("Face swapper model not loaded or failed to load. Skipping swap.", NAME)
+        if strict:
+            raise RuntimeError("Face swapper model could not be loaded.")
         return temp_frame
 
     # Safety check for faces
     if source_face is None or target_face is None:
+        if strict:
+            raise ValueError("Source and target faces are required for a swap.")
         return temp_frame
     if not hasattr(source_face, 'normed_embedding') or source_face.normed_embedding is None:
+        if strict:
+            raise ValueError("Source face has no recognition embedding.")
         return temp_frame
 
     # _fast_paste_back writes in-place on the GPU path.  Only copy when
@@ -558,10 +564,21 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
             )
 
         if bgr_fake is None:
+            if strict:
+                raise RuntimeError("Face swapper returned no image.")
             return original_frame
 
         if not isinstance(bgr_fake, np.ndarray):
+            if strict:
+                raise RuntimeError("Face swapper returned an invalid image.")
             return original_frame
+        if strict and (
+            not isinstance(M, np.ndarray)
+            or M.shape != (2, 3)
+            or not np.isfinite(M).all()
+            or abs(np.linalg.det(M[:, :2])) <= np.finfo(np.float32).eps
+        ):
+            raise ValueError("Face swapper returned an invalid alignment.")
 
         # Pass a dummy aimg with correct shape — _fast_paste_back only uses aimg.shape
         # to create the white mask. Avoids redundant norm_crop2 (~0.6ms).
@@ -572,6 +589,8 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
 
     except Exception as e:
         print(f"Error during face swap: {e}")
+        if strict:
+            raise
         return original_frame
 
     # --- Post-swap Processing (Masking, Opacity, etc.) ---
@@ -743,7 +762,7 @@ def apply_post_processing(current_frame: Frame, swapped_face_bboxes: List[np.nda
 # --- END: Helper function for interpolation and sharpening ---
 
 
-def process_frame(source_face: Face, temp_frame: Frame, target_face: Face = None) -> Frame:
+def process_frame(source_face: Face, temp_frame: Frame, target_face: Face = None, *, strict: bool = False) -> Frame:
     """Process a single frame, swapping source_face onto detected target(s).
 
     Args:
@@ -761,18 +780,22 @@ def process_frame(source_face: Face, temp_frame: Frame, target_face: Face = None
 
     if modules.globals.many_faces:
         many_faces = get_many_faces(processed_frame)
+        if strict and not many_faces:
+            raise ValueError("No faces found in target image.")
         if many_faces:
             current_swap_target = processed_frame.copy()
             for face in many_faces:
-                current_swap_target = swap_face(source_face, face, current_swap_target)
+                current_swap_target = swap_face(source_face, face, current_swap_target, strict=strict)
                 if face is not None and hasattr(face, "bbox") and face.bbox is not None:
                     swapped_face_bboxes.append(face.bbox.astype(int))
             processed_frame = current_swap_target
     else:
         if target_face is None:
             target_face = get_one_face(processed_frame)
+        if strict and target_face is None:
+            raise ValueError("No face found in target image.")
         if target_face:
-            processed_frame = swap_face(source_face, target_face, processed_frame)
+            processed_frame = swap_face(source_face, target_face, processed_frame, strict=strict)
             if hasattr(target_face, "bbox") and target_face.bbox is not None:
                 swapped_face_bboxes.append(target_face.bbox.astype(int))
 
@@ -780,7 +803,7 @@ def process_frame(source_face: Face, temp_frame: Frame, target_face: Face = None
     return final_frame
 
 
-def process_frame_v2(temp_frame: Frame, temp_frame_path: str = "") -> Frame:
+def process_frame_v2(temp_frame: Frame, temp_frame_path: str = "", *, strict: bool = False) -> Frame:
     """Handles complex mapping scenarios (map_faces=True) and live streams."""
     if getattr(modules.globals, "opacity", 1.0) == 0:
         # If opacity is 0, no swap happens, so no post-processing needed.
@@ -893,11 +916,14 @@ def process_frame_v2(temp_frame: Frame, temp_frame_path: str = "") -> Frame:
                     source_target_pairs.append((source_face, target_face))
 
 
+    if strict and not source_target_pairs:
+        raise ValueError("No valid source and target face pairs were selected.")
+
     # Perform swaps based on the collected pairs
     current_swap_target = processed_frame.copy() # Apply swaps sequentially
     for source_face, target_face in source_target_pairs:
         if source_face and target_face:
-            current_swap_target = swap_face(source_face, target_face, current_swap_target)
+            current_swap_target = swap_face(source_face, target_face, current_swap_target, strict=strict)
             if target_face is not None and hasattr(target_face, "bbox") and target_face.bbox is not None:
                 swapped_face_bboxes.append(target_face.bbox.astype(int))
     processed_frame = current_swap_target # Assign final result
@@ -1026,8 +1052,8 @@ def process_frames(
         #        update_status(f"Processed frame {i+1}/{total_frames}", NAME)
 
 
-def process_image(source_path: str, target_path: str, output_path: str) -> None:
-    """Processes a single target image."""
+def process_image(source_path: str, target_path: str, output_path: str) -> bool:
+    """Return True only after processing and writing the target succeeded."""
     # --- Reset interpolation state for single image processing ---
     global PREVIOUS_FRAME_RESULT
     PREVIOUS_FRAME_RESULT = None
@@ -1040,51 +1066,63 @@ def process_image(source_path: str, target_path: str, output_path: str) -> None:
         target_frame = imread_unicode(target_path)
         if target_frame is None:
             update_status(f"Error: Could not read target image: {target_path}", NAME)
-            return
+            return False
     except Exception as read_e:
         update_status(f"Error reading target image {target_path}: {read_e}", NAME)
-        return
+        return False
 
     result = None
     try:
         if use_v2:
             if getattr(modules.globals, "many_faces", False):
-                 update_status("Processing image with 'map_faces' and 'many_faces'. Using pre-analysis map.", NAME)
+                update_status(
+                    "Processing image with 'map_faces' and 'many_faces'. Using pre-analysis map.",
+                    NAME,
+                )
             # V2 processes based on global maps, doesn't need source_path here directly
             # Assumes maps are pre-populated. Pass target_path for map lookup.
-            result = process_frame_v2(target_frame, target_path)
+            result = process_frame_v2(target_frame, target_path, strict=True)
 
-        else: # Simple mode
+        else:  # Simple mode
             try:
                 source_img = imread_unicode(source_path)
                 if source_img is None:
-                    update_status(f"Error: Could not read source image: {source_path}", NAME)
-                    return
+                    update_status(
+                        f"Error: Could not read source image: {source_path}", NAME
+                    )
+                    return False
                 source_face = get_one_face(source_img)
                 if not source_face:
-                    update_status(f"Error: No face found in source image: {source_path}", NAME)
-                    return
+                    update_status(
+                        f"Error: No face found in source image: {source_path}", NAME
+                    )
+                    return False
             except Exception as src_e:
-                 update_status(f"Error reading or analyzing source image {source_path}: {src_e}", NAME)
-                 return
+                update_status(
+                    f"Error reading or analyzing source image {source_path}: {src_e}",
+                    NAME,
+                )
+                return False
 
-            result = process_frame(source_face, target_frame)
+            result = process_frame(source_face, target_frame, strict=True)
 
         # Write the result if processing was successful
         if result is not None:
             write_success = imwrite_unicode(output_path, result)
             if write_success:
                 update_status(f"Output image saved to: {output_path}", NAME)
+                return True
             else:
-                update_status(f"Error: Failed to write output image to {output_path}", NAME)
+                update_status(
+                    f"Error: Failed to write output image to {output_path}", NAME
+                )
         else:
             # This case might occur if process_frame/v2 returns None unexpectedly
             update_status("Image processing failed (result was None).", NAME)
 
     except Exception as proc_e:
-         update_status(f"Error during image processing: {proc_e}", NAME)
-         # import traceback
-         # traceback.print_exc()
+        update_status(f"Error during image processing: {proc_e}", NAME)
+    return False
 
 
 def process_video(source_path: str, temp_frame_paths: List[str]) -> None:
