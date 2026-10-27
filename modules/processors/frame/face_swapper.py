@@ -2,11 +2,13 @@ from typing import Any, List, Optional, Tuple
 import cv2
 import insightface
 import logging
+import queue
 import threading
 import numpy as np
 import platform
 import modules.globals
 import modules.processors.frame.core
+from insightface.utils import face_align
 from modules import imread_unicode, imwrite_unicode
 from modules.core import update_status
 from modules.face_analyser import get_one_face, get_many_faces, default_source_face
@@ -523,6 +525,39 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
     if not hasattr(source_face, 'normed_embedding') or source_face.normed_embedding is None:
         return temp_frame
 
+    frame = temp_frame
+    if frame.dtype != np.uint8:
+        frame = np.clip(frame, 0, 255).astype(np.uint8)
+
+    try:
+        if not frame.flags['C_CONTIGUOUS']:
+            frame = np.ascontiguousarray(frame)
+
+        # Use paste_back=False and our optimized paste-back
+        if any("DmlExecutionProvider" in p for p in modules.globals.execution_providers):
+            with modules.globals.dml_lock:
+                bgr_fake, M = face_swapper.get(
+                    frame, target_face, source_face, paste_back=False
+                )
+        else:
+            bgr_fake, M = face_swapper.get(
+                frame, target_face, source_face, paste_back=False
+            )
+    except Exception as e:
+        print(f"Error during face swap: {e}")
+        return temp_frame
+
+    if not isinstance(bgr_fake, np.ndarray):
+        return temp_frame
+    return paste_swapped_face(temp_frame, bgr_fake, M, target_face)
+
+
+def paste_swapped_face(temp_frame: Frame, bgr_fake: np.ndarray, M: np.ndarray, target_face: Face) -> Frame:
+    """Paste the swap model's aligned output back onto ``temp_frame``.
+
+    ``M`` is the alignment of ``target_face`` in ``temp_frame``. The mouth
+    mask, Poisson blend and opacity settings are applied here.
+    """
     # _fast_paste_back writes in-place on the GPU path.  Only copy when
     # mouth_mask or opacity < 1 need an unmodified original.
     opacity = getattr(modules.globals, "opacity", 1.0)
@@ -546,26 +581,9 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
         if not temp_frame.flags['C_CONTIGUOUS']:
             temp_frame = np.ascontiguousarray(temp_frame)
 
-        # Use paste_back=False and our optimized paste-back
-        if any("DmlExecutionProvider" in p for p in modules.globals.execution_providers):
-            with modules.globals.dml_lock:
-                bgr_fake, M = face_swapper.get(
-                    temp_frame, target_face, source_face, paste_back=False
-                )
-        else:
-            bgr_fake, M = face_swapper.get(
-                temp_frame, target_face, source_face, paste_back=False
-            )
-
-        if bgr_fake is None:
-            return original_frame
-
-        if not isinstance(bgr_fake, np.ndarray):
-            return original_frame
-
         # Pass a dummy aimg with correct shape — _fast_paste_back only uses aimg.shape
         # to create the white mask. Avoids redundant norm_crop2 (~0.6ms).
-        _face_size = face_swapper.input_size[0]
+        _face_size = bgr_fake.shape[0]
         _aimg_dummy = np.empty((_face_size, _face_size, 3), dtype=np.uint8)
 
         swapped_frame = _fast_paste_back(temp_frame, bgr_fake, _aimg_dummy, M)
@@ -616,6 +634,161 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
     # Blend the original_frame with the (potentially mouth-masked) swapped_frame
     final_swapped_frame = gpu_add_weighted(original_frame.astype(np.uint8), 1 - opacity, swapped_frame.astype(np.uint8), opacity, 0)
     return final_swapped_frame.astype(np.uint8)
+
+
+class AsyncLiveSwapper:
+    """Run the swap model off the live preview's processing thread.
+
+    ``swap()`` never waits for the model. It hands the current face crop to a
+    background thread, which only ever works on the newest crop, and pastes
+    the most recent model output using the *current* frame's alignment. The
+    preview keeps the camera's frame rate and the face follows the head on
+    every frame, while the face itself (expression, mouth, eyes) refreshes
+    only as fast as the model runs, one inference behind. Meant for hardware
+    where the model is the bottleneck: CPU, Apple Silicon, older GPUs. The
+    live preview uses it for its single-face path only.
+    """
+
+    # Beyond these changes since the previous frame the target is taken to be
+    # a different face (the detector switched people), and the result made for
+    # the previous face is not pasted: eye-center movement, in inter-ocular
+    # distances, and the ratio between the two inter-ocular distances.
+    MAX_TARGET_JUMP = 2.0
+    MAX_TARGET_SCALE = 1.5
+
+    def __init__(self) -> None:
+        self._jobs: queue.Queue = queue.Queue(maxsize=1)
+        self._lock = threading.Lock()
+        # Bumped by clear(); a result from an older generation is dropped.
+        self._generation = 0
+        self._result: Optional[Tuple[Face, np.ndarray]] = None
+        # Eye center and inter-ocular distance of the previous target.
+        self._last_eyes: Optional[Tuple[np.ndarray, float]] = None
+        self._thread = threading.Thread(
+            target=self._run, name="DLC.ASYNC-SWAP", daemon=True
+        )
+        self._thread.start()
+
+    def swap(self, source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
+        """Paste the latest result for ``source_face`` onto ``target_face``.
+
+        Returns ``temp_frame`` unchanged until a first result is ready.
+        """
+        # The model thread loads the model; until it has, frames pass through
+        # rather than this call waiting for it.
+        face_swapper = FACE_SWAPPER
+        if face_swapper is None or source_face is None or target_face is None:
+            return temp_frame
+        if getattr(source_face, "normed_embedding", None) is None:
+            return temp_frame
+        try:
+            kps = np.asarray(target_face.kps, dtype=np.float32)
+            aimg, M = face_align.norm_crop2(temp_frame, kps, face_swapper.input_size[0])
+        except Exception as e:
+            print(f"Error during face swap: {e}")
+            return temp_frame
+
+        if self._is_new_target(kps):
+            self.clear()
+        with self._lock:
+            job = (self._generation, face_swapper, source_face, aimg)
+            result = self._result
+        _put_latest(self._jobs, job)
+
+        # A result made for a previous source image must not be pasted.
+        if result is None or result[0] is not source_face:
+            return temp_frame
+        return paste_swapped_face(temp_frame, result[1], M, target_face)
+
+    def clear(self) -> None:
+        """Forget the current result and any waiting crop, e.g. because the
+        face was lost."""
+        with self._lock:
+            self._generation += 1
+            self._result = None
+        while True:
+            try:
+                self._jobs.get_nowait()
+            except queue.Empty:
+                break
+
+    def close(self) -> None:
+        """Stop the model thread, waiting for an inference in progress."""
+        self.clear()
+        _put_latest(self._jobs, None)
+        self._thread.join()
+
+    def _is_new_target(self, kps: np.ndarray) -> bool:
+        center = kps[:2].mean(axis=0)
+        distance = float(np.linalg.norm(kps[0] - kps[1]))
+        previous = self._last_eyes
+        self._last_eyes = (center, distance)
+        if previous is None or previous[1] <= 0 or distance <= 0:
+            return previous is not None
+        scale = distance / previous[1]
+        return (
+            float(np.linalg.norm(center - previous[0])) > self.MAX_TARGET_JUMP * previous[1]
+            or not 1 / self.MAX_TARGET_SCALE <= scale <= self.MAX_TARGET_SCALE
+        )
+
+    def _run(self) -> None:
+        try:
+            get_face_swapper()
+        except Exception as e:
+            print(f"Error loading face swapper: {e}")
+        while True:
+            job = self._jobs.get()
+            if job is None:
+                return
+            generation, face_swapper, source_face, aimg = job
+            with self._lock:
+                if generation != self._generation:
+                    continue
+            try:
+                bgr_fake = _swap_aligned_face(face_swapper, source_face, aimg)
+            except Exception as e:
+                print(f"Error during face swap: {e}")
+                bgr_fake = None
+            with self._lock:
+                if generation == self._generation:
+                    # After a failed inference show the unswapped frame, as
+                    # swap_face() does, instead of freezing the last result.
+                    self._result = None if bgr_fake is None else (source_face, bgr_fake)
+
+
+def _put_latest(jobs: queue.Queue, job: Any) -> None:
+    """Put ``job`` in the one-slot queue ``jobs``, replacing a waiting one."""
+    while True:
+        try:
+            jobs.put_nowait(job)
+            return
+        except queue.Full:
+            try:
+                jobs.get_nowait()
+            except queue.Empty:
+                pass
+
+
+def _swap_aligned_face(face_swapper: Any, source_face: Face, aimg: np.ndarray) -> np.ndarray:
+    """Run the swap model on an already aligned crop, as INSwapper.get() does."""
+    blob = cv2.dnn.blobFromImage(
+        aimg,
+        1.0 / face_swapper.input_std,
+        face_swapper.input_size,
+        (face_swapper.input_mean,) * 3,
+        swapRB=True,
+    )
+    latent = source_face.normed_embedding.reshape((1, -1))
+    latent = np.dot(latent, face_swapper.emap)
+    latent /= np.linalg.norm(latent)
+    inputs = {face_swapper.input_names[0]: blob, face_swapper.input_names[1]: latent}
+    if any("DmlExecutionProvider" in p for p in modules.globals.execution_providers):
+        with modules.globals.dml_lock:
+            pred = face_swapper.session.run(face_swapper.output_names, inputs)[0]
+    else:
+        pred = face_swapper.session.run(face_swapper.output_names, inputs)[0]
+    bgr_fake = np.clip(255 * pred.transpose((0, 2, 3, 1))[0], 0, 255).astype(np.uint8)
+    return np.ascontiguousarray(bgr_fake[:, :, ::-1])
 
 
 # --- START: Mac M1-M5 Optimized Face Detection ---
