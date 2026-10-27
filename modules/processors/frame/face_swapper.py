@@ -240,7 +240,11 @@ def get_face_swapper() -> Any:
             # older GPUs (e.g. GTX 16xx) where FP16 can produce NaN.
             fp32_path = os.path.join(models_dir, "inswapper_128.onnx")
             fp16_path = os.path.join(models_dir, "inswapper_128_fp16.onnx")
-            use_fp16 = _HAS_TORCH_CUDA and os.path.exists(fp16_path)
+            use_fp16 = os.path.exists(fp16_path) and any(
+                p == "CUDAExecutionProvider" or
+                (isinstance(p, tuple) and p[0] == "CUDAExecutionProvider")
+                for p in modules.globals.execution_providers
+            )
             if use_fp16:
                 model_path = fp16_path
             elif os.path.exists(fp32_path):
@@ -288,7 +292,7 @@ def get_face_swapper() -> Any:
                     providers=providers_config,
                 )
                 # Set up CUDA graph session for faster inference
-                if _HAS_TORCH_CUDA and any(
+                if any(
                     p == "CUDAExecutionProvider" or
                     (isinstance(p, tuple) and p[0] == "CUDAExecutionProvider")
                     for p in providers_config

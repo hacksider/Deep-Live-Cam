@@ -29,3 +29,7 @@ switch_states.json
 install.bat
 /.claude
 *.bat
+
+cuda_libs/
+DeepLiveCam_Modifications.zip
+changes.patch

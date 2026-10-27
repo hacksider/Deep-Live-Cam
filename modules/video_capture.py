@@ -65,11 +65,28 @@ class VideoCapturer:
 
                 for dev_id, backend in capture_methods:
                     try:
-                        self.cap = cv2.VideoCapture(dev_id, backend, open_params)
-                        if self.cap.isOpened():
-                            break
-                        self.cap.release()
+                        if backend == cv2.CAP_DSHOW:
+                            self.cap = cv2.VideoCapture(dev_id, backend, open_params)
+                        elif backend == cv2.CAP_MSMF:
+                            self.cap = cv2.VideoCapture(dev_id, backend)
+                            if self.cap.isOpened():
+                                self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+                                self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+                                self.cap.set(cv2.CAP_PROP_FPS, fps)
+                        else:
+                            self.cap = cv2.VideoCapture(dev_id, backend)
+
+                        if self.cap and self.cap.isOpened():
+                            probe_ok, _ = self.cap.read()
+                            if probe_ok:
+                                break
+                        if self.cap:
+                            self.cap.release()
+                            self.cap = None
                     except Exception:
+                        if self.cap:
+                            self.cap.release()
+                            self.cap = None
                         continue
             elif platform.system() == "Linux":
                 self.cap = cv2.VideoCapture(f"/dev/video{self.device_index}")
