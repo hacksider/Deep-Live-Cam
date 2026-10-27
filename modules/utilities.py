@@ -237,6 +237,11 @@ def normalize_output_path(source_path: str, target_path: str, output_path: str) 
     if source_path and target_path:
         source_name, _ = os.path.splitext(os.path.basename(source_path))
         target_name, target_extension = os.path.splitext(os.path.basename(target_path))
+        if not output_path:
+            # No -o/--output: write next to the target, named like the directory case.
+            return os.path.join(
+                os.path.dirname(target_path), source_name + "-" + target_name + target_extension
+            )
         if os.path.isdir(output_path):
             return os.path.join(
                 output_path, source_name + "-" + target_name + target_extension
