@@ -89,6 +89,9 @@ if sys.platform.startswith("linux"):
                 except OSError:
                     pass
         break
+        
+from download import download_models
+download_models()
 
 from modules import platform_info
 platform_info.print_banner()
