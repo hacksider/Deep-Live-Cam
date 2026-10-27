@@ -9,7 +9,7 @@ MODELS = {
             "https://huggingface.co/hacksider/deep-live-cam/"
             "resolve/main/inswapper_128_fp16.onnx?download=true"
         ),
-        "max_size": 500_000_000,
+        "max_size": 900_000_000,
     },
     "gfpgan-1024.onnx": {
         "url": (
