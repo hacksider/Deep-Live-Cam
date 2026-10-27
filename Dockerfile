@@ -1,3 +1,11 @@
+FROM python:3.12-slim-bookworm
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    QT_QPA_PLATFORM=offscreen
+WORKDIR /app
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     cmake \
@@ -39,3 +47,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libv4l-0 \
     ffmpeg \
     && rm -rf /var/lib/apt/lists/*
+# Copy requirements and install Python packages
+COPY requirements.txt /app/requirements.txt
+RUN python -m pip install --upgrade pip setuptools wheel \
+    && python -m pip install -r /app/requirements.txt
+# Copy application files
+COPY . /app
+# Create models directory
+RUN mkdir -p /app/models
+EXPOSE 7860
+CMD ["python", "run.py"]
