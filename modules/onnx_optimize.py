@@ -25,24 +25,53 @@ would otherwise introduce:
    ``[1]`` and squeeze the added axis on the Gather output.
    (Filed upstream as microsoft/onnxruntime#28180.)
 
-All passes are cached on disk with a ``_coreml`` suffix (plus the input shape
-when one is given, e.g. ``_coreml_1x3x320x320``) so the rewrite cost
-is paid only once per model and shape.
+Rewritten models are stored outside the InsightFace model pack, in the
+installation's ``.cache/onnx`` directory. The cache key includes the source
+contents, input shape, and rewrite revision.
 """
 
 import os
 import platform
+import hashlib
+import json
+import tempfile
+from pathlib import Path
+from typing import Sequence
 
 import numpy as np
 
+from modules.paths import ROOT_DIR
+
 IS_APPLE_SILICON = platform.system() == "Darwin" and platform.machine() == "arm64"
+CACHE_DIR = Path(ROOT_DIR) / ".cache"
+OPTIMIZER_REVISION = 1
+
+
+def model_fingerprint(model_paths: Sequence[str]) -> str:
+    """Identify model contents, including a pack with several ONNX files.
+
+    CoreML's default path hash does not notice updated weights at the same
+    path. Read the actual bytes so replacing a model with preserved file
+    timestamps also invalidates the cache.
+    """
+    if not model_paths:
+        raise ValueError("At least one model path is required for model caching.")
+    members = []
+    for model_path in sorted(model_paths):
+        hasher = hashlib.sha256()
+        with open(model_path, "rb") as handle:
+            while chunk := handle.read(1024 * 1024):
+                hasher.update(chunk)
+        members.append((os.path.basename(model_path), hasher.hexdigest()))
+    payload = json.dumps(members, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
 
 
 def optimize_for_coreml(model_path: str, input_shape: tuple = None) -> str:
     """Return path to a CoreML-optimized ONNX model.
 
-    Applies all applicable optimizations and caches the result next to
-    the original model (``_coreml`` suffix, keyed on ``input_shape``).
+    Applies all applicable optimizations and caches the result outside the
+    model pack, keyed on source contents, ``input_shape``, and rewrite revision.
 
     Args:
         model_path: Path to the original ONNX model.
@@ -55,15 +84,18 @@ def optimize_for_coreml(model_path: str, input_shape: tuple = None) -> str:
     if not IS_APPLE_SILICON:
         return model_path
 
-    base, ext = os.path.splitext(model_path)
-    # Shape/Gather folding bakes input_shape into the graph, so the cache
-    # key must include it — otherwise a model folded at det_size 640 would
-    # be reused after switching to 320/160.
-    shape_tag = "_" + "x".join(str(d) for d in input_shape) if input_shape else ""
-    optimized_path = f"{base}_coreml{shape_tag}{ext}"
-    if os.path.exists(optimized_path):
-        if os.path.getmtime(optimized_path) >= os.path.getmtime(model_path):
-            return optimized_path
+    identity = {
+        "model": model_fingerprint([model_path]),
+        "input_shape": input_shape,
+        "optimizer_revision": OPTIMIZER_REVISION,
+    }
+    cache_key = hashlib.sha256(
+        json.dumps(identity, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    cache_dir = CACHE_DIR / "onnx"
+    optimized_path = str(cache_dir / f"{cache_key}.onnx")
+    if os.path.isfile(optimized_path) and os.path.getsize(optimized_path) > 0:
+        return optimized_path
 
     import onnx
     from onnx import numpy_helper
@@ -95,13 +127,27 @@ def optimize_for_coreml(model_path: str, input_shape: tuple = None) -> str:
     # had a (512, 512) matrix as its last initializer, keep it last.
     _preserve_emap_position(model, numpy_helper)
 
-    onnx.save(model, optimized_path)
+    # InsightFace eagerly creates a session for every *.onnx in its pack,
+    # including duplicates. Keep derivatives here and publish only a complete
+    # file, so interruption cannot leave a cache hit pointing to a partial model.
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        dir=cache_dir, prefix=f".{cache_key}.", suffix=".tmp", delete=False
+    ) as handle:
+        temporary_path = handle.name
+    try:
+        onnx.save(model, temporary_path)
+        os.replace(temporary_path, optimized_path)
+    finally:
+        if os.path.exists(temporary_path):
+            os.unlink(temporary_path)
     return optimized_path
 
 
 # ---------------------------------------------------------------------------
 # Pass 1: Fold Shape → Gather chains into constants
 # ---------------------------------------------------------------------------
+
 
 def _fold_shape_gather(model, input_shape) -> bool:
     """Replace dynamic Shape→Gather chains with constants when input size is known.
@@ -218,6 +264,7 @@ def _fold_shape_gather(model, input_shape) -> bool:
 # Once the ORT floor is >= 1.26.0, MLProgram handles Pad(mode=reflect) natively
 # via MIL tensor_operation.pad and this entire pass can be deleted.
 # ---------------------------------------------------------------------------
+
 
 def _decompose_reflect_pad(model) -> bool:
     """Rewrite Pad(reflect) as Slice+Concat sequences CoreML can handle."""
@@ -357,6 +404,7 @@ def _decompose_reflect_pad(model) -> bool:
 # Pass 3: Decompose Split → Slice pairs
 # ---------------------------------------------------------------------------
 
+
 def _decompose_split(model) -> bool:
     """Rewrite Split(axis=1) as Slice pairs that CoreML can handle.
 
@@ -440,6 +488,7 @@ def _decompose_split(model) -> bool:
 # slices) don't split the CoreML subgraph. Once the upstream fix ships
 # and the ORT floor is raised, delete this pass.
 # ---------------------------------------------------------------------------
+
 
 def _rewrite_scalar_gather(model) -> bool:
     """Rewrite Gather(data, scalar_idx) as Gather(data, [scalar_idx]) + Squeeze.
@@ -536,6 +585,7 @@ def _rewrite_scalar_gather(model) -> bool:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _preserve_emap_position(model, numpy_helper):
     """Keep the insightface emap (512×512 matrix) as the last initializer."""

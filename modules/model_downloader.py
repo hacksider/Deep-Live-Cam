@@ -8,7 +8,7 @@ from typing import Dict, List, Optional
 import certifi
 from tqdm import tqdm
 
-from modules.paths import MODELS_DIR
+from modules.paths import MODELS_DIR, ROOT_DIR
 
 HF_REPO_ID = "hacksider/deep-live-cam"
 HF_RESOLVE_BASE = f"https://huggingface.co/{HF_REPO_ID}/resolve/main/"
@@ -25,6 +25,17 @@ MODEL_SIZES: Dict[str, int] = {
     "buffalo_l/buffalo_l/genderage.onnx": 1322532,
     "buffalo_l/buffalo_l/w600k_r50.onnx": 174383860,
 }
+
+# FaceAnalysis appends "models/<pack>" to its root. Keep its root and the
+# downloader destination aligned, so no models or optimized ONNX files land
+# in the user's home directory. These are the modules the app actually uses.
+INSIGHTFACE_ROOT = ROOT_DIR
+INSIGHTFACE_MODEL_FILES: Dict[str, str] = {
+    "detection": "det_10g.onnx",
+    "recognition": "w600k_r50.onnx",
+    "landmark_2d_106": "2d106det.onnx",
+}
+
 
 _LOCKS: Dict[str, threading.Lock] = {}
 _LOCKS_GUARD = threading.Lock()
@@ -164,11 +175,16 @@ def ensure_any(names: List[str]) -> Optional[str]:
 
 
 def ensure_insightface_pack(name: str = "buffalo_l") -> bool:
-    members = [n for n in MODEL_SIZES if n.startswith(f"{name}/")]
-    if not members:
+    required_files = set(INSIGHTFACE_MODEL_FILES.values())
+    members = [
+        member for member in MODEL_SIZES
+        if member.startswith(f"{name}/")
+        and os.path.basename(member) in required_files
+    ]
+    if {os.path.basename(member) for member in members} != required_files:
         return False
 
-    dest_dir = os.path.join(os.path.expanduser("~"), ".insightface", "models", name)
+    dest_dir = os.path.join(MODELS_DIR, name)
     if all(is_present(member, dest_dir) for member in members):
         return True
 
@@ -178,5 +194,5 @@ def ensure_insightface_pack(name: str = "buffalo_l") -> bool:
         if ensure_model(member, quiet=True, dest_dir=dest_dir) is None:
             ok = False
     if not ok:
-        print(f"[DLC.MODELS] Could not pre-fill '{name}'; insightface will retry.")
+        print(f"[DLC.MODELS] Could not prepare required models for '{name}'.")
     return ok
