@@ -16,7 +16,7 @@ MODELS = {
             "https://huggingface.co/hacksider/deep-live-cam/"
             "resolve/main/gfpgan-1024.onnx?download=true"
         ),
-        "max_size": 300_000_000,
+        "max_size": 1000_000_000,
     },
 }
 CHUNK_SIZE = 1024 * 1024
