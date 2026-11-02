@@ -235,9 +235,11 @@ def get_face_swapper() -> Any:
 
     with THREAD_LOCK:
         if FACE_SWAPPER is None:
-            # Prefer FP16 on GPUs with Tensor Cores (Turing+) — half the
-            # memory bandwidth, faster inference.  Fall back to FP32 for
-            # older GPUs (e.g. GTX 16xx) where FP16 can produce NaN.
+            # Prefer FP16 whenever a CUDA device is present — half the memory
+            # bandwidth, faster inference.  Note there is no GPU capability
+            # check: on older GPUs (e.g. GTX 16xx) FP16 can produce NaN, so
+            # those users have to keep only the FP32 model in the models
+            # folder.
             fp32_path = os.path.join(models_dir, "inswapper_128.onnx")
             fp16_path = os.path.join(models_dir, "inswapper_128_fp16.onnx")
             use_fp16 = _HAS_TORCH_CUDA and os.path.exists(fp16_path)

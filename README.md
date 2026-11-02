@@ -159,7 +159,7 @@ cd Deep-Live-Cam
 1. [gfpgan-1024.onnx](https://huggingface.co/hacksider/deep-live-cam/resolve/main/gfpgan-1024.onnx)
 2. [inswapper\_128.onnx](https://huggingface.co/hacksider/deep-live-cam/resolve/main/inswapper_128.onnx)
 
-The application also accepts `inswapper_128_fp16.onnx` when an FP16-capable GPU is available.
+The application also accepts `inswapper_128_fp16.onnx`. It is selected automatically whenever a CUDA device is detected (GPU FP16 support is not checked), so if FP16 inference produces NaNs on your GPU, remove `inswapper_128_fp16.onnx` from the models folder to fall back to the FP32 model.
 
 Place these files in the "**models**" folder.
 
