@@ -24,6 +24,7 @@ MODEL_SIZES: Dict[str, int] = {
     "buffalo_l/buffalo_l/det_10g.onnx": 16923827,
     "buffalo_l/buffalo_l/genderage.onnx": 1322532,
     "buffalo_l/buffalo_l/w600k_r50.onnx": 174383860,
+    "modnet_photographic_portrait_matting.onnx": 25888640,
 }
 
 _LOCKS: Dict[str, threading.Lock] = {}

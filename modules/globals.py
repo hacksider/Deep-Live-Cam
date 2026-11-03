@@ -22,6 +22,7 @@ simple_map: Dict[str, Any] = {}             # Stores simplified map (embeddings/
 source_path: str | None = None
 target_path: str | None = None
 output_path: str | None = None
+background_path: str | None = None
 
 # Processing Options
 frame_processors: List[str] = []
@@ -53,7 +54,12 @@ headless: bool | None = None         # Run without UI?
 log_level: str = "error"             # Logging level (e.g., 'debug', 'info', 'warning', 'error')
 
 # Face Processor UI Toggles (Example)
-fp_ui: Dict[str, bool] = {"face_enhancer": False, "face_enhancer_gpen256": False, "face_enhancer_gpen512": False}
+fp_ui: Dict[str, bool] = {"face_enhancer": False, "face_enhancer_gpen256": False, "face_enhancer_gpen512": False, "background_swapper": False}
+
+# Background Swapper Specific Options
+background_swapper_enabled: bool = False
+background_blur: float = 0.0
+background_feather: float = 0.0
 
 # Face Swapper Specific Options
 face_swapper_enabled: bool = True # General toggle for the swapper processor
