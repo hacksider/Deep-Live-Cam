@@ -124,8 +124,8 @@ def swap_background(temp_frame: Frame) -> Frame:
         return temp_frame
 
     bg_path = getattr(modules.globals, "background_path", None)
-    blur_amount = float(getattr(modules.globals, "background_blur", 0.0))
-    feather_amount = float(getattr(modules.globals, "background_feather", 0.0))
+    blur_amount = max(0.0, min(100.0, float(getattr(modules.globals, "background_blur", 0.0))))
+    feather_amount = max(0.0, min(50.0, float(getattr(modules.globals, "background_feather", 0.0))))
 
     has_custom_bg = bg_path is not None and os.path.isfile(bg_path)
     if not has_custom_bg and blur_amount <= 0:

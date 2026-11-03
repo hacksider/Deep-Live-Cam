@@ -76,7 +76,7 @@ def parse_args() -> None:
     modules.globals.target_path = args.target_path
     modules.globals.output_path = normalize_output_path(modules.globals.source_path, modules.globals.target_path, args.output_path)
     modules.globals.background_path = args.background_path
-    modules.globals.background_blur = args.background_blur
+    modules.globals.background_blur = max(0.0, min(100.0, args.background_blur)) if args.background_blur is not None else 0.0
     modules.globals.frame_processors = args.frame_processor
     modules.globals.headless = args.source_path or args.target_path or args.output_path
     modules.globals.keep_fps = args.keep_fps
