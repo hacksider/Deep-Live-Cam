@@ -332,6 +332,9 @@ def save_switch_states():
         "mouth_mask_size": modules.globals.mouth_mask_size,
         "capture_resolution": list(modules.globals.capture_resolution),
         "det_size": modules.globals.det_size,
+        "background_path": modules.globals.background_path,
+        "background_blur": modules.globals.background_blur,
+        "background_feather": modules.globals.background_feather,
     }
     try:
         with open("switch_states.json", "w") as f:
@@ -356,6 +359,9 @@ def load_switch_states():
         modules.globals.live_resizable = state.get("live_resizable", False)
         modules.globals.fp_ui = state.get("fp_ui", {"face_enhancer": False})
         modules.globals.show_fps = state.get("show_fps", False)
+        modules.globals.background_path = state.get("background_path", None)
+        modules.globals.background_blur = state.get("background_blur", 0.0)
+        modules.globals.background_feather = state.get("background_feather", 0.0)
         # Mouth mask always starts disabled (slider at 0) on launch,
         # regardless of the persisted value — enable it explicitly each session.
         modules.globals.mouth_mask_size = 0.0
@@ -518,6 +524,9 @@ class MainWindow(QMainWindow):
 
         # Sliders card
         layout.addWidget(self._build_sliders_card())
+
+        # Background Swap card
+        layout.addWidget(self._build_background_card())
 
         # Action buttons
         layout.addLayout(self._build_action_row())
@@ -699,6 +708,64 @@ class MainWindow(QMainWindow):
             _("0 = use swapped mouth, 100 = expose original mouth to chin area")
         )
         grid.addWidget(self.s_mouth, 2, 1)
+        return card
+
+    # ── background card ──────────────────────────────────────────────────
+
+    def _build_background_card(self) -> QGroupBox:
+        card = QGroupBox(_("Background Swap"))
+        grid = QGridLayout(card)
+        grid.setHorizontalSpacing(12)
+        grid.setVerticalSpacing(10)
+
+        # Toggle Switch
+        self.sw_bg_swap = _make_switch(_("Enable Background Swap"),
+                                       modules.globals.fp_ui.get("background_swapper", False),
+                                       _("Enable replacing or blurring the background"))
+        self.sw_bg_swap.toggled.connect(self._on_bg_swap_toggled)
+        grid.addWidget(self.sw_bg_swap, 0, 0, 1, 2)
+
+        # Select & Clear buttons
+        bg_btn_row = QHBoxLayout()
+        self.btn_select_bg = QPushButton(_("Select Background"))
+        self.btn_select_bg.setToolTip(_("Choose an image to replace the background"))
+        self.btn_select_bg.clicked.connect(self._on_select_background)
+
+        self.btn_clear_bg = QPushButton(_("Clear"))
+        self.btn_clear_bg.setObjectName("secondary")
+        self.btn_clear_bg.setToolTip(_("Remove the selected background image"))
+        self.btn_clear_bg.clicked.connect(self._on_clear_background)
+
+        bg_btn_row.addWidget(self.btn_select_bg)
+        bg_btn_row.addWidget(self.btn_clear_bg)
+        grid.addLayout(bg_btn_row, 1, 0, 1, 2)
+
+        # Background preview / file label
+        self.bg_label = QLabel(_("No background selected"))
+        self.bg_label.setStyleSheet("color: #888; font-size: 11px;")
+        if modules.globals.background_path and os.path.isfile(modules.globals.background_path):
+            self.bg_label.setText(os.path.basename(modules.globals.background_path))
+        grid.addWidget(self.bg_label, 2, 0, 1, 2)
+
+        def slider(min_v, max_v, default, denom, on_change):
+            s = QSlider(Qt.Orientation.Horizontal)
+            s.setRange(int(min_v * denom), int(max_v * denom))
+            s.setValue(int(default * denom))
+            s.valueChanged.connect(lambda iv: on_change(iv / denom))
+            return s
+
+        # Background Blur Slider
+        grid.addWidget(QLabel(_("Background Blur")), 3, 0)
+        self.s_bg_blur = slider(0.0, 100.0, modules.globals.background_blur, 1, self._on_bg_blur_change)
+        self.s_bg_blur.setToolTip(_("Blur amount for the background (0 = sharp, 100 = strong blur)"))
+        grid.addWidget(self.s_bg_blur, 3, 1)
+
+        # Background Feather Slider
+        grid.addWidget(QLabel(_("Edge Feather")), 4, 0)
+        self.s_bg_feather = slider(0.0, 25.0, modules.globals.background_feather, 1, self._on_bg_feather_change)
+        self.s_bg_feather.setToolTip(_("Smooth out the segmentation edges between person and background"))
+        grid.addWidget(self.s_bg_feather, 4, 1)
+
         return card
 
     # ── action row ───────────────────────────────────────────────────────
@@ -988,6 +1055,36 @@ class MainWindow(QMainWindow):
 
     def _on_mouth_mask_released(self) -> None:
         modules.globals.show_mouth_mask_box = False
+
+    def _on_bg_swap_toggled(self, value: bool) -> None:
+        _update_tumbler("background_swapper", value)
+        modules.globals.background_swapper_enabled = value
+        save_switch_states()
+
+    def _on_select_background(self) -> None:
+        global _RECENT_DIRECTORY
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            _("Select Background Image"),
+            _RECENT_DIRECTORY or "",
+            _IMAGE_FILE_FILTER,
+        )
+        if path:
+            _RECENT_DIRECTORY = os.path.dirname(path)
+            modules.globals.background_path = path
+            self.bg_label.setText(os.path.basename(path))
+            update_status(f"Selected background: {os.path.basename(path)}")
+
+    def _on_clear_background(self) -> None:
+        modules.globals.background_path = None
+        self.bg_label.setText(_("No background selected"))
+        update_status("Cleared background image.")
+
+    def _on_bg_blur_change(self, value: float) -> None:
+        modules.globals.background_blur = value
+
+    def _on_bg_feather_change(self, value: float) -> None:
+        modules.globals.background_feather = value
 
     def _on_start(self) -> None:
         if _MAPPER is not None and _MAPPER.isVisible():
@@ -1282,6 +1379,9 @@ class _ProcessingWorker(QThread):
                             ):
                                 swapped_bboxes.append(cached_target_face.bbox.astype(int))
                         temp_frame = fp.apply_post_processing(temp_frame, swapped_bboxes)
+                    elif fp.NAME == "DLC.BACKGROUND-SWAPPER":
+                        if modules.globals.fp_ui.get("background_swapper", False):
+                            temp_frame = fp.process_frame(source_image, temp_frame)
                     else:
                         temp_frame = fp.process_frame(source_image, temp_frame)
             else:
@@ -1293,6 +1393,9 @@ class _ProcessingWorker(QThread):
                     elif fp.NAME in ("DLC.FACE-ENHANCER-GPEN256", "DLC.FACE-ENHANCER-GPEN512"):
                         fp_key = fp.NAME.split(".")[-1].lower().replace("-", "_")
                         if modules.globals.fp_ui.get(fp_key, False):
+                            temp_frame = fp.process_frame_v2(temp_frame)
+                    elif fp.NAME == "DLC.BACKGROUND-SWAPPER":
+                        if modules.globals.fp_ui.get("background_swapper", False):
                             temp_frame = fp.process_frame_v2(temp_frame)
                     else:
                         temp_frame = fp.process_frame_v2(temp_frame)
