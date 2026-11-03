@@ -34,6 +34,7 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
+    QButtonGroup,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -44,12 +45,15 @@ from PySide6.QtWidgets import (
     QLabel,
     QMainWindow,
     QPushButton,
+    QRadioButton,
     QScrollArea,
     QSizePolicy,
     QSlider,
     QVBoxLayout,
     QWidget,
 )
+import shutil
+import modules.paths
 
 import modules.globals
 import modules.metadata
@@ -563,6 +567,14 @@ class MainWindow(QMainWindow):
             _("Choose the source face image to swap onto the target")
         )
         self.btn_select_source.clicked.connect(self._on_select_source)
+
+        self.btn_source_library = QPushButton(_("Library"))
+        self.btn_source_library.setObjectName("secondary")
+        self.btn_source_library.setToolTip(
+            _("Choose a face image from the in-app library")
+        )
+        self.btn_source_library.clicked.connect(self._on_open_source_library)
+
         self.btn_random_face = QPushButton("🔄")
         self.btn_random_face.setObjectName("secondary")
         self.btn_random_face.setFixedWidth(40)
@@ -571,6 +583,7 @@ class MainWindow(QMainWindow):
         )
         self.btn_random_face.clicked.connect(self._on_random_face)
         src_row.addWidget(self.btn_select_source)
+        src_row.addWidget(self.btn_source_library)
         src_row.addWidget(self.btn_random_face)
         src_col.addLayout(src_row)
 
@@ -719,9 +732,9 @@ class MainWindow(QMainWindow):
         grid.setVerticalSpacing(10)
 
         # Toggle Switch
-        self.sw_bg_swap = _make_switch(_("Enable Background Swap"),
-                                       modules.globals.fp_ui.get("background_swapper", False),
-                                       _("Enable replacing or blurring the background"))
+        self.sw_bg_swap = _Switch(_("Enable Background Swap"),
+                                  modules.globals.fp_ui.get("background_swapper", False),
+                                  _("Enable replacing or blurring the background"))
         self.sw_bg_swap.toggled.connect(self._on_bg_swap_toggled)
         grid.addWidget(self.sw_bg_swap, 0, 0, 1, 2)
 
@@ -731,12 +744,18 @@ class MainWindow(QMainWindow):
         self.btn_select_bg.setToolTip(_("Choose an image to replace the background"))
         self.btn_select_bg.clicked.connect(self._on_select_background)
 
+        self.btn_bg_library = QPushButton(_("Library"))
+        self.btn_bg_library.setObjectName("secondary")
+        self.btn_bg_library.setToolTip(_("Choose a background image from the in-app library"))
+        self.btn_bg_library.clicked.connect(self._on_open_bg_library)
+
         self.btn_clear_bg = QPushButton(_("Clear"))
         self.btn_clear_bg.setObjectName("secondary")
         self.btn_clear_bg.setToolTip(_("Remove the selected background image"))
         self.btn_clear_bg.clicked.connect(self._on_clear_background)
 
         bg_btn_row.addWidget(self.btn_select_bg)
+        bg_btn_row.addWidget(self.btn_bg_library)
         bg_btn_row.addWidget(self.btn_clear_bg)
         grid.addLayout(bg_btn_row, 1, 0, 1, 2)
 
@@ -912,17 +931,9 @@ class MainWindow(QMainWindow):
             _RECENT_SOURCE_DIR or "",
             _IMAGE_FILE_FILTER,
         )
-        if path and is_image(path):
-            modules.globals.source_path = path
-            _RECENT_SOURCE_DIR = os.path.dirname(path)
-            self.source_label.setPixmap(render_image_preview(path, (200, 200)))
-            self.source_label.setText("")
-        elif not path:
+        if not path:
             return
-        else:
-            modules.globals.source_path = None
-            self.source_label.clear()
-            self.source_label.setText(_("Source face"))
+        self._set_source_path(path)
 
     def _on_select_target(self) -> None:
         global _RECENT_TARGET_DIR
@@ -1069,15 +1080,60 @@ class MainWindow(QMainWindow):
             _RECENT_DIRECTORY or "",
             _IMAGE_FILE_FILTER,
         )
-        if path:
+        if not path:
+            return
+        self._set_background_path(path)
+
+    def _on_open_source_library(self) -> None:
+        if _PREVIEW is not None:
+            _PREVIEW.hide()
+        dlg = ImageLibraryDialog(
+            parent=self,
+            initial_category=ImageLibraryDialog.CATEGORY_SOURCES,
+            on_source_selected=self._set_source_path,
+            on_background_selected=self._set_background_path,
+        )
+        dlg.exec()
+
+    def _on_open_bg_library(self) -> None:
+        dlg = ImageLibraryDialog(
+            parent=self,
+            initial_category=ImageLibraryDialog.CATEGORY_BACKGROUNDS,
+            on_source_selected=self._set_source_path,
+            on_background_selected=self._set_background_path,
+        )
+        dlg.exec()
+
+    def _set_source_path(self, path: str) -> None:
+        global _RECENT_SOURCE_DIR
+        if path and is_image(path):
+            modules.globals.source_path = path
+            _RECENT_SOURCE_DIR = os.path.dirname(path)
+            self.source_label.setPixmap(render_image_preview(path, (200, 200)))
+            self.source_label.setText("")
+            update_status(f"Selected source face: {os.path.basename(path)}")
+        else:
+            modules.globals.source_path = None
+            self.source_label.clear()
+            self.source_label.setText(_("Source face"))
+
+    def _set_background_path(self, path: str) -> None:
+        global _RECENT_DIRECTORY
+        if path and is_image(path):
             _RECENT_DIRECTORY = os.path.dirname(path)
             modules.globals.background_path = path
             self.bg_label.setText(os.path.basename(path))
+            save_switch_states()
             update_status(f"Selected background: {os.path.basename(path)}")
+        else:
+            modules.globals.background_path = None
+            self.bg_label.setText(_("No background selected"))
+            save_switch_states()
 
     def _on_clear_background(self) -> None:
         modules.globals.background_path = None
         self.bg_label.setText(_("No background selected"))
+        save_switch_states()
         update_status("Cleared background image.")
 
     def _on_bg_blur_change(self, value: float) -> None:
@@ -1529,6 +1585,321 @@ def _open_webcam_preview(camera_index: int) -> None:
         _WEBCAM_PREVIEW.close()
     _WEBCAM_PREVIEW = WebcamPreviewWindow(camera_index)
     _WEBCAM_PREVIEW.show()
+
+
+# ─── image library dialog ────────────────────────────────────────────────
+
+
+class _LibraryItemWidget(QWidget):
+    """Clickable thumbnail item representing an image in the library."""
+
+    clicked = Signal(str)
+    doubleClicked = Signal(str)
+
+    def __init__(self, image_path: str, size: int = 110):
+        super().__init__()
+        self.image_path = image_path
+        self._selected = False
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(4)
+
+        self._thumb_label = QLabel()
+        self._thumb_label.setFixedSize(size, size)
+        self._thumb_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        try:
+            pixmap = render_image_preview(image_path, (size, size))
+            self._thumb_label.setPixmap(pixmap)
+        except Exception:
+            self._thumb_label.setText("Error")
+
+        filename = os.path.basename(image_path)
+        if len(filename) > 16:
+            display_name = filename[:13] + "..."
+        else:
+            display_name = filename
+
+        self._text_label = QLabel(display_name)
+        self._text_label.setToolTip(filename)
+        self._text_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._text_label.setStyleSheet("font-size: 10px; color: #ccc;")
+
+        layout.addWidget(self._thumb_label, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self._text_label, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        self._update_style()
+
+    def set_selected(self, selected: bool) -> None:
+        self._selected = selected
+        self._update_style()
+
+    def _update_style(self) -> None:
+        if self._selected:
+            self.setStyleSheet(
+                "QWidget { background-color: #2d6cdf; border-radius: 6px; } QLabel { color: white; }"
+            )
+        else:
+            self.setStyleSheet(
+                "QWidget { background-color: #2d2d2d; border-radius: 6px; } QWidget:hover { background-color: #383838; }"
+            )
+
+    def mousePressEvent(self, event) -> None:
+        self.clicked.emit(self.image_path)
+        super().mousePressEvent(event)
+
+    def mouseDoubleClickEvent(self, event) -> None:
+        self.doubleClicked.emit(self.image_path)
+        super().mouseDoubleClickEvent(event)
+
+
+class ImageLibraryDialog(QDialog):
+    """In-app library dialog to browse and select source and background images."""
+
+    CATEGORY_SOURCES = "sources"
+    CATEGORY_BACKGROUNDS = "backgrounds"
+
+    def __init__(
+        self,
+        parent: Optional[QWidget] = None,
+        initial_category: str = CATEGORY_SOURCES,
+        on_source_selected: Optional[Callable[[str], None]] = None,
+        on_background_selected: Optional[Callable[[str], None]] = None,
+    ):
+        super().__init__(parent or _MAIN)
+        modules.paths.ensure_library_dirs()
+        self.setWindowTitle(_("Images Library"))
+        self.resize(720, 600)
+        self.setMinimumSize(540, 420)
+
+        self._category = initial_category
+        self._on_source_selected = on_source_selected
+        self._on_background_selected = on_background_selected
+        self._selected_path: Optional[str] = None
+        self._items: List[_LibraryItemWidget] = []
+
+        self._build_ui()
+        self._refresh_library()
+
+    def _build_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setSpacing(10)
+        layout.setContentsMargins(14, 14, 14, 14)
+
+        # Top row: Category switch + Management actions
+        top_row = QHBoxLayout()
+
+        self._btn_sources = QPushButton(_("Source Faces"))
+        self._btn_sources.setCheckable(True)
+        self._btn_sources.setChecked(self._category == self.CATEGORY_SOURCES)
+        self._btn_sources.clicked.connect(lambda: self._set_category(self.CATEGORY_SOURCES))
+
+        self._btn_backgrounds = QPushButton(_("Backgrounds"))
+        self._btn_backgrounds.setCheckable(True)
+        self._btn_backgrounds.setChecked(self._category == self.CATEGORY_BACKGROUNDS)
+        self._btn_backgrounds.clicked.connect(lambda: self._set_category(self.CATEGORY_BACKGROUNDS))
+
+        self._cat_group = QButtonGroup(self)
+        self._cat_group.addButton(self._btn_sources)
+        self._cat_group.addButton(self._btn_backgrounds)
+
+        top_row.addWidget(self._btn_sources)
+        top_row.addWidget(self._btn_backgrounds)
+        top_row.addStretch(1)
+
+        btn_add = QPushButton(_("Import Image(s)..."))
+        btn_add.setObjectName("secondary")
+        btn_add.setToolTip(_("Import images into the current library category"))
+        btn_add.clicked.connect(self._on_import_images)
+
+        btn_open_folder = QPushButton(_("Open Folder"))
+        btn_open_folder.setObjectName("secondary")
+        btn_open_folder.setToolTip(_("Open the current library directory in file manager"))
+        btn_open_folder.clicked.connect(self._on_open_folder)
+
+        btn_refresh = QPushButton("🔄")
+        btn_refresh.setObjectName("secondary")
+        btn_refresh.setFixedWidth(36)
+        btn_refresh.setToolTip(_("Refresh image list"))
+        btn_refresh.clicked.connect(self._refresh_library)
+
+        top_row.addWidget(btn_add)
+        top_row.addWidget(btn_open_folder)
+        top_row.addWidget(btn_refresh)
+        layout.addLayout(top_row)
+
+        # Scroll area with grid
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setObjectName("libraryScroll")
+        self._scroll_widget = QWidget()
+        self._grid = QGridLayout(self._scroll_widget)
+        self._grid.setSpacing(10)
+        self._grid.setContentsMargins(8, 8, 8, 8)
+        self._scroll.setWidget(self._scroll_widget)
+        layout.addWidget(self._scroll, 1)
+
+        # Selection info label
+        self._info_label = QLabel(_("Select an image from the library"))
+        self._info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._info_label.setStyleSheet("color: #aaa; font-size: 11px;")
+        layout.addWidget(self._info_label)
+
+        # Bottom row: Selection action buttons
+        bottom_row = QHBoxLayout()
+
+        self.btn_use_source = QPushButton(_("Use as Source Face"))
+        self.btn_use_source.clicked.connect(self._on_apply_as_source)
+        self.btn_use_source.setEnabled(False)
+
+        self.btn_use_bg = QPushButton(_("Use as Background"))
+        self.btn_use_bg.clicked.connect(self._on_apply_as_bg)
+        self.btn_use_bg.setEnabled(False)
+
+        btn_cancel = QPushButton(_("Close"))
+        btn_cancel.setObjectName("secondary")
+        btn_cancel.clicked.connect(self.reject)
+
+        bottom_row.addWidget(self.btn_use_source)
+        bottom_row.addWidget(self.btn_use_bg)
+        bottom_row.addStretch(1)
+        bottom_row.addWidget(btn_cancel)
+        layout.addLayout(bottom_row)
+
+    def _get_current_dir(self) -> str:
+        if self._category == self.CATEGORY_BACKGROUNDS:
+            return modules.paths.LIBRARY_BACKGROUNDS_DIR
+        return modules.paths.LIBRARY_SOURCES_DIR
+
+    def _set_category(self, cat: str) -> None:
+        self._category = cat
+        self._btn_sources.setChecked(cat == self.CATEGORY_SOURCES)
+        self._btn_backgrounds.setChecked(cat == self.CATEGORY_BACKGROUNDS)
+        self._selected_path = None
+        self._update_buttons()
+        self._refresh_library()
+
+    def _update_buttons(self) -> None:
+        has_sel = self._selected_path is not None and os.path.isfile(self._selected_path)
+        self.btn_use_source.setEnabled(has_sel)
+        self.btn_use_bg.setEnabled(has_sel)
+        if has_sel:
+            self._info_label.setText(os.path.basename(self._selected_path))
+        else:
+            self._info_label.setText(_("Select an image from the library"))
+
+    def _on_item_clicked(self, path: str) -> None:
+        self._selected_path = path
+        for item in self._items:
+            item.set_selected(item.image_path == path)
+        self._update_buttons()
+
+    def _on_item_double_clicked(self, path: str) -> None:
+        self._selected_path = path
+        if self._category == self.CATEGORY_BACKGROUNDS:
+            self._on_apply_as_bg()
+        else:
+            self._on_apply_as_source()
+
+    def _on_apply_as_source(self) -> None:
+        if not self._selected_path or not os.path.isfile(self._selected_path):
+            return
+        if self._on_source_selected:
+            self._on_source_selected(self._selected_path)
+        self.accept()
+
+    def _on_apply_as_bg(self) -> None:
+        if not self._selected_path or not os.path.isfile(self._selected_path):
+            return
+        if self._on_background_selected:
+            self._on_background_selected(self._selected_path)
+        self.accept()
+
+    def _on_import_images(self) -> None:
+        files, _ = QFileDialog.getOpenFileNames(
+            self,
+            _("Import Images into Library"),
+            "",
+            _IMAGE_FILE_FILTER,
+        )
+        if not files:
+            return
+        target_dir = self._get_current_dir()
+        os.makedirs(target_dir, exist_ok=True)
+        imported_count = 0
+        failed_count = 0
+        for f in files:
+            if is_image(f):
+                dest = os.path.join(target_dir, os.path.basename(f))
+                try:
+                    shutil.copy2(f, dest)
+                    imported_count += 1
+                except Exception as e:
+                    print(f"Error copying {f}: {e}")
+                    failed_count += 1
+            else:
+                failed_count += 1
+        if imported_count > 0 and failed_count == 0:
+            update_status(f"Imported {imported_count} image(s) into library.")
+            self._refresh_library()
+        elif imported_count > 0 and failed_count > 0:
+            update_status(f"Imported {imported_count} image(s), {failed_count} failed to import.")
+            self._refresh_library()
+        else:
+            update_status(f"Failed to import images into library ({failed_count} failed).")
+
+    def _on_open_folder(self) -> None:
+        folder = self._get_current_dir()
+        os.makedirs(folder, exist_ok=True)
+        import subprocess
+        if platform.system() == "Windows":
+            os.startfile(folder)
+        elif platform.system() == "Darwin":
+            subprocess.Popen(["open", folder])
+        else:
+            subprocess.Popen(["xdg-open", folder])
+
+    def _refresh_library(self) -> None:
+        # Clear grid
+        for i in reversed(range(self._grid.count())):
+            item = self._grid.itemAt(i)
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(None)
+                widget.deleteLater()
+        self._items.clear()
+
+        directory = self._get_current_dir()
+        os.makedirs(directory, exist_ok=True)
+        filenames = sorted(os.listdir(directory))
+        valid_files = [
+            os.path.join(directory, f)
+            for f in filenames
+            if has_image_extension(f) and os.path.isfile(os.path.join(directory, f))
+        ]
+
+        if not valid_files:
+            empty_label = QLabel(
+                _("No images in this folder yet.\nUse 'Import Image(s)...' or place images into:\n")
+                + directory
+            )
+            empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            empty_label.setStyleSheet("color: #777; font-style: italic; padding: 40px;")
+            self._grid.addWidget(empty_label, 0, 0, 1, 4)
+            self._update_buttons()
+            return
+
+        columns = max(1, (self.width() - 40) // 130)
+        for idx, file_path in enumerate(valid_files):
+            item_widget = _LibraryItemWidget(file_path, size=105)
+            item_widget.clicked.connect(self._on_item_clicked)
+            item_widget.doubleClicked.connect(self._on_item_double_clicked)
+            if file_path == self._selected_path:
+                item_widget.set_selected(True)
+            self._items.append(item_widget)
+            self._grid.addWidget(item_widget, idx // columns, idx % columns)
+
+        self._update_buttons()
 
 
 # ─── mapper dialogs (image/video + live) ────────────────────────────────
