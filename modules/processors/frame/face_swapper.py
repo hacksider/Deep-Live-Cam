@@ -1,5 +1,6 @@
 from typing import Any, List, Optional, Tuple
 import cv2
+import gc
 import insightface
 import logging
 import threading
@@ -29,6 +30,11 @@ NAME = "DLC.FACE-SWAPPER"
 # --- START: Added for Interpolation ---
 PREVIOUS_FRAME_RESULT = None # Stores the final processed frame from the previous step
 # --- END: Added for Interpolation ---
+
+# Tracks total processed frames across all process_frames() calls so CUDA
+# memory can be flushed periodically without touching the loop structure.
+_cuda_frame_counter = 0
+_CUDA_GC_INTERVAL = 50  # flush VRAM every N frames (#1868)
 
 # --- Poisson blend (ported from deep-live-cam-gumroad-edition) ---
 # Root-cause fix for the "wobble": the blend mask is NOT built from the
@@ -498,6 +504,10 @@ def _fast_paste_back(target_img: Frame, bgr_fake: np.ndarray, aimg: np.ndarray, 
         tgt_t = torch.from_numpy(target_crop).float().cuda()
         blended = (mask_t * fake_t + (1.0 - mask_t) * tgt_t).to(torch.uint8).cpu().numpy()
         target_img[y1p:y2p, x1p:x2p] = blended
+        # Explicitly release CUDA tensors so VRAM is freed before Python GC runs.
+        # Without this, tensors accumulate over hundreds of frames and exhaust
+        # VRAM, triggering CUBLAS_STATUS_NOT_INITIALIZED on long videos (#1868).
+        del mask_t, fake_t, tgt_t, blended
     else:
         # Fused uint8 blend via cv2 SIMD — no float32 round-trip.
         # Measured ~7-8× faster than the old numpy float32 path on a 1000×1000 crop.
@@ -1017,6 +1027,14 @@ def process_frames(
         del temp_frame
         if result_frame is not None:
             del result_frame
+
+        # Periodically flush CUDA allocator and Python GC to prevent VRAM
+        # exhaustion on long videos when _HAS_TORCH_CUDA is True (#1868).
+        global _cuda_frame_counter
+        _cuda_frame_counter += 1
+        if _HAS_TORCH_CUDA and _cuda_frame_counter % _CUDA_GC_INTERVAL == 0:
+            gc.collect()
+            torch.cuda.empty_cache()
 
         # Update progress bar
         if progress:
