@@ -1225,11 +1225,17 @@ class _ProcessingWorker(QThread):
                 temp_frame = gpu_flip(temp_frame, 1)
 
             if not modules.globals.map_faces:
-                if (
-                    modules.globals.source_path
-                    and modules.globals.source_path != last_source_path
-                ):
-                    source_frame = imread_unicode(modules.globals.source_path)
+                source_path = modules.globals.source_path
+                if not source_path:
+                    # Clearing the selection also invalidates cached and
+                    # in-flight swaps before processing another frame.
+                    source_image = None
+                    last_source_path = None
+                    reported_source_error = None
+                    if async_swapper is not None:
+                        async_swapper.clear()
+                elif source_path != last_source_path:
+                    source_frame = imread_unicode(source_path)
                     if source_frame is None:
                         # Clear the cached path along with the image. It keeps
                         # a source that is only transiently unreadable (still
@@ -1241,13 +1247,13 @@ class _ProcessingWorker(QThread):
                         # path so it cannot flood the status line.
                         source_image = None
                         last_source_path = None
-                        if reported_source_error != modules.globals.source_path:
-                            reported_source_error = modules.globals.source_path
+                        if reported_source_error != source_path:
+                            reported_source_error = source_path
                             update_status(
-                                f"Could not read source image: {modules.globals.source_path}"
+                                f"Could not read source image: {source_path}"
                             )
                     else:
-                        last_source_path = modules.globals.source_path
+                        last_source_path = source_path
                         reported_source_error = None
                         source_image = get_one_face(source_frame)
 

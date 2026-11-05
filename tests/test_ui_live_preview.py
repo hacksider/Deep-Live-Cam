@@ -164,6 +164,77 @@ class SourceReloadTest(unittest.TestCase):
     """Picking an unreadable source must not disable swapping for a source
     that does work: A -> unreadable B -> A has to reload A."""
 
+    def test_clearing_source_stops_swaps_and_same_path_reloads(self):
+        for async_enabled in (False, True):
+            with self.subTest(async_enabled=async_enabled):
+                sources = []
+                loaded = []
+                calls = []
+
+                def load_source(_frame):
+                    source = object()
+                    loaded.append(source)
+                    return source
+
+                def record_swap(source, _target, frame):
+                    sources.append(source)
+                    return frame
+
+                class _Async:
+                    swap = staticmethod(record_swap)
+
+                    def clear(self):
+                        calls.append("clear")
+
+                    def close(self):
+                        calls.append("close")
+
+                class _Swapper:
+                    NAME = "DLC.FACE-SWAPPER"
+                    AsyncLiveSwapper = _Async
+                    swap_face = staticmethod(record_swap)
+
+                    @staticmethod
+                    def apply_post_processing(frame, _bboxes):
+                        return frame
+
+                capture_q = queue.Queue(maxsize=2)
+                processed_q = queue.Queue(maxsize=2)
+                stop = threading.Event()
+
+                def feed():
+                    capture_q.put(_frame(), timeout=5)
+                    processed_q.get(timeout=5)
+
+                with patch.multiple(
+                    modules.globals, map_faces=False, many_faces=False,
+                    mouth_mask=False, source_path="A", live_async_swap=async_enabled,
+                ), patch.object(ui, "imread_unicode", lambda *_a, **_kw: _frame()), \
+                     patch.object(ui, "get_one_face", load_source), \
+                     patch.object(ui, "get_frame_processors_modules", lambda *_: [_Swapper]), \
+                     patch.object(ui, "detect_one_face_fast", lambda *_: object()):
+                    worker = ui._ProcessingWorker(capture_q, processed_q, stop, 10.0)
+                    worker.start()
+                    try:
+                        feed()
+                        self.assertIs(sources[-1], loaded[0])
+
+                        modules.globals.source_path = None
+                        feed()
+                        feed()
+                        self.assertEqual(sources[-2:], [None, None])
+                        if async_enabled:
+                            self.assertIn("clear", calls)
+
+                        modules.globals.source_path = "A"
+                        feed()
+                        self.assertEqual(len(loaded), 2)
+                        self.assertIs(sources[-1], loaded[1])
+                        self.assertIsNot(loaded[0], loaded[1])
+                    finally:
+                        stop.set()
+                        worker.wait(5000)
+
     def test_switching_back_to_a_working_source_reloads_it(self):
         reads = []
         lock = threading.Lock()
