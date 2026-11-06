@@ -330,6 +330,7 @@ def save_switch_states():
         "mouth_mask": modules.globals.mouth_mask,
         "show_mouth_mask_box": modules.globals.show_mouth_mask_box,
         "mouth_mask_size": modules.globals.mouth_mask_size,
+        "hand_occlusion": modules.globals.hand_occlusion,
         "capture_resolution": list(modules.globals.capture_resolution),
         "det_size": modules.globals.det_size,
     }
@@ -361,6 +362,7 @@ def load_switch_states():
         modules.globals.mouth_mask_size = 0.0
         modules.globals.mouth_mask = False
         modules.globals.show_mouth_mask_box = False
+        modules.globals.hand_occlusion = state.get("hand_occlusion", False)
         # Validate persisted camera settings before trusting them — a hand-
         # edited/corrupt file shouldn't push a bad size into cv2/insightface.
         res = state.get("capture_resolution")
@@ -622,6 +624,8 @@ class MainWindow(QMainWindow):
                                "Blend face edges smoothly using Poisson blending")
         self.sw_color_fix = make("color_correction", "Fix Blueish Cam",
                                  "Fix blue/green color cast from some webcams")
+        self.sw_hand_occlusion = make("hand_occlusion", "Hand Occlusion",
+                                      "Prevent swapped face from showing on hands over the face")
         self.sw_show_fps = make("show_fps", "Show FPS",
                                 "Display frames-per-second counter on the live preview")
 
@@ -636,13 +640,15 @@ class MainWindow(QMainWindow):
             self.sw_keep_frames, self.sw_many_faces,
             self.sw_map_faces, self.sw_show_fps,
             self.sw_poisson, self.sw_color_fix,
+            self.sw_hand_occlusion,
         ]
         for i, w in enumerate(items):
             grid.addWidget(w, i // 2, i % 2)
 
         # Face enhancer dropdown
+        enhancer_row = (len(items) + 1) // 2
         enhancer_label = QLabel(_("Face Enhancer:"))
-        grid.addWidget(enhancer_label, len(items) // 2, 0)
+        grid.addWidget(enhancer_label, enhancer_row, 0)
 
         self.cb_enhancer = QComboBox()
         self.cb_enhancer.addItems(["None", "GFPGAN", "GPEN-512", "GPEN-256"])
@@ -656,7 +662,7 @@ class MainWindow(QMainWindow):
         self.cb_enhancer.setCurrentText(initial)
         self.cb_enhancer.currentTextChanged.connect(self._on_enhancer_change)
         self.cb_enhancer.setToolTip(_("Select a face enhancement model (None = no enhancement)"))
-        grid.addWidget(self.cb_enhancer, len(items) // 2, 1)
+        grid.addWidget(self.cb_enhancer, enhancer_row, 1)
 
         return card
 
@@ -1165,8 +1171,76 @@ class _CaptureWorker(QThread):
                     pass
 
 
+class _DetectionWorker(threading.Thread):
+    """Runs face detection, landmarks, and hand detection in the background."""
+
+    def __init__(self, stop_event: threading.Event):
+        super().__init__(daemon=True)
+        self._stop = stop_event
+        self._lock = threading.Lock()
+        self._frame: Optional[np.ndarray] = None
+        self._frame_seq = 0
+        self._last_seq = -1
+        self._target_face = None
+        self._many_faces = None
+        self._hand_mask = None
+
+    def submit_frame(self, frame: np.ndarray) -> None:
+        with self._lock:
+            self._frame = frame
+            self._frame_seq += 1
+
+    def get_cached(self):
+        with self._lock:
+            return self._target_face, self._many_faces, self._hand_mask
+
+    def run(self) -> None:
+        from modules.hand_occlusion import detect_hand_mask
+
+        while not self._stop.is_set():
+            with self._lock:
+                frame = self._frame
+                seq = self._frame_seq
+            if frame is None or seq == self._last_seq:
+                time.sleep(0.003)
+                continue
+            self._last_seq = seq
+
+            if modules.globals.many_faces:
+                many = detect_many_faces_fast(frame)
+                faces = many
+                with self._lock:
+                    self._target_face = None
+                    self._many_faces = many
+            else:
+                target = detect_one_face_fast(frame)
+                faces = [target] if target else None
+                with self._lock:
+                    self._target_face = target
+                    self._many_faces = None
+
+            if modules.globals.mouth_mask and faces:
+                ensure_landmarks(frame, faces)
+                with self._lock:
+                    if self._many_faces is not None:
+                        self._many_faces = faces
+                    elif faces:
+                        self._target_face = faces[0]
+
+            hand_mask = None
+            if getattr(modules.globals, "hand_occlusion", False):
+                hand_mask = detect_hand_mask(frame)
+            with self._lock:
+                self._hand_mask = hand_mask
+
+
 class _ProcessingWorker(QThread):
-    """Pulls raw frames, runs detect/swap/enhance, pushes processed frames."""
+    """Pulls raw frames, runs swap/enhance, pushes processed frames.
+
+    Face detection runs in a separate _DetectionWorker thread so every
+    frame takes roughly the same time (just the swap) — no periodic
+    stutter from expensive detection frames.
+    """
 
     def __init__(self, capture_queue, processed_queue, stop_event, camera_fps: float):
         super().__init__()
@@ -1184,10 +1258,9 @@ class _ProcessingWorker(QThread):
         fps_update_interval = 0.5
         frame_count = 0
         fps = 0.0
-        det_count = 0
-        cached_target_face = None
-        cached_many_faces = None
-        det_interval = max(1, round(self._fps * 0.08))
+
+        det_worker = _DetectionWorker(self._stop)
+        det_worker.start()
 
         while not self._stop.is_set():
             try:
@@ -1206,14 +1279,6 @@ class _ProcessingWorker(QThread):
                 ):
                     source_frame = imread_unicode(modules.globals.source_path)
                     if source_frame is None:
-                        # Clear the cached path along with the image. It keeps
-                        # a source that is only transiently unreadable (still
-                        # being written, on a volume that just went away) from
-                        # being given up on, and it keeps a bad pick from
-                        # sticking: with the path cached, A -> unreadable B -> A
-                        # never reloaded A, so swapping stayed off. Retrying
-                        # every frame is cheap; the message is reported once per
-                        # path so it cannot flood the status line.
                         source_image = None
                         last_source_path = None
                         if reported_source_error != modules.globals.source_path:
@@ -1226,26 +1291,14 @@ class _ProcessingWorker(QThread):
                         reported_source_error = None
                         source_image = get_one_face(source_frame)
 
-                det_count += 1
-                if det_count % det_interval == 0:
-                    if modules.globals.many_faces:
-                        cached_target_face = None
-                        cached_many_faces = detect_many_faces_fast(temp_frame)
-                    else:
-                        cached_target_face = detect_one_face_fast(temp_frame)
-                        cached_many_faces = None
+                det_worker.submit_frame(temp_frame)
+                cached_target_face, cached_many_faces, cached_hand_mask = det_worker.get_cached()
 
                 cached_faces = None
                 if cached_many_faces:
                     cached_faces = cached_many_faces
                 elif cached_target_face is not None:
                     cached_faces = [cached_target_face]
-
-                # Fast detection skips the 2d106 landmark model, but the mouth
-                # mask needs it. Attach landmarks on demand (computed once per
-                # detection cycle — the helper no-ops if already present).
-                if modules.globals.mouth_mask and cached_faces:
-                    ensure_landmarks(temp_frame, cached_faces)
 
                 for fp in frame_processors:
                     if fp.NAME == "DLC.FACE-ENHANCER":
@@ -1268,13 +1321,13 @@ class _ProcessingWorker(QThread):
                         if modules.globals.many_faces and cached_many_faces:
                             result = temp_frame.copy()
                             for t_face in cached_many_faces:
-                                result = fp.swap_face(source_image, t_face, result)
+                                result = fp.swap_face(source_image, t_face, result, hand_mask=cached_hand_mask)
                                 if hasattr(t_face, "bbox") and t_face.bbox is not None:
                                     swapped_bboxes.append(t_face.bbox.astype(int))
                             temp_frame = result
                         elif cached_target_face is not None:
                             temp_frame = fp.swap_face(
-                                source_image, cached_target_face, temp_frame
+                                source_image, cached_target_face, temp_frame, hand_mask=cached_hand_mask
                             )
                             if (
                                 hasattr(cached_target_face, "bbox")

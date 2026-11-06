@@ -68,6 +68,9 @@ mask_down_size: float = 0.1        # Expansion factor for lower lip mask (relati
 mask_size: float = 1.0             # Expansion factor for upper lip mask (relative)
 mouth_mask_size: float = 0.0       # Mouth mask size (0-100; 0=off, 100=mouth to chin)
 
+# Hand Occlusion
+hand_occlusion: bool = False       # Restore original hand pixels over swapped face
+
 # --- START: Added for Frame Interpolation ---
 enable_interpolation: bool = True # Toggle temporal smoothing
 interpolation_weight: float = 0  # Blend weight for current frame (0.0-1.0). Lower=smoother.

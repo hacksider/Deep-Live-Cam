@@ -17,6 +17,7 @@ from modules.utilities import (
 )
 from modules.cluster_analysis import find_closest_centroid
 from modules.gpu_processing import gpu_gaussian_blur, gpu_sharpen, gpu_add_weighted, gpu_resize
+from modules.hand_occlusion import detect_hand_mask, apply_hand_occlusion
 from modules.platform_info import OPENVINO_PROVIDER_CONFIG
 import os
 from collections import deque
@@ -510,7 +511,7 @@ def _fast_paste_back(target_img: Frame, bgr_fake: np.ndarray, aimg: np.ndarray, 
     return target_img
 
 
-def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
+def swap_face(source_face: Face, target_face: Face, temp_frame: Frame, hand_mask=None) -> Frame:
     """Optimized face swapping with better memory management and performance."""
     face_swapper = get_face_swapper()
     if face_swapper is None:
@@ -529,11 +530,15 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
     opacity = max(0.0, min(1.0, opacity))
     mouth_mask_enabled = getattr(modules.globals, "mouth_mask", False)
     poisson_blend_enabled = getattr(modules.globals, "poisson_blend", False)
+
+    if hand_mask is None and getattr(modules.globals, "hand_occlusion", False):
+        hand_mask = detect_hand_mask(temp_frame)
+
     # Poisson blend's seamlessClone needs the genuine pre-swap frame as its
     # destination. Without this, original_frame aliases temp_frame, which
     # _fast_paste_back mutates in place — so seamlessClone would blend the
     # swapped face onto the already-swapped frame (no visible effect).
-    needs_original = opacity < 1.0 or mouth_mask_enabled or poisson_blend_enabled
+    needs_original = opacity < 1.0 or mouth_mask_enabled or poisson_blend_enabled or hand_mask is not None
     if needs_original:
         original_frame = temp_frame.copy()
     else:
@@ -608,6 +613,10 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
         swapped_frame = _apply_poisson_blend(
             swapped_frame, original_frame, target_face, M, bgr_fake
         )
+
+    # Restore original hand pixels over the swapped face
+    if hand_mask is not None:
+        swapped_frame = apply_hand_occlusion(swapped_frame, original_frame, hand_mask)
 
     # Apply opacity blend between the original frame and the swapped frame
     if opacity >= 1.0:
