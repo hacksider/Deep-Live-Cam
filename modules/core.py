@@ -42,8 +42,10 @@ def parse_args() -> None:
     program = argparse.ArgumentParser()
     program.add_argument('-s', '--source', help='select an source image', dest='source_path')
     program.add_argument('-t', '--target', help='select an target image or video', dest='target_path')
+    program.add_argument('-b', '--background', help='select a background image', dest='background_path')
     program.add_argument('-o', '--output', help='select output file or directory', dest='output_path')
-    program.add_argument('--frame-processor', help='pipeline of frame processors', dest='frame_processor', default=['face_swapper'], choices=['face_swapper', 'face_enhancer', 'face_enhancer_gpen256', 'face_enhancer_gpen512'], nargs='+')
+    program.add_argument('--background-swap', help='enable background swap', dest='background_swap', action='store_true', default=False)
+    program.add_argument('--frame-processor', help='pipeline of frame processors', dest='frame_processor', default=['face_swapper'], choices=['face_swapper', 'face_enhancer', 'face_enhancer_gpen256', 'face_enhancer_gpen512', 'background_swapper'], nargs='+')
     program.add_argument('--keep-fps', help='keep original fps', dest='keep_fps', action='store_true', default=False)
     program.add_argument('--keep-audio', help='keep original audio', dest='keep_audio', action='store_true', default=True)
     program.add_argument('--keep-frames', help='keep temporary frames', dest='keep_frames', action='store_true', default=False)
@@ -72,8 +74,12 @@ def parse_args() -> None:
 
     modules.globals.source_path = args.source_path
     modules.globals.target_path = args.target_path
+    modules.globals.background_path = args.background_path
+    modules.globals.background_swap = args.background_swap or bool(args.background_path) or ('background_swapper' in args.frame_processor)
     modules.globals.output_path = normalize_output_path(modules.globals.source_path, modules.globals.target_path, args.output_path)
     modules.globals.frame_processors = args.frame_processor
+    if modules.globals.background_swap and 'background_swapper' not in modules.globals.frame_processors:
+        modules.globals.frame_processors.append('background_swapper')
     modules.globals.headless = args.source_path or args.target_path or args.output_path
     modules.globals.keep_fps = args.keep_fps
     modules.globals.keep_audio = args.keep_audio

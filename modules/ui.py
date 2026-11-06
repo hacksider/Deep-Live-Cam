@@ -86,7 +86,7 @@ import json
 # ─── constants ────────────────────────────────────────────────────────────
 
 ROOT_HEIGHT = 820
-ROOT_WIDTH = 640
+ROOT_WIDTH = 760
 
 PREVIEW_MAX_HEIGHT = 700
 PREVIEW_MAX_WIDTH = 1200
@@ -239,6 +239,7 @@ def _(text: str) -> str:
 # Preserve original cwd state for file dialogs.
 _RECENT_SOURCE_DIR: Optional[str] = None
 _RECENT_TARGET_DIR: Optional[str] = None
+_RECENT_BG_DIR: Optional[str] = None
 _RECENT_OUTPUT_DIR: Optional[str] = None
 
 # QFileDialog filter strings, built from the canonical extension sets in
@@ -325,6 +326,7 @@ def save_switch_states():
         "nsfw_filter": modules.globals.nsfw_filter,
         "live_mirror": modules.globals.live_mirror,
         "live_resizable": modules.globals.live_resizable,
+        "background_swap": modules.globals.background_swap,
         "fp_ui": modules.globals.fp_ui,
         "show_fps": modules.globals.show_fps,
         "mouth_mask": modules.globals.mouth_mask,
@@ -354,6 +356,7 @@ def load_switch_states():
         modules.globals.nsfw_filter = state.get("nsfw_filter", False)
         modules.globals.live_mirror = state.get("live_mirror", False)
         modules.globals.live_resizable = state.get("live_resizable", False)
+        modules.globals.background_swap = state.get("background_swap", False)
         modules.globals.fp_ui = state.get("fp_ui", {"face_enhancer": False})
         modules.globals.show_fps = state.get("show_fps", False)
         # Mouth mask always starts disabled (slider at 0) on launch,
@@ -542,11 +545,11 @@ class MainWindow(QMainWindow):
 
     def _build_image_row(self) -> QHBoxLayout:
         row = QHBoxLayout()
-        row.setSpacing(16)
+        row.setSpacing(12)
 
         # Source column
         src_col = QVBoxLayout()
-        self.source_label = _make_image_drop(_("Source face"), (200, 200))
+        self.source_label = _make_image_drop(_("Source face"), (180, 180))
         src_col.addWidget(self.source_label, alignment=Qt.AlignmentFlag.AlignCenter)
         src_row = QHBoxLayout()
         self.btn_select_source = QPushButton(_("Select a face"))
@@ -556,7 +559,7 @@ class MainWindow(QMainWindow):
         self.btn_select_source.clicked.connect(self._on_select_source)
         self.btn_random_face = QPushButton("🔄")
         self.btn_random_face.setObjectName("secondary")
-        self.btn_random_face.setFixedWidth(40)
+        self.btn_random_face.setFixedWidth(36)
         self.btn_random_face.setToolTip(
             _("Get a random face from thispersondoesnotexist.com")
         )
@@ -570,7 +573,7 @@ class MainWindow(QMainWindow):
         swap_col.addStretch(1)
         self.btn_swap = QPushButton("↔")
         self.btn_swap.setObjectName("secondary")
-        self.btn_swap.setFixedSize(44, 44)
+        self.btn_swap.setFixedSize(36, 36)
         self.btn_swap.setToolTip(_("Swap source and target images"))
         self.btn_swap.clicked.connect(self._on_swap_paths)
         swap_col.addWidget(self.btn_swap, alignment=Qt.AlignmentFlag.AlignCenter)
@@ -578,7 +581,7 @@ class MainWindow(QMainWindow):
 
         # Target column
         tgt_col = QVBoxLayout()
-        self.target_label = _make_image_drop(_("Target"), (200, 200))
+        self.target_label = _make_image_drop(_("Target"), (180, 180))
         tgt_col.addWidget(self.target_label, alignment=Qt.AlignmentFlag.AlignCenter)
         self.btn_select_target = QPushButton(_("Select a target"))
         self.btn_select_target.setToolTip(
@@ -587,9 +590,21 @@ class MainWindow(QMainWindow):
         self.btn_select_target.clicked.connect(self._on_select_target)
         tgt_col.addWidget(self.btn_select_target)
 
+        # Background column
+        bg_col = QVBoxLayout()
+        self.bg_label = _make_image_drop(_("Background"), (180, 180))
+        bg_col.addWidget(self.bg_label, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.btn_select_bg = QPushButton(_("Select background"))
+        self.btn_select_bg.setToolTip(
+            _("Choose a background image to swap into the scene")
+        )
+        self.btn_select_bg.clicked.connect(self._on_select_background)
+        bg_col.addWidget(self.btn_select_bg)
+
         row.addLayout(src_col)
         row.addLayout(swap_col)
         row.addLayout(tgt_col)
+        row.addLayout(bg_col)
         return row
 
     # ── options card ─────────────────────────────────────────────────────
@@ -618,6 +633,8 @@ class MainWindow(QMainWindow):
                                    "Keep extracted frames on disk after processing")
         self.sw_many_faces = make("many_faces", "Many faces",
                                   "Swap every detected face, not just the primary one")
+        self.sw_bg_swap = make("background_swap", "Background Swap",
+                               "Swap background with 3D perspective and parallax effect")
         self.sw_poisson = make("poisson_blend", "Poisson Blend",
                                "Blend face edges smoothly using Poisson blending")
         self.sw_color_fix = make("color_correction", "Fix Blueish Cam",
@@ -634,8 +651,9 @@ class MainWindow(QMainWindow):
         items = [
             self.sw_keep_fps, self.sw_keep_audio,
             self.sw_keep_frames, self.sw_many_faces,
-            self.sw_map_faces, self.sw_show_fps,
-            self.sw_poisson, self.sw_color_fix,
+            self.sw_bg_swap, self.sw_map_faces,
+            self.sw_show_fps, self.sw_poisson,
+            self.sw_color_fix,
         ]
         for i, w in enumerate(items):
             grid.addWidget(w, i // 2, i % 2)
@@ -923,6 +941,31 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             print(f"Failed to fetch random face: {exc}")
 
+    def _on_select_background(self) -> None:
+        global _RECENT_BG_DIR
+        if _PREVIEW is not None:
+            _PREVIEW.hide()
+        path, _filter = QFileDialog.getOpenFileName(
+            self, _("select a background image"),
+            _RECENT_BG_DIR or "",
+            _IMAGE_FILE_FILTER,
+        )
+        if path and is_image(path):
+            modules.globals.background_path = path
+            modules.globals.background_swap = True
+            if hasattr(self, "sw_bg_swap"):
+                self.sw_bg_swap.setChecked(True)
+            _RECENT_BG_DIR = os.path.dirname(path)
+            self.bg_label.setPixmap(render_image_preview(path, (180, 180)))
+            self.bg_label.setText("")
+            save_switch_states()
+        elif not path:
+            return
+        else:
+            modules.globals.background_path = None
+            self.bg_label.clear()
+            self.bg_label.setText(_("Background"))
+
     def _on_swap_paths(self) -> None:
         global _RECENT_SOURCE_DIR, _RECENT_TARGET_DIR
         sp = modules.globals.source_path
@@ -934,8 +977,8 @@ class MainWindow(QMainWindow):
         _RECENT_TARGET_DIR = os.path.dirname(sp)
         if _PREVIEW is not None:
             _PREVIEW.hide()
-        self.source_label.setPixmap(render_image_preview(tp, (200, 200)))
-        self.target_label.setPixmap(render_image_preview(sp, (200, 200)))
+        self.source_label.setPixmap(render_image_preview(tp, (180, 180)))
+        self.target_label.setPixmap(render_image_preview(sp, (180, 180)))
         self.source_label.setText("")
         self.target_label.setText("")
 
@@ -1121,6 +1164,11 @@ class PreviewWindow(QWidget):
             )
             return
         from modules.processors.frame.core import get_frame_processors_modules as _gfpm
+        # Ensure background_swapper is included in active processors if background swap is enabled
+        if modules.globals.background_swap and "background_swapper" not in modules.globals.frame_processors:
+            modules.globals.frame_processors.append("background_swapper")
+        elif not modules.globals.background_swap and "background_swapper" in modules.globals.frame_processors:
+            modules.globals.frame_processors.remove("background_swapper")
         for fp in _gfpm(modules.globals.frame_processors):
             temp_frame = fp.process_frame(get_one_face(source_frame), temp_frame)
         # Fit to current widget size while preserving aspect ratio.
@@ -1176,6 +1224,10 @@ class _ProcessingWorker(QThread):
         self._fps = camera_fps
 
     def run(self) -> None:
+        if modules.globals.background_swap and "background_swapper" not in modules.globals.frame_processors:
+            modules.globals.frame_processors.append("background_swapper")
+        elif not modules.globals.background_swap and "background_swapper" in modules.globals.frame_processors:
+            modules.globals.frame_processors.remove("background_swapper")
         frame_processors = get_frame_processors_modules(modules.globals.frame_processors)
         source_image = None
         last_source_path = None

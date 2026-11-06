@@ -22,6 +22,7 @@ simple_map: Dict[str, Any] = {}             # Stores simplified map (embeddings/
 source_path: str | None = None
 target_path: str | None = None
 output_path: str | None = None
+background_path: str | None = None
 
 # Processing Options
 frame_processors: List[str] = []
@@ -30,6 +31,7 @@ keep_audio: bool = True
 keep_frames: bool = False
 many_faces: bool = False         # Process all detected faces with default source
 map_faces: bool = False          # Use source_target_map or simple_map for specific swaps
+background_swap: bool = False    # Enable background segmentation and 3D perspective swap
 poisson_blend: bool = False      # Enable Poisson Blending for smoother face swaps
 color_correction: bool = False   # Enable color correction (implementation specific)
 nsfw_filter: bool = False

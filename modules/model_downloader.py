@@ -19,6 +19,7 @@ MODEL_SIZES: Dict[str, int] = {
     "gfpgan-1024.onnx": 365875079,
     "GPEN-BFR-256.onnx": 75715262,
     "GPEN-BFR-512.onnx": 284244491,
+    "modnet_photographic_portrait_matting.onnx": 25888640,
     "buffalo_l/buffalo_l/1k3d68.onnx": 143607619,
     "buffalo_l/buffalo_l/2d106det.onnx": 5030888,
     "buffalo_l/buffalo_l/det_10g.onnx": 16923827,
