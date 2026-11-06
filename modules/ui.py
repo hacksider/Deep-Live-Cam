@@ -76,6 +76,7 @@ from modules.utilities import (
 )
 from modules import imread_unicode
 from modules.video_capture import VideoCapturer
+from modules.virtual_camera import VIRTUAL_CAM, VirtualCameraManager
 
 if platform.system() == "Windows":
     from pygrabber.dshow_graph import FilterGraph
@@ -327,6 +328,8 @@ def save_switch_states():
         "live_mirror": modules.globals.live_mirror,
         "live_resizable": modules.globals.live_resizable,
         "background_swap": modules.globals.background_swap,
+        "virtual_camera": modules.globals.virtual_camera,
+        "virtual_camera_device": modules.globals.virtual_camera_device,
         "fp_ui": modules.globals.fp_ui,
         "show_fps": modules.globals.show_fps,
         "mouth_mask": modules.globals.mouth_mask,
@@ -357,6 +360,8 @@ def load_switch_states():
         modules.globals.live_mirror = state.get("live_mirror", False)
         modules.globals.live_resizable = state.get("live_resizable", False)
         modules.globals.background_swap = state.get("background_swap", False)
+        modules.globals.virtual_camera = state.get("virtual_camera", False)
+        modules.globals.virtual_camera_device = state.get("virtual_camera_device", None)
         modules.globals.fp_ui = state.get("fp_ui", {"face_enhancer": False})
         modules.globals.show_fps = state.get("show_fps", False)
         # Mouth mask always starts disabled (slider at 0) on launch,
@@ -822,8 +827,34 @@ class MainWindow(QMainWindow):
         ))
         grid.addWidget(self.cb_det_size, 2, 1, 1, 2)
 
+        # Row 3: Virtual Camera toggle & device selector
+        self.sw_virtual_cam = _Switch(_("Virtual Camera"), modules.globals.virtual_camera,
+                                      _("Output live preview to a virtual webcam device (e.g. for OBS/Zoom/Discord)"))
+        self.sw_virtual_cam.toggled.connect(self._on_virtual_cam_toggled)
+        grid.addWidget(self.sw_virtual_cam, 3, 0)
+
+        self.cb_virtual_cam_dev = QComboBox()
+        self._vcam_devices = VirtualCameraManager.get_available_devices()
+        self.cb_virtual_cam_dev.addItems(self._vcam_devices)
+        cur_dev = modules.globals.virtual_camera_device or "Default / Auto"
+        if cur_dev in self._vcam_devices:
+            self.cb_virtual_cam_dev.setCurrentText(cur_dev)
+        self.cb_virtual_cam_dev.currentTextChanged.connect(self._on_vcam_dev_change)
+        self.cb_virtual_cam_dev.setToolTip(_("Select virtual camera device / loopback"))
+        grid.addWidget(self.cb_virtual_cam_dev, 3, 1, 1, 2)
+
         grid.setColumnStretch(1, 1)
         return card
+
+    def _on_virtual_cam_toggled(self, val: bool) -> None:
+        modules.globals.virtual_camera = val
+        save_switch_states()
+        status = "enabled" if val else "disabled"
+        update_status(f"Virtual Camera {status}")
+
+    def _on_vcam_dev_change(self, text: str) -> None:
+        modules.globals.virtual_camera_device = text if text != "Default / Auto" else None
+        save_switch_states()
 
     def _on_resolution_change(self, idx: int) -> None:
         if 0 <= idx < len(self._resolution_options):
@@ -1417,6 +1448,18 @@ class WebcamPreviewWindow(QWidget):
         self._capture_worker.start()
         self._processing_worker.start()
 
+        # Initialize virtual camera if enabled
+        self._vcam_warned = False
+        if modules.globals.virtual_camera:
+            v_ok = VIRTUAL_CAM.start(
+                self._cap.actual_width,
+                self._cap.actual_height,
+                camera_fps,
+                device=modules.globals.virtual_camera_device,
+            )
+            if not v_ok and VIRTUAL_CAM.last_error:
+                update_status(f"Virtual camera warning: {VIRTUAL_CAM.last_error}")
+
         # Poll at ~2x camera fps so we never block but also don't burn CPU.
         poll_ms = max(1, min(16, int(500 / max(camera_fps, 1))))
         self._timer = QTimer(self)
@@ -1428,10 +1471,28 @@ class WebcamPreviewWindow(QWidget):
             self.close()
             return
         try:
-            bgr_frame = self._processed_queue.get_nowait()
+            raw_bgr_frame = self._processed_queue.get_nowait()
         except queue.Empty:
             return
-        bgr_frame = fit_image_to_size(bgr_frame, self.width(), self.height())
+
+        # Send full-resolution frame to virtual camera
+        if modules.globals.virtual_camera:
+            if not VIRTUAL_CAM.is_active:
+                v_ok = VIRTUAL_CAM.start(
+                    raw_bgr_frame.shape[1],
+                    raw_bgr_frame.shape[0],
+                    self._cap.actual_fps,
+                    device=modules.globals.virtual_camera_device,
+                )
+                if not v_ok and not self._vcam_warned:
+                    self._vcam_warned = True
+                    update_status(f"Virtual camera: {VIRTUAL_CAM.last_error}")
+            if VIRTUAL_CAM.is_active:
+                VIRTUAL_CAM.send_bgr_frame(raw_bgr_frame)
+        elif VIRTUAL_CAM.is_active:
+            VIRTUAL_CAM.stop()
+
+        bgr_frame = fit_image_to_size(raw_bgr_frame, self.width(), self.height())
         self._image_label.setPixmap(_bgr_to_qpixmap(bgr_frame))
 
     def closeEvent(self, event) -> None:
@@ -1470,6 +1531,7 @@ class WebcamPreviewWindow(QWidget):
                 cap.release()
             except Exception:
                 pass
+        VIRTUAL_CAM.stop()
         global _WEBCAM_PREVIEW
         if _WEBCAM_PREVIEW is self:
             _WEBCAM_PREVIEW = None

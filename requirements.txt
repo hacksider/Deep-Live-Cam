@@ -16,4 +16,5 @@ onnxruntime-gpu==1.26.0; sys_platform != 'darwin'
 opennsfw2==0.18.0
 keras>=3.0.0
 protobuf>=6.33.5,<8
+pyvirtualcam>=0.11.0
 pygrabber; sys_platform == 'win32'

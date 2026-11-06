@@ -58,6 +58,8 @@ def parse_args() -> None:
     program.add_argument('-l', '--lang', help='Ui language', default="en")
     program.add_argument('--live-mirror', help='The live camera display as you see it in the front-facing camera frame', dest='live_mirror', action='store_true', default=False)
     program.add_argument('--live-resizable', help='The live camera frame is resizable', dest='live_resizable', action='store_true', default=False)
+    program.add_argument('--virtual-camera', help='output live frames to virtual camera', dest='virtual_camera', action='store_true', default=False)
+    program.add_argument('--virtual-camera-device', help='virtual camera device name or path', dest='virtual_camera_device', default=None)
     program.add_argument('--max-memory', help='maximum amount of RAM in GB', dest='max_memory', type=int, default=suggest_max_memory())
     program.add_argument('--execution-provider', help='execution provider', dest='execution_provider', default=[suggest_default_execution_provider()], choices=suggest_execution_providers(), nargs='+')
     program.add_argument('--execution-threads', help='number of execution threads', dest='execution_threads', type=int, default=None)
@@ -92,6 +94,8 @@ def parse_args() -> None:
     modules.globals.video_quality = args.video_quality
     modules.globals.live_mirror = args.live_mirror
     modules.globals.live_resizable = args.live_resizable
+    modules.globals.virtual_camera = args.virtual_camera
+    modules.globals.virtual_camera_device = args.virtual_camera_device
     modules.globals.max_memory = args.max_memory
     modules.globals.execution_providers = decode_execution_providers(args.execution_provider)
     modules.globals.execution_threads = args.execution_threads
