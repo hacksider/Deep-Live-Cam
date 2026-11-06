@@ -1,5 +1,5 @@
-import os
 import unittest
+from unittest.mock import patch
 import numpy as np
 
 import modules.globals
@@ -44,9 +44,16 @@ class TestBackgroundSwapper(unittest.TestCase):
         self.assertEqual(warped.dtype, np.uint8)
         self.assertGreater(warped.max(), 0)
 
-    def test_swap_background_blending(self):
+    @patch("modules.processors.frame.background_swapper.get_one_face")
+    @patch("modules.processors.frame.background_swapper.predict_matte")
+    def test_swap_background_blending(self, mock_predict_matte, mock_get_one_face):
+        mock_get_one_face.return_value = None
+        # Matte with 1.0 (foreground) in center and 0.0 (background) elsewhere
+        matte = np.zeros((200, 200), dtype=np.float32)
+        matte[50:150, 50:150] = 1.0
+        mock_predict_matte.return_value = matte
+
         frame = np.zeros((200, 200, 3), dtype=np.uint8)
-        # Put white circle in foreground
         frame[50:150, 50:150] = 255
 
         bg = np.full((200, 200, 3), 100, dtype=np.uint8)
@@ -57,8 +64,10 @@ class TestBackgroundSwapper(unittest.TestCase):
         result = background_swapper.swap_background(frame)
         self.assertEqual(result.shape, (200, 200, 3))
         self.assertEqual(result.dtype, np.uint8)
-        # Foreground person area should contain high intensity
-        self.assertGreater(result[100, 100, 0], 50)
+        # Foreground person area should retain original intensity
+        self.assertEqual(result[100, 100, 0], 255)
+        # Background area should match background
+        self.assertEqual(result[10, 10, 0], 100)
 
     def test_process_frame_toggle_disabled(self):
         modules.globals.background_swap = False

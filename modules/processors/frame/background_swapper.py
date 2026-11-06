@@ -8,7 +8,6 @@ background perspective according to the viewer's head pose / point of view
 
 from __future__ import annotations
 
-import logging
 import os
 import threading
 from typing import Any, List, Optional, Tuple
@@ -18,10 +17,10 @@ import numpy as np
 import onnxruntime as ort
 
 import modules.globals
+import modules.processors.frame.core
 from modules import imread_unicode, imwrite_unicode
 from modules.core import update_status
 from modules.face_analyser import get_one_face
-from modules.gpu_processing import gpu_resize
 from modules.paths import MODELS_DIR
 from modules.platform_info import OPENVINO_PROVIDER_CONFIG
 from modules.typing import Face, Frame

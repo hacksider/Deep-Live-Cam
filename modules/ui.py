@@ -1036,6 +1036,10 @@ class MainWindow(QMainWindow):
         if _MAPPER is not None and _MAPPER.isVisible():
             update_status("Please complete pop-up or close it.")
             return
+        if modules.globals.background_swap and "background_swapper" not in modules.globals.frame_processors:
+            modules.globals.frame_processors.append("background_swapper")
+        elif not modules.globals.background_swap and "background_swapper" in modules.globals.frame_processors:
+            modules.globals.frame_processors.remove("background_swapper")
         if modules.globals.map_faces:
             modules.globals.source_target_map = []
             if is_image(modules.globals.target_path):
