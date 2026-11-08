@@ -199,6 +199,25 @@ class AsyncLiveSwapperTest(unittest.TestCase):
 
         self.assertEqual(self.pasted, [])
 
+    def test_cuda_graph_adapter_is_bypassed_for_the_model_call(self):
+        # Replaying a captured CUDA graph from the model thread races the
+        # detector's CUDA work ("operation not permitted when stream is
+        # capturing"), so _swap_aligned_face must use the plain session.
+        class _SpyAdapter(face_swapper._CudaGraphSessionAdapter):
+            def run(self, *_args, **_kwargs):
+                raise AssertionError("CUDA graph replay used from model thread")
+
+        underlying = _FakeSession()
+        model = _FakeSwapper()
+        model.session = _SpyAdapter(underlying)
+
+        out = face_swapper._swap_aligned_face(
+            model, _source(), np.zeros((128, 128, 3), dtype=np.uint8)
+        )
+
+        self.assertEqual(out.shape, (128, 128, 3))
+        self.assertEqual(len(underlying.inputs), 1, "plain session was not used")
+
     def test_swap_never_loads_the_model_itself(self):
         with patch.object(face_swapper, "FACE_SWAPPER", None):
             frame = _frame(10)

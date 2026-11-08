@@ -642,11 +642,12 @@ class AsyncLiveSwapper:
     ``swap()`` never waits for the model. It hands the current face crop to a
     background thread, which only ever works on the newest crop, and pastes
     the most recent model output using the *current* frame's alignment. The
-    preview keeps the camera's frame rate and the face follows the head on
-    every frame, while the face itself (expression, mouth, eyes) refreshes
-    only as fast as the model runs, one inference behind. Meant for hardware
-    where the model is the bottleneck: CPU, Apple Silicon, older GPUs. The
-    live preview uses it for its single-face path only.
+    preview runs at detection speed instead of model speed, so it stays
+    responsive while the face itself (expression, mouth, eyes) refreshes only
+    as fast as the model runs, one inference behind. On slow hardware that lag
+    can be seconds. Meant for hardware where the model is the bottleneck: CPU,
+    Apple Silicon, older GPUs. The live preview uses it for its single-face
+    path only.
     """
 
     # Beyond these changes since the previous frame the target is taken to be
@@ -681,12 +682,21 @@ class AsyncLiveSwapper:
             return temp_frame
         if getattr(source_face, "normed_embedding", None) is None:
             return temp_frame
+
+        # Match swap_face(): norm_crop2()/warpAffine expects an 8-bit,
+        # contiguous frame, and the caller may hand us a view.
+        frame = temp_frame
+        if frame.dtype != np.uint8:
+            frame = np.clip(frame, 0, 255).astype(np.uint8)
+        if not frame.flags["C_CONTIGUOUS"]:
+            frame = np.ascontiguousarray(frame)
+
         try:
             kps = np.asarray(target_face.kps, dtype=np.float32)
-            aimg, M = face_align.norm_crop2(temp_frame, kps, face_swapper.input_size[0])
+            aimg, M = face_align.norm_crop2(frame, kps, face_swapper.input_size[0])
         except Exception as e:
             print(f"Error during face swap: {e}")
-            return temp_frame
+            return frame
 
         if self._is_new_target(kps):
             self.clear()
@@ -697,8 +707,8 @@ class AsyncLiveSwapper:
 
         # A result made for a previous source image must not be pasted.
         if result is None or result[0] is not source_face:
-            return temp_frame
-        return paste_swapped_face(temp_frame, result[1], M, target_face)
+            return frame
+        return paste_swapped_face(frame, result[1], M, target_face)
 
     def clear(self) -> None:
         """Forget the current result and any waiting crop, e.g. because the
@@ -770,7 +780,11 @@ def _put_latest(jobs: queue.Queue, job: Any) -> None:
 
 
 def _swap_aligned_face(face_swapper: Any, source_face: Face, aimg: np.ndarray) -> np.ndarray:
-    """Run the swap model on an already aligned crop, as INSwapper.get() does."""
+    """Run the swap model on an already aligned crop, as INSwapper.get() does.
+
+    Mirrors insightface 0.7.3's aligned-face path (blob, emap projection,
+    session.run); keep this in step if the pinned insightface version changes.
+    """
     blob = cv2.dnn.blobFromImage(
         aimg,
         1.0 / face_swapper.input_std,
@@ -782,11 +796,18 @@ def _swap_aligned_face(face_swapper: Any, source_face: Face, aimg: np.ndarray) -
     latent = np.dot(latent, face_swapper.emap)
     latent /= np.linalg.norm(latent)
     inputs = {face_swapper.input_names[0]: blob, face_swapper.input_names[1]: latent}
+    session = face_swapper.session
+    if isinstance(session, _CudaGraphSessionAdapter):
+        # Replaying the captured graph from this thread races the detector's
+        # CUDA work on the default stream and fails with "operation not
+        # permitted when stream is capturing" (ORT CUDA failure 900). The
+        # plain session is only a couple of ms slower.
+        session = session._underlying
     if any("DmlExecutionProvider" in p for p in modules.globals.execution_providers):
         with modules.globals.dml_lock:
-            pred = face_swapper.session.run(face_swapper.output_names, inputs)[0]
+            pred = session.run(face_swapper.output_names, inputs)[0]
     else:
-        pred = face_swapper.session.run(face_swapper.output_names, inputs)[0]
+        pred = session.run(face_swapper.output_names, inputs)[0]
     bgr_fake = np.clip(255 * pred.transpose((0, 2, 3, 1))[0], 0, 255).astype(np.uint8)
     return np.ascontiguousarray(bgr_fake[:, :, ::-1])
 

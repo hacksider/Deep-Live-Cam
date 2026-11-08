@@ -813,10 +813,11 @@ class MainWindow(QMainWindow):
         # Row 3: async swap
         self.sw_async_swap = _Switch(
             _("Async swap"), modules.globals.live_async_swap,
-            _("Run the swap model in the background so the live preview keeps "
-              "the camera's frame rate when the model is slow (CPU, Apple "
-              "Silicon, older GPUs). The face follows head movement on every "
-              "frame, but expressions update only as fast as the model runs. "
+            _("Run the swap model in the background so the live preview stays "
+              "responsive when the model is slow (CPU, Apple Silicon, older "
+              "GPUs). The face follows the head's position on every frame, but "
+              "expressions update only as fast as the model runs — on a slow "
+              "CPU the face can lag a second or more behind the preview. "
               "Single-face mode only: not used with Many faces or Map faces."),
         )
         self.sw_async_swap.toggled.connect(
