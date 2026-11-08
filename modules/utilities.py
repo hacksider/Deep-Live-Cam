@@ -323,8 +323,50 @@ def resolve_relative_path(path: str) -> str:
     return os.path.abspath(os.path.join(os.path.dirname(__file__), path))
 
 
+def get_video_rotation(target_path: str) -> int:
+    """Get the display rotation of a video in degrees (0, 90, 180 or 270).
+
+    Phone recordings are stored in landscape and carry a display-matrix side
+    tag telling players how much to rotate them.  Older files use the legacy
+    "rotate" stream tag instead, so look at both.  Returns 0 when the file has
+    no rotation or ffprobe cannot be asked.
+    """
+    for entry in ("stream_side_data=rotation", "stream_tags=rotate"):
+        command = [
+            "ffprobe", "-v", "error",
+            "-select_streams", "v:0",
+            "-show_entries", entry,
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            target_path,
+        ]
+        try:
+            output = subprocess.check_output(command).decode().strip()
+        except (subprocess.CalledProcessError, OSError, UnicodeDecodeError):
+            continue
+        for line in output.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                # The two tags use opposite sign conventions, but only the
+                # 90/270 cases matter here, so the sign makes no difference.
+                return int(round(float(line))) % 360
+            except ValueError:
+                continue
+    return 0
+
+
 def get_video_dimensions(target_path: str) -> tuple:
-    """Get video width and height using ffprobe."""
+    """Get the displayed video width and height using ffprobe.
+
+    ffprobe reports the size of the coded picture, which for a rotated
+    recording is the opposite way round from what gets displayed.  ffmpeg
+    auto-rotates on decode unless "-noautorotate" is passed, so the frames
+    every consumer of this function actually sees are the rotated ones; swap
+    the dimensions to match.  This is also what the disk-based pipeline
+    already does, since the PNGs written by extract_frames are auto-rotated
+    and create_video sizes its output from them.
+    """
     command = [
         "ffprobe", "-v", "error",
         "-select_streams", "v:0",
@@ -333,7 +375,13 @@ def get_video_dimensions(target_path: str) -> tuple:
         target_path,
     ]
     output = subprocess.check_output(command).decode().strip()
-    width, height = map(int, output.split("x"))
+    # Some ffprobe builds append an empty field for the stream's side-data
+    # subsection, which rotated files always have, so read the first two
+    # values rather than unpacking everything the csv writer printed.
+    fields = output.split("x")
+    width, height = int(fields[0]), int(fields[1])
+    if get_video_rotation(target_path) in (90, 270):
+        return height, width
     return width, height
 
 

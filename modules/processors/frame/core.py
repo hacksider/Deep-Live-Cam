@@ -271,6 +271,10 @@ def _run_pipe_pipeline(
     """Run the FFmpeg-pipe read → process → encode pipeline once."""
 
     # --- Reader: decode source video to raw BGR24 on stdout ---
+    # ffmpeg auto-rotates rotated recordings on decode, so the frames arriving
+    # here are already upright and `width`/`height` are the rotated dimensions
+    # reported by get_video_dimensions.  Do not add "-noautorotate" without
+    # also undoing the swap there and tagging the encoder output.
     reader_cmd = [
         'ffmpeg', '-hide_banner',
         '-hwaccel', 'auto',
