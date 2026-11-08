@@ -987,7 +987,6 @@ class MainWindow(QMainWindow):
         modules.globals.opacity = value
         pct = int(value * 100)
         if pct == 0:
-            modules.globals.fp_ui["face_enhancer"] = False
             update_status("Transparency set to 0% - Face swapping disabled.")
         elif pct == 100:
             modules.globals.face_swapper_enabled = True
