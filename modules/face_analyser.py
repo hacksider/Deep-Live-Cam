@@ -1,6 +1,7 @@
 import os
 import shutil
 from typing import Any
+import cv2
 import insightface
 import threading
 
@@ -167,13 +168,37 @@ def _analyse_faces(frame: Frame) -> list:
     return faces
 
 
+def _analyse_faces_locked(frame: Frame) -> list:
+    if _is_dml():
+        with modules.globals.dml_lock:
+            return _analyse_faces(frame)
+    return _analyse_faces(frame)
+
+
+def _analyse_faces_padded(frame: Frame) -> list:
+    """Retry detection on a bordered copy of the frame.
+
+    RetinaFace misses faces that fill nearly the whole image (tight
+    portrait crops, e.g. thispersondoesnotexist.com). Padding gives the
+    detector context; coordinates are shifted back to the original frame.
+    """
+    pad = max(frame.shape[:2]) // 4
+    padded = cv2.copyMakeBorder(frame, pad, pad, pad, pad, cv2.BORDER_CONSTANT, value=(0, 0, 0))
+    faces = _analyse_faces_locked(padded)
+    for face in faces:
+        face.bbox = face.bbox - pad
+        if face.get('kps') is not None:
+            face.kps = face.kps - pad
+        if face.get('landmark_2d_106') is not None:
+            face.landmark_2d_106 = face.landmark_2d_106 - pad
+    return faces
+
+
 def get_one_face(frame: Frame, faces: Any = None) -> Any:
     if faces is None:
-        if _is_dml():
-            with modules.globals.dml_lock:
-                faces = _analyse_faces(frame)
-        else:
-            faces = _analyse_faces(frame)
+        faces = _analyse_faces_locked(frame)
+        if not faces and frame is not None:
+            faces = _analyse_faces_padded(frame)
     try:
         return min(faces, key=lambda x: x.bbox[0])
     except ValueError:
