@@ -1,4 +1,4 @@
-numpy>=2.0,<3
+numpy>=2.5.3,<3
 typing-extensions>=4.15.0
 opencv-python==4.14.0.94
 opencv-python-headless==4.14.0.94
