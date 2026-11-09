@@ -174,9 +174,19 @@ def get_one_face(frame: Frame, faces: Any = None) -> Any:
                 faces = _analyse_faces(frame)
         else:
             faces = _analyse_faces(frame)
+
+    if faces is None:
+        return None
+
+    # Some callers may pass a sequence containing None entries, or a numpy-like
+    # collection that is empty after filtering. Treat those as no face found.
+    valid_faces = [face for face in faces if face is not None and getattr(face, "bbox", None) is not None]
+    if not valid_faces:
+        return None
+
     try:
-        return min(faces, key=lambda x: x.bbox[0])
-    except ValueError:
+        return min(valid_faces, key=lambda x: x.bbox[0])
+    except (TypeError, ValueError):
         return None
 
 
@@ -184,9 +194,12 @@ def get_many_faces(frame: Frame) -> Any:
     try:
         if _is_dml():
             with modules.globals.dml_lock:
-                return _analyse_faces(frame)
+                faces = _analyse_faces(frame)
         else:
-            return _analyse_faces(frame)
+            faces = _analyse_faces(frame)
+        if not faces:
+            return None
+        return faces
     except IndexError:
         return None
 
