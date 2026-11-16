@@ -1941,7 +1941,14 @@ class _Window:
         self._main = main_window
 
     def mainloop(self) -> None:
-        self._main.show()
+        # --camera-input + --camera-output is a headless v4l2loopback
+        # launch: Live already auto-started inside MainWindow.__init__
+        # (see _apply_cli_camera_args), so the main control window never
+        # needs to appear — only the Qt event loop (QTimers/QThreads
+        # driving capture/processing/virtual-cam output) has to keep
+        # running.
+        if not (modules.globals.camera_input and modules.globals.camera_output):
+            self._main.show()
         self._app.exec()
 
 
