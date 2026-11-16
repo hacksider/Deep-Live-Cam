@@ -40,7 +40,7 @@ if HAS_TORCH:
 def parse_args() -> None:
     signal.signal(signal.SIGINT, lambda signal_number, frame: destroy())
     program = argparse.ArgumentParser()
-    program.add_argument('-s', '--source', help='select an source image', dest='source_path')
+    program.add_argument('-s', '--source', help='select an source image; without a target this just preloads the face into the GUI for live mode', dest='source_path')
     program.add_argument('-t', '--target', help='select an target image or video', dest='target_path')
     program.add_argument('-o', '--output', help='select output file or directory', dest='output_path')
     program.add_argument('--frame-processor', help='pipeline of frame processors', dest='frame_processor', default=['face_swapper'], choices=['face_swapper', 'face_enhancer', 'face_enhancer_gpen256', 'face_enhancer_gpen512'], nargs='+')
@@ -60,6 +60,8 @@ def parse_args() -> None:
     program.add_argument('--execution-provider', help='execution provider', dest='execution_provider', default=[suggest_default_execution_provider()], choices=suggest_execution_providers(), nargs='+')
     program.add_argument('--execution-threads', help='number of execution threads', dest='execution_threads', type=int, default=None)
     program.add_argument('--det-size', help='face detection input size (160, 320, or 640)', dest='det_size', type=int, default=modules.globals.DEFAULT_DET_SIZE, choices=[160, 320, 640])
+    program.add_argument('--camera-input', help='camera device to use for live mode, e.g. /dev/video0 or a plain index like 0', dest='camera_input', default=None)
+    program.add_argument('--camera-output', help='virtual camera device to stream live output to, e.g. /dev/video10 (a v4l2loopback device). Combined with --camera-input, starts Live immediately with Virtual Camera on and the preview window off', dest='camera_output', default=None)
     program.add_argument('-v', '--version', action='version', version=f'{modules.metadata.name} {modules.metadata.version}')
 
     # register deprecated args
@@ -74,7 +76,10 @@ def parse_args() -> None:
     modules.globals.target_path = args.target_path
     modules.globals.output_path = normalize_output_path(modules.globals.source_path, modules.globals.target_path, args.output_path)
     modules.globals.frame_processors = args.frame_processor
-    modules.globals.headless = args.source_path or args.target_path or args.output_path
+    # Headless (no GUI) only makes sense once there's a target to process.
+    # -s/--source alone is also used to preload the source face into the
+    # GUI (live mode), so it must not force headless on its own.
+    modules.globals.headless = bool(args.target_path or args.output_path)
     modules.globals.keep_fps = args.keep_fps
     modules.globals.keep_audio = args.keep_audio
     modules.globals.keep_frames = args.keep_frames
@@ -90,6 +95,8 @@ def parse_args() -> None:
     modules.globals.execution_providers = decode_execution_providers(args.execution_provider)
     modules.globals.execution_threads = args.execution_threads
     modules.globals.det_size = args.det_size
+    modules.globals.camera_input = args.camera_input
+    modules.globals.camera_output = args.camera_output
     modules.globals.lang = args.lang
 
     # The argparse default (None) avoids evaluating suggest_execution_threads()

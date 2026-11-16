@@ -385,10 +385,20 @@ options:
   --max-memory MAX_MEMORY                                  maximum amount of RAM in GB
   --execution-provider {cpu} [{cpu} ...]                   available execution provider (choices: cpu, ...)
   --execution-threads EXECUTION_THREADS                    number of execution threads
+  --camera-input CAMERA_INPUT                              camera device for live mode, e.g. /dev/video0 or a plain index like 0
+  --camera-output CAMERA_OUTPUT                             virtual camera device to stream live output to, e.g. /dev/video10 (a v4l2loopback device)
   -v, --version                                            show program's version number and exit
 ```
 
-Looking for a CLI mode? Using the -s/--source argument will make the run program in cli mode.
+Looking for a CLI mode? Passing -t/--target (or -o/--output) runs the program in CLI/headless mode instead of opening the GUI. Passing only -s/--source still opens the GUI, with that face preloaded as the source image — handy for jumping straight into Live mode.
+
+Passing both --camera-input and --camera-output starts Live immediately on launch, with "Virtual Camera" switched on and the "Preview window" switched off — e.g. for running as a headless v4l2loopback source:
+
+```
+python run.py -s face.jpg --camera-input /dev/video0 --camera-output /dev/video10
+```
+
+Passing just one of the two pre-fills that setting (device selection / virtual camera device) without auto-starting Live.
 
 ## Press
 
