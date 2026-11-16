@@ -974,13 +974,20 @@ class MainWindow(QMainWindow):
         path = modules.globals.source_path
         if not path:
             return
+        pixmap = None
         if is_image(path):
-            global _RECENT_SOURCE_DIR
-            _RECENT_SOURCE_DIR = os.path.dirname(path)
-            self.source_label.setPixmap(render_image_preview(path, (200, 200)))
-            self.source_label.setText("")
+            try:
+                pixmap = render_image_preview(path, (200, 200))
+            except Exception as exc:
+                print(f"[ui] --source '{path}' could not be decoded ({exc}), ignoring")
         else:
             print(f"[ui] --source '{path}' is not a readable image, ignoring")
+        if pixmap is not None:
+            global _RECENT_SOURCE_DIR
+            _RECENT_SOURCE_DIR = os.path.dirname(path)
+            self.source_label.setPixmap(pixmap)
+            self.source_label.setText("")
+        else:
             modules.globals.source_path = None
 
     def _on_select_source(self) -> None:
