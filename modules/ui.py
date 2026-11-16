@@ -1498,8 +1498,13 @@ class _ProcessingWorker(QThread):
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2,
                 )
 
-            if self._vcam is not None:
-                self._vcam.send(temp_frame)
+            # Snapshot once: self._vcam can be reassigned to None by the UI
+            # thread (toggling "Virtual Camera" off) between the None-check
+            # and the send() call — two separate reads of self._vcam would
+            # otherwise race and crash this thread with an AttributeError.
+            vcam = self._vcam
+            if vcam is not None:
+                vcam.send(temp_frame)
 
             try:
                 self._pq.put_nowait(temp_frame)
