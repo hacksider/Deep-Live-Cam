@@ -10,6 +10,7 @@ import os
 import sys
 import types
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -18,11 +19,11 @@ import numpy as np  # noqa: E402
 import modules.globals  # noqa: E402
 
 
-def _load_predicter(seen, added):
-    """Import modules.predicter with opennsfw2 stubbed to record its input.
+def _predicter_stubs(seen):
+    """Stubs for the imports modules.predicter needs, recording the model input.
 
-    Stubs are installed only for modules that are not importable here, and the
-    names added are collected so the caller can undo them.
+    opennsfw2 is stubbed even when the real package is installed, so that no
+    model is ever built.
     """
 
     def preprocess_image(pil_image, _preprocessing):
@@ -34,7 +35,7 @@ def _load_predicter(seen, added):
     insightface_common = types.ModuleType("insightface.app.common")
     insightface_common.Face = type("Face", (), {})
 
-    stubs = {
+    return {
         "opennsfw2": types.SimpleNamespace(
             Preprocessing=types.SimpleNamespace(YAHOO="YAHOO"),
             preprocess_image=preprocess_image,
@@ -46,17 +47,6 @@ def _load_predicter(seen, added):
         "insightface.app": insightface_app,
         "insightface.app.common": insightface_common,
     }
-    for name, stub in stubs.items():
-        if name not in sys.modules:
-            sys.modules[name] = stub
-            added.append(name)
-    # opennsfw2 must be ours even if the real package is installed, so that
-    # no model is ever built.
-    sys.modules["opennsfw2"] = stubs["opennsfw2"]
-    added.append("opennsfw2")
-
-    sys.modules.pop("modules.predicter", None)
-    return importlib.import_module("modules.predicter")
 
 
 def _bgr_blue():
@@ -69,16 +59,18 @@ def _bgr_blue():
 class PredictFrameChannelOrderTest(unittest.TestCase):
     def setUp(self):
         self._seen = []
-        self._added = []
         self._color_correction = modules.globals.color_correction
-        self.addCleanup(self._restore)
-        self._predicter = _load_predicter(self._seen, self._added)
-
-    def _restore(self):
-        modules.globals.color_correction = self._color_correction
+        self.addCleanup(self._restore_color_correction)
+        # patch.dict puts sys.modules back exactly as it was, so neither the
+        # stubs nor the freshly imported modules.predicter outlive the test.
+        patcher = patch.dict(sys.modules, _predicter_stubs(self._seen), clear=False)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         sys.modules.pop("modules.predicter", None)
-        for name in self._added:
-            sys.modules.pop(name, None)
+        self._predicter = importlib.import_module("modules.predicter")
+
+    def _restore_color_correction(self):
+        modules.globals.color_correction = self._color_correction
 
     def _channels_reaching_the_model(self):
         self._predicter.predict_frame(_bgr_blue())
