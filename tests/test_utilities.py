@@ -85,6 +85,16 @@ class NormalizeOutputPathTests(unittest.TestCase):
             utilities.os.path.join("videos", "source-target.mp4"),
         )
 
+    def test_missing_output_without_source_does_not_overwrite_target(self) -> None:
+        utilities = _load_utilities_module()
+
+        self.assertEqual(
+            utilities.normalize_output_path(
+                None, utilities.os.path.join("videos", "target.mp4"), None
+            ),
+            utilities.os.path.join("videos", "target-enhanced.mp4"),
+        )
+
     def test_output_directory_gets_generated_name(self) -> None:
         utilities = _load_utilities_module()
 

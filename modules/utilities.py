@@ -234,18 +234,19 @@ def get_temp_output_path(target_path: str) -> str:
 
 
 def normalize_output_path(source_path: str, target_path: str, output_path: str) -> Any:
-    if source_path and target_path:
-        source_name, _ = os.path.splitext(os.path.basename(source_path))
+    if target_path:
         target_name, target_extension = os.path.splitext(os.path.basename(target_path))
+        if source_path:
+            source_name, _ = os.path.splitext(os.path.basename(source_path))
+            output_name = source_name + "-" + target_name + target_extension
+        else:
+            # Enhancer-only run: no source name to use, and the target must not be overwritten.
+            output_name = target_name + "-enhanced" + target_extension
         if not output_path:
             # No -o/--output: write next to the target, named like the directory case.
-            return os.path.join(
-                os.path.dirname(target_path), source_name + "-" + target_name + target_extension
-            )
+            return os.path.join(os.path.dirname(target_path), output_name)
         if os.path.isdir(output_path):
-            return os.path.join(
-                output_path, source_name + "-" + target_name + target_extension
-            )
+            return os.path.join(output_path, output_name)
     return output_path
 
 

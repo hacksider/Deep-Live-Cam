@@ -16,14 +16,33 @@ def _parse(core, argv):
 
 
 class ParseArgsTests(unittest.TestCase):
+    def _assert_usage_error(self, argv, message):
+        with _patched_core_import_stubs([]) as core:
+            stderr = StringIO()
+            with redirect_stderr(stderr), self.assertRaises(SystemExit) as raised:
+                _parse(core, argv)
+            self.assertEqual(raised.exception.code, 2)
+            self.assertIn(message, stderr.getvalue())
+
     def test_cli_mode_without_target_exits_with_usage_error(self):
         for argv in (["-o", "out.mp4"], ["-s", "source.jpg"]):
-            with self.subTest(argv=argv), _patched_core_import_stubs([]) as core:
-                stderr = StringIO()
-                with redirect_stderr(stderr), self.assertRaises(SystemExit) as raised:
-                    _parse(core, argv)
-                self.assertEqual(raised.exception.code, 2)
-                self.assertIn("-s/--source and -t/--target", stderr.getvalue())
+            with self.subTest(argv=argv):
+                self._assert_usage_error(argv, "-t/--target")
+
+    def test_face_swapper_without_source_exits_with_usage_error(self):
+        for argv in (
+            ["-t", "target.jpg"],
+            ["--frame-processor", "face_swapper", "face_enhancer", "-t", "target.jpg"],
+        ):
+            with self.subTest(argv=argv):
+                self._assert_usage_error(argv, "face_swapper needs -s/--source")
+
+    def test_enhancer_only_runs_without_source(self):
+        for enhancer in ("face_enhancer", "face_enhancer_gpen256", "face_enhancer_gpen512"):
+            with self.subTest(enhancer=enhancer), _patched_core_import_stubs([]) as core:
+                _parse(core, ["--frame-processor", enhancer, "-t", "target.jpg", "-o", "enhanced.jpg"])
+                self.assertTrue(core.modules.globals.headless)
+                self.assertEqual(core.modules.globals.output_path, "enhanced.jpg")
 
     def test_cli_mode_with_source_and_target(self):
         with _patched_core_import_stubs([]) as core:
