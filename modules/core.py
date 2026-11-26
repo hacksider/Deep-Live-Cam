@@ -123,6 +123,13 @@ def parse_args() -> None:
         print('\033[33mArgument --gpu-threads is deprecated. Use --execution-threads instead.\033[0m')
         modules.globals.execution_threads = args.gpu_threads_deprecated
 
+    if modules.globals.headless:
+        if not modules.globals.target_path:
+            program.error('CLI mode needs -t/--target')
+        # Only the face swapper uses a source face; the enhancers run on the target alone.
+        if 'face_swapper' in modules.globals.frame_processors and not modules.globals.source_path:
+            program.error('face_swapper needs -s/--source')
+
 
 def encode_execution_providers(execution_providers: List[str]) -> List[str]:
     return [execution_provider.replace('ExecutionProvider', '').lower() for execution_provider in execution_providers]
