@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import sys
+import tempfile
 import types
 import unittest
 from unittest import mock
@@ -94,6 +95,21 @@ class NormalizeOutputPathTests(unittest.TestCase):
             ),
             utilities.os.path.join("videos", "target-enhanced.mp4"),
         )
+
+    def test_missing_output_does_not_overwrite_existing_file(self) -> None:
+        utilities = _load_utilities_module()
+
+        with tempfile.TemporaryDirectory() as directory:
+            target = utilities.os.path.join(directory, "target.mp4")
+            taken = utilities.os.path.join(directory, "source-target.mp4")
+            with open(taken, "wb") as handle:
+                handle.write(b"existing")
+
+            output = utilities.normalize_output_path("source.jpg", target, None)
+
+            self.assertEqual(output, utilities.os.path.join(directory, "source-target-1.mp4"))
+            with open(taken, "rb") as handle:
+                self.assertEqual(handle.read(), b"existing")
 
     def test_output_directory_gets_generated_name(self) -> None:
         utilities = _load_utilities_module()
